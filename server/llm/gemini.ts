@@ -1,6 +1,6 @@
 import {GoogleGenAI} from '@google/genai';
 import type {GenerateContentConfig} from '@google/genai';
-import type {GenerateRequest, LlmProvider} from './types.ts';
+import type {GenerateRequest, LlmProvider} from './types';
 
 export class GeminiProvider implements LlmProvider {
   readonly name = 'gemini';

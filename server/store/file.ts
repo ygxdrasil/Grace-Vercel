@@ -1,7 +1,7 @@
 import {mkdir, readFile, rename, writeFile} from 'node:fs/promises';
 import {existsSync} from 'node:fs';
 import path from 'node:path';
-import type {Backend} from './types.ts';
+import type {Backend} from './types';
 
 /**
  * Grace's memory on your own disk. Writes go to a temp file and are renamed

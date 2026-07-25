@@ -1,5 +1,5 @@
-import type {ActionCategory, ActionPolicy, ConfirmationPolicy} from '../shared/types.ts';
-import {Document} from './store/index.ts';
+import type {ActionCategory, ActionPolicy, ConfirmationPolicy} from '../shared/types';
+import {Document} from './store/index';
 
 /**
  * The user's two hard limits are enforced here rather than only in the prompt.

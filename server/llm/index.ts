@@ -1,6 +1,6 @@
-import {config} from '../config.ts';
-import {GeminiProvider} from './gemini.ts';
-import type {LlmProvider} from './types.ts';
+import {config} from '../config';
+import {GeminiProvider} from './gemini';
+import type {LlmProvider} from './types';
 
 let provider: LlmProvider | null = null;
 

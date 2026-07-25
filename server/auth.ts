@@ -1,7 +1,7 @@
 import {createHmac} from 'node:crypto';
 import type {NextFunction, Request, Response} from 'express';
-import {config} from './config.ts';
-import {matches} from './crypto.ts';
+import {config} from './config';
+import {matches} from './crypto';
 
 const COOKIE = 'grace_session';
 const SESSION_DAYS = 30;

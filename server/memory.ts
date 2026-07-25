@@ -5,11 +5,11 @@ import type {
   Profile,
   ProfileEntry,
   Speaker,
-} from '../shared/types.ts';
-import {config} from './config.ts';
-import {getProvider} from './llm/index.ts';
-import type {Turn} from './llm/types.ts';
-import {Document} from './store/index.ts';
+} from '../shared/types';
+import {config} from './config';
+import {getProvider} from './llm/index';
+import type {Turn} from './llm/types';
+import {Document} from './store/index';
 
 interface Meta {
   /** Prose recap of everything folded out of the verbatim window. */

@@ -1,8 +1,8 @@
 import express from 'express';
 import {existsSync} from 'node:fs';
 import path from 'node:path';
-import {createApi} from './api.ts';
-import {config, isConfigured} from './config.ts';
+import {createApi} from './api';
+import {config, isConfigured} from './config';
 
 /**
  * Production entry point. In development the same router is mounted straight

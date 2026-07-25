@@ -1,8 +1,8 @@
-import {config} from '../config.ts';
-import {newSalt, seal, unseal} from '../crypto.ts';
-import {FileBackend} from './file.ts';
-import {RedisBackend, redisCredentials} from './redis.ts';
-import type {Backend} from './types.ts';
+import {config} from '../config';
+import {newSalt, seal, unseal} from '../crypto';
+import {FileBackend} from './file';
+import {RedisBackend, redisCredentials} from './redis';
+import type {Backend} from './types';
 
 let backend: Backend | null = null;
 

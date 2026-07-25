@@ -1,4 +1,4 @@
-import type {ActionPolicy, Profile} from '../shared/types.ts';
+import type {ActionPolicy, Profile} from '../shared/types';
 
 interface PersonaContext {
   profile: Profile;

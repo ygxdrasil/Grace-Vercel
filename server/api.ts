@@ -5,8 +5,8 @@ import type {
   ConfirmationPolicy,
   GraceState,
   InputMode,
-} from '../shared/types.ts';
-import {getPolicies, setPolicy} from './actions.ts';
+} from '../shared/types';
+import {getPolicies, setPolicy} from './actions';
 import {
   authStatus,
   checkPassword,
@@ -14,10 +14,10 @@ import {
   issueSession,
   pauseAfterFailure,
   requireAuth,
-} from './auth.ts';
-import {config, isConfigured} from './config.ts';
-import {learnFrom} from './learn.ts';
-import {getProvider} from './llm/index.ts';
+} from './auth';
+import {config, isConfigured} from './config';
+import {learnFrom} from './learn';
+import {getProvider} from './llm/index';
 import {
   clearConversation,
   compactIfNeeded,
@@ -28,9 +28,9 @@ import {
   record,
   recentTurns,
   setAddressAs,
-} from './memory.ts';
-import {buildSystemPrompt} from './persona.ts';
-import {getBackend} from './store/index.ts';
+} from './memory';
+import {buildSystemPrompt} from './persona';
+import {getBackend} from './store/index';
 
 /**
  * Express 4 lets a rejected async handler escape as an unhandled rejection,

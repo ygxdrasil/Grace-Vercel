@@ -1,5 +1,5 @@
 import express from 'express';
-import {createApi} from '../server/api.ts';
+import {createApi} from '../server/api';
 
 /**
  * Grace's API as a single Vercel function.

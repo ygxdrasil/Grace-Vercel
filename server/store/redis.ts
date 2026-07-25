@@ -1,5 +1,5 @@
 import {Redis} from '@upstash/redis';
-import type {Backend} from './types.ts';
+import type {Backend} from './types';
 
 /**
  * Grace's memory when she is deployed. Serverless has no durable disk, and

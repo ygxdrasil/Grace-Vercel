@@ -13,11 +13,11 @@
 import assert from 'node:assert/strict';
 import {rmSync} from 'node:fs';
 import type {AddressInfo} from 'node:net';
-import type {ChatEvent, ProfileEntry} from '../shared/types.ts';
-import {createApi} from '../server/api.ts';
-import {config} from '../server/config.ts';
-import {setProvider} from '../server/llm/index.ts';
-import type {GenerateRequest, LlmProvider, Turn} from '../server/llm/types.ts';
+import type {ChatEvent, ProfileEntry} from '../shared/types';
+import {createApi} from '../server/api';
+import {config} from '../server/config';
+import {setProvider} from '../server/llm/index';
+import type {GenerateRequest, LlmProvider, Turn} from '../server/llm/types';
 import {
   clearConversation,
   getMessages,
@@ -25,9 +25,9 @@ import {
   getSummarizedThrough,
   getSummary,
   recentTurns,
-} from '../server/memory.ts';
-import {setBackend} from '../server/store/index.ts';
-import type {Backend} from '../server/store/types.ts';
+} from '../server/memory';
+import {setBackend} from '../server/store/index';
+import type {Backend} from '../server/store/types';
 
 const REPLY_CHUNKS = ['Good morning. ', 'Nothing pressing today. ', 'Tea at four?'];
 const REPLY = REPLY_CHUNKS.join('');

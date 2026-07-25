@@ -1,8 +1,8 @@
 import {Type} from '@google/genai';
-import type {ProfileEntry} from '../shared/types.ts';
-import {config} from './config.ts';
-import {getProvider} from './llm/index.ts';
-import {getProfile, remember} from './memory.ts';
+import type {ProfileEntry} from '../shared/types';
+import {config} from './config';
+import {getProvider} from './llm/index';
+import {getProfile, remember} from './memory';
 
 const SCHEMA = {
   type: Type.OBJECT,
