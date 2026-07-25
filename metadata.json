@@ -1,0 +1,6 @@
+{
+  "name": "Grace",
+  "description": "A personal assistant with a voice, a memory, and a firm sense of what she may not do without asking.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
