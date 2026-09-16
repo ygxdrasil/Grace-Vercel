@@ -1,5 +1,5 @@
 import {GoogleGenAI} from '@google/genai';
-import type {Content, GenerateContentConfig} from '@google/genai';
+import type {Content, GenerateContentConfig, Part} from '@google/genai';
 import * as budget from '../budget';
 import {THINKING} from '../../shared/effort';
 import {config} from '../config';
@@ -178,6 +178,23 @@ export class GeminiProvider implements LlmProvider {
         });
 
         const calls: {name: string; args: Record<string, unknown>}[] = [];
+        /*
+         * What the model said, kept exactly as it said it.
+         *
+         * On the 3.x line a functionCall part arrives carrying a
+         * `thoughtSignature` — an encrypted crumb of the model's reasoning
+         * state. Send the conversation back without it and the next request
+         * is rejected outright: "Function call is missing a thought_signature
+         * in functionCall parts."
+         *
+         * This used to rebuild the model's turn from the name and arguments
+         * it had extracted, which is a perfectly reasonable thing to do and
+         * silently discarded the signature, because the signature is on the
+         * part rather than inside the call. So the parts are now kept
+         * verbatim and handed straight back. The rule is simply that what
+         * comes out of the model goes back into the model unedited.
+         */
+        const said: Part[] = [];
         // Usage is metered once, after the stream drains — never per chunk.
         // Gemini reports usageMetadata cumulatively on every chunk it sends,
         // so metering inside the loop billed a ten-chunk reply something like
@@ -195,6 +212,11 @@ export class GeminiProvider implements LlmProvider {
                 name: part.functionCall.name,
                 args: (part.functionCall.args ?? {}) as Record<string, unknown>,
               });
+              said.push(part);
+            } else if (part.thoughtSignature || part.thought) {
+              // A signature can also arrive on a part of its own. It is
+              // opaque either way; the only correct handling is to carry it.
+              said.push(part);
             }
           }
 
@@ -209,12 +231,7 @@ export class GeminiProvider implements LlmProvider {
         // Nothing to do: that was her answer.
         if (calls.length === 0 || !request.onToolCall) return;
 
-        history.push({
-          role: 'model',
-          parts: calls.map((call) => ({
-            functionCall: {name: call.name, args: call.args},
-          })),
-        });
+        history.push({role: 'model', parts: said});
 
         const results = [];
         for (const call of calls) {

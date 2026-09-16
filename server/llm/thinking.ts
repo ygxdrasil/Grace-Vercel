@@ -37,7 +37,25 @@ function speaksLevels(model: string): boolean {
  * Pro being broken rather than like a two-value enum.
  */
 const LEVELS_ALLOWED: {match: RegExp; levels: Level[]}[] = [
-  {match: /pro/i, levels: ['low', 'high']},
+  /*
+   * Pro is capped at `low` on purpose, and this is a latency decision rather
+   * than a quality one.
+   *
+   * The hosting kills any request at sixty seconds and returns *nothing* —
+   * not a partial answer, not an error anyone can read, just silence. Pro
+   * thinking at `high` on a question that also needs three or four tool calls
+   * does not fit in that window. So the choice is not "well-reasoned answer
+   * versus quick answer". It is "decent answer versus no answer at all", and
+   * an empty reply is the worst outcome available.
+   *
+   * Pro at `low` still reasons considerably better than Flash at `high`,
+   * which is the whole reason the hard turns are routed here. The tier is
+   * doing the work; the level was only ever going to buy the last few
+   * percent, at the price of the entire response.
+   *
+   * Raise this the day she runs somewhere without a sixty-second guillotine.
+   */
+  {match: /pro/i, levels: ['low']},
   {match: /lite/i, levels: ['minimal', 'low', 'medium', 'high']},
 ];
 

@@ -631,7 +631,12 @@ try {
    * every hard question fail while the same question on Flash succeeded — a
    * bug that reads as "Pro is broken" rather than as a two-value enum.
    */
-  assert.deepEqual(levelsFor(config.hardModel), ['low', 'high'], 'Pro offers two levels');
+  assert.deepEqual(
+    levelsFor(config.hardModel),
+    ['low'],
+    'Pro is held at low: high thinking plus tool calls does not fit in the ' +
+      "hosting's sixty-second window, and overrunning it returns nothing at all",
+  );
   for (const tokens of [0, THINKING.reflex, THINKING.ordinary, THINKING.hard]) {
     assert.ok(
       levelsFor(config.hardModel).includes(levelFor(config.hardModel, tokens)),
@@ -639,9 +644,14 @@ try {
     );
   }
   assert.equal(
-    levelFor(config.hardModel, THINKING.ordinary),
+    levelFor(config.hardModel, THINKING.hard),
     'low',
-    'a level Pro lacks rounds down, never up — paying more than asked is the worse error',
+    'even the hardest question stays inside the time it is allowed to take',
+  );
+  assert.equal(
+    levelFor(config.model, THINKING.ordinary),
+    'medium',
+    'a level the model does offer is used as asked',
   );
   assert.equal(
     levelFor(config.model, 0),
@@ -800,6 +810,76 @@ try {
     'exactly one closing pass, with the tools taken away so she has to speak',
   );
   ok(`a task that runs past ${rounds.length - 1} steps still ends in an answer`);
+
+  /*
+   * What the model said goes back to the model unedited.
+   *
+   * On the 3.x line a functionCall part carries a `thoughtSignature` — an
+   * opaque crumb of the model's reasoning state. Rebuilding that part from
+   * the name and arguments you extracted is the obvious thing to do, works
+   * perfectly on the first tool call, and makes the second one fail: "Function
+   * call is missing a thought_signature in functionCall parts."
+   *
+   * Which means the bug cannot be caught by any test that only calls one
+   * tool. This one deliberately runs two rounds.
+   */
+  const SIGNATURE = 'c2lnbmF0dXJl';
+  const sent: unknown[][] = [];
+  const careful = new GeminiProvider('unused', config.model);
+  (careful as unknown as {client: unknown}).client = {
+    models: {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      generateContentStream: async (params: any) => {
+        sent.push(params.contents);
+        const round = sent.length;
+        return (async function* () {
+          yield round === 1
+            ? {
+                candidates: [
+                  {
+                    content: {
+                      parts: [
+                        {
+                          functionCall: {name: 'search_web', args: {query: 'x'}},
+                          thoughtSignature: SIGNATURE,
+                        },
+                      ],
+                    },
+                  },
+                ],
+              }
+            : {text: 'Found it.'};
+        })();
+      },
+    },
+  };
+
+  let carefulReply = '';
+  for await (const piece of careful.stream({
+    system: 's',
+    turns: [{role: 'user', text: 'look something up'}],
+    tools: declarations(),
+    onToolCall: async () => 'a result',
+  })) {
+    carefulReply += piece;
+  }
+
+  assert.equal(carefulReply, 'Found it.', 'the second round must actually happen');
+  const handedBack = (sent[1] ?? []) as {role: string; parts: Record<string, unknown>[]}[];
+  const modelTurn = handedBack.find((entry) => entry.role === 'model');
+  assert.ok(modelTurn, 'the tool call she made must be replayed to her');
+  assert.equal(
+    modelTurn?.parts?.[0]?.thoughtSignature,
+    SIGNATURE,
+    'the thought signature must survive the round trip, or every second tool ' +
+      'call is rejected with a 400',
+  );
+  assert.equal(
+    (modelTurn?.parts?.[0]?.functionCall as {name?: string})?.name,
+    'search_web',
+    'and the call itself must still be there alongside it',
+  );
+  ok('what the model says is handed back to it unedited, signature and all');
 
   /*
    * Running out of *time* rather than out of steps.

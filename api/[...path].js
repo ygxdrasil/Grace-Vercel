@@ -886,7 +886,25 @@ function speaksLevels(model) {
   return Number.isFinite(generation) && generation >= 3;
 }
 var LEVELS_ALLOWED = [
-  { match: /pro/i, levels: ["low", "high"] },
+  /*
+   * Pro is capped at `low` on purpose, and this is a latency decision rather
+   * than a quality one.
+   *
+   * The hosting kills any request at sixty seconds and returns *nothing* —
+   * not a partial answer, not an error anyone can read, just silence. Pro
+   * thinking at `high` on a question that also needs three or four tool calls
+   * does not fit in that window. So the choice is not "well-reasoned answer
+   * versus quick answer". It is "decent answer versus no answer at all", and
+   * an empty reply is the worst outcome available.
+   *
+   * Pro at `low` still reasons considerably better than Flash at `high`,
+   * which is the whole reason the hard turns are routed here. The tier is
+   * doing the work; the level was only ever going to buy the last few
+   * percent, at the price of the entire response.
+   *
+   * Raise this the day she runs somewhere without a sixty-second guillotine.
+   */
+  { match: /pro/i, levels: ["low"] },
   { match: /lite/i, levels: ["minimal", "low", "medium", "high"] }
 ];
 var ORDER = ["minimal", "low", "medium", "high"];
@@ -999,6 +1017,7 @@ var GeminiProvider = class {
           contents: history
         });
         const calls = [];
+        const said2 = [];
         let usage2;
         for await (const chunk of response2) {
           if (chunk.candidates?.[0]?.groundingMetadata) request.onGrounded?.();
@@ -1009,6 +1028,9 @@ var GeminiProvider = class {
                 name: part.functionCall.name,
                 args: part.functionCall.args ?? {}
               });
+              said2.push(part);
+            } else if (part.thoughtSignature || part.thought) {
+              said2.push(part);
             }
           }
           if (chunk.text) {
@@ -1018,12 +1040,7 @@ var GeminiProvider = class {
         }
         meter(request.model ?? this.model, usage2);
         if (calls.length === 0 || !request.onToolCall) return;
-        history.push({
-          role: "model",
-          parts: calls.map((call4) => ({
-            functionCall: { name: call4.name, args: call4.args }
-          }))
-        });
+        history.push({ role: "model", parts: said2 });
         const results = [];
         for (const call4 of calls) {
           const result = await request.onToolCall(call4.name, call4.args);
