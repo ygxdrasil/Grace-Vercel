@@ -163,3 +163,62 @@ export function Polar({level, live, size = 132}: {level: number; live: boolean; 
 
   return <canvas ref={canvasRef} style={{width: size, height: size}} aria-hidden />;
 }
+
+
+/** A section rule with its label sitting on it. */
+export function Head({children}: {children: React.ReactNode}) {
+  return (
+    <div className="mb-2 flex items-center gap-2">
+      <span className="readout whitespace-nowrap text-ice/55">{children}</span>
+      <span className="h-px flex-1 bg-ice/15" />
+    </div>
+  );
+}
+
+/**
+ * One row of a column: label, optional bar, value.
+ *
+ * `tone` is not styling for its own sake. Green means running, amber means
+ * something wants you, cyan is everything else — and because those meanings
+ * never vary, a glance down the column says whether anything is wrong without
+ * a single word being read. A palette where the colours mean nothing in
+ * particular is a palette you have to read, which defeats the point of having
+ * a panel at all.
+ */
+export function Row({
+  label,
+  value,
+  share,
+  tone = 'ice',
+}: {
+  label: string;
+  value: string;
+  share?: number;
+  tone?: 'ice' | 'live' | 'warn';
+}) {
+  const colour =
+    tone === 'live'
+      ? 'var(--color-live)'
+      : tone === 'warn'
+        ? 'var(--color-ember)'
+        : 'rgb(var(--accent))';
+
+  return (
+    <div className="mb-2">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="readout truncate text-mist/50">{label}</span>
+        <span className="readout shrink-0 truncate tabular-nums" style={{color: colour}} title={value}>
+          {value}
+        </span>
+      </div>
+      {share !== undefined && (
+        <div className="mt-1 h-[2px] w-full bg-ice/10">
+          <div
+            className="h-full transition-[width] duration-700 ease-out"
+            style={{width: `${Math.max(0, Math.min(1, share)) * 100}%`, background: colour}}
+          />
+        </div>
+      )}
+    </div>
+  );
+}

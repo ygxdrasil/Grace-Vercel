@@ -214,6 +214,7 @@ try {
   // A stale pattern here fails the build with "doesn't match any Serverless
   // Functions", which costs a whole deploy cycle to discover. It has happened.
   const vercel = JSON.parse(readFileSync('vercel.json', 'utf8')) as {
+    headers?: {headers?: {key: string; value: string}[]}[];
     functions?: Record<string, unknown>;
   };
   for (const pattern of Object.keys(vercel.functions ?? {})) {

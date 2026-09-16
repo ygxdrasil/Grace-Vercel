@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="dark" />
-    <meta name="theme-color" content="#07090c" />
+    <meta name="theme-color" content="#04090f" />
     <meta name="description" content="Grace — a personal assistant with a memory." />
     <title>Grace</title>
     <link rel="manifest" href="/manifest.webmanifest" />
@@ -13,29 +13,23 @@
   <body>
     <div id="root"></div>
     <!--
-      The theme goes on before anything is drawn.
+      There is one theme, and it is dark.
 
-      React cannot do this: by the time it mounts, a frame has already been
-      painted, and in daylight that frame is black. A flash of the wrong theme
-      on every single load is the sort of thing that is impossible to unsee
-      once noticed, and this is four lines.
+      This used to follow the operating system, and that was right when she
+      was a page with a conversation on it. She is an instrument panel now,
+      and an instrument panel on a white background is not a lighter version
+      of the same thing — it is a different object, and a worse one. Every
+      readout here works by being dim against black, with the two or three
+      lit things carrying all the meaning. On white there is nothing for them
+      to be lit against.
+
+      Set here rather than in React because by the time React mounts a frame
+      has already been painted, and a flash of the wrong background on every
+      load is impossible to unsee once noticed.
     -->
     <script>
-      (function () {
-        try {
-          var saved = localStorage.getItem('grace-theme');
-          document.documentElement.dataset.theme =
-            saved === 'light' || saved === 'dark'
-              ? saved
-              : matchMedia('(prefers-color-scheme: light)').matches
-                ? 'light'
-                : 'dark';
-          document.documentElement.style.colorScheme =
-            document.documentElement.dataset.theme;
-        } catch (error) {
-          document.documentElement.dataset.theme = 'dark';
-        }
-      })();
+      document.documentElement.dataset.theme = 'dark';
+      document.documentElement.style.colorScheme = 'dark';
     </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>

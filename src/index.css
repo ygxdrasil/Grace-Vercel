@@ -138,115 +138,15 @@
  * has almost no contrast on near-white, and it carries meaning here — it is
  * what "this is live" looks like.
  */
-:root[data-theme='light'] {
-  --color-void: #eef4f8;
-  --color-surface: #ffffff;
-  --color-raised: #f4f9fc;
-  --color-edge: #cfdfe9;
-  --color-mist: #52708a;
-  --color-ice: #0069a8;
-  --color-ember: #a85800;
+/*
+ * The daylight theme is gone.
+ *
+ * It was well made and it is the wrong object. A panel that works by being
+ * dim against black, with two or three lit things carrying every bit of
+ * meaning, has nothing to be lit against on white — so the light version was
+ * not a brighter Grace, it was a different and worse one.
+ */
 
-  /* The three text shades, inverted. Brightest becomes darkest. */
-  --color-slate-100: #08141d;
-  --color-slate-200: #1c3345;
-  --color-slate-300: #3a5568;
-
-  --accent: 0 105 168;
-  --accent-2: 168 88 0;
-}
-
-:root[data-theme='light'][data-room='work'] {
-  --accent: 180 83 9;
-  --accent-2: 194 65 12;
-}
-
-:root[data-theme='light'][data-room='play'] {
-  --accent: 29 78 216;
-  --accent-2: 14 116 144;
-}
-
-:root[data-theme='light'][data-room='day'] {
-  --accent: 109 40 217;
-  --accent-2: 190 24 93;
-}
-
-/* Panels sit above the page on a shadow, not on a glow. */
-:root[data-theme='light'] .glass {
-  background: linear-gradient(
-    168deg,
-    rgb(255 255 255 / 0.95) 0%,
-    rgb(255 255 255 / 0.78) 100%
-  );
-  border-color: rgb(var(--accent) / 0.16);
-  box-shadow:
-    inset 0 1px 0 0 rgb(255 255 255 / 0.9),
-    0 0.5rem 1.5rem -0.75rem rgb(60 40 90 / 0.28),
-    0 0 0 1px rgb(var(--accent) / 0.04);
-}
-
-:root[data-theme='light'] .glass:hover {
-  border-color: rgb(var(--accent) / 0.3);
-  box-shadow:
-    inset 0 1px 0 0 rgb(255 255 255 / 0.95),
-    0 0.9rem 2rem -0.8rem rgb(60 40 90 / 0.34);
-}
-
-:root[data-theme='light'] .glass-bright {
-  border-color: rgb(var(--accent) / 0.4);
-  box-shadow:
-    inset 0 1px 0 0 rgb(255 255 255 / 0.95),
-    0 0.9rem 2rem -0.8rem rgb(var(--accent) / 0.32);
-}
-
-/* The light behind everything, at a fraction of the strength: on white, the
-   same intensity stops being atmosphere and becomes a stain. */
-:root[data-theme='light'] .field {
-  background:
-    radial-gradient(38rem 30rem at 22% 28%, rgb(var(--accent) / 0.10), transparent 62%),
-    radial-gradient(34rem 28rem at 78% 68%, rgb(var(--accent-2) / 0.08), transparent 60%);
-}
-
-:root[data-theme='light'] .field-counter {
-  mix-blend-mode: multiply;
-  opacity: 0.5;
-}
-
-/* Grain has to darken the page rather than lighten it, or it is invisible. */
-:root[data-theme='light'] .grain {
-  mix-blend-mode: multiply;
-  opacity: 0.07;
-}
-
-/* A light vignette is a hint, not a frame. Any more and it reads as a
-   photograph of a screen. */
-:root[data-theme='light'] .vignette {
-  background:
-    radial-gradient(80rem 50rem at 50% -20%, rgb(255 255 255 / 0.7), transparent 60%),
-    radial-gradient(circle at 50% 45%, transparent 55%, rgb(90 70 120 / 0.10) 100%);
-}
-
-:root[data-theme='light'] .grid-veil {
-  background-image:
-    linear-gradient(rgb(var(--accent) / 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgb(var(--accent) / 0.05) 1px, transparent 1px);
-}
-
-/* The sheen is a pale band crossing a dark panel. Inverted, it is a shadow. */
-:root[data-theme='light'] .sheen::after {
-  background: linear-gradient(
-    100deg,
-    transparent 20%,
-    rgb(var(--accent) / 0.05) 48%,
-    transparent 72%
-  );
-}
-
-/* Wells that were "a hole cut in a dark panel" have to become the opposite. */
-:root[data-theme='light'] .bg-black\/20,
-:root[data-theme='light'] .bg-black\/40 {
-  background-color: rgb(var(--accent) / 0.05);
-}
 
 :root[data-room='work'] {
   --accent: 251 191 36;
