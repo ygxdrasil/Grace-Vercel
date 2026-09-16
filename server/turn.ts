@@ -3,7 +3,7 @@ import type {Choice, InputMode, Message} from '../shared/types';
 import {getPolicies} from './actions';
 import {available} from './available';
 import {currentChat, titleFrom, touch} from './chats';
-import {isConfigured} from './config';
+import {config, isConfigured} from './config';
 import {buildBriefing} from './google/briefing';
 import {getProvider} from './llm/index';
 import {getMode} from './modes';
@@ -160,6 +160,20 @@ export async function takeTurn({
       // and her considered one.
       think: deliberation.think,
       temperature: deliberation.temperature,
+      /*
+       * The handful of turns a day worth paying Pro rates for.
+       *
+       * Deliberation used to be the only dial, which bought more of the same
+       * reasoning rather than better reasoning — a hard question got a longer
+       * run at the same thinking. This is the other half: the turns already
+       * judged `hard` go to the better model as well as getting more room.
+       *
+       * Left undefined otherwise, so every command and every ordinary
+       * exchange stays on Flash. That ratio is what makes the credit last
+       * ninety days rather than nine; Pro on everything would cost roughly
+       * three times as much for no gain on "turn the lights off".
+       */
+      ...(deliberation.effort === 'hard' ? {model: config.hardModel} : {}),
       // Enough left to write the answer, speak it, and record it after the
       // last tool comes back. The hosting stops the whole request dead at
       // sixty seconds and returns nothing — no reply and no reason — so the

@@ -145,7 +145,18 @@ class MemoryBackend implements Backend {
 }
 
 /** Only ever used to inspect the request it would build. */
-const provider = new GeminiProvider('unused', 'gemini-2.5-flash-lite');
+/*
+ * Built on the models she actually runs, not on a hardcoded one.
+ *
+ * These were pinned to the 2.5 line, which meant the suite was proving that
+ * the *outgoing* code path worked. Every check passed while the models behind
+ * them were three weeks from shutdown, and the two generations do not take the
+ * same parameters — so a green suite would have said nothing at all about
+ * whether she still worked on 20 October.
+ *
+ * A test fixture that names a model is a test fixture that expires.
+ */
+const provider = new GeminiProvider('unused', config.transcribeModel);
 
 const stub = new StubProvider();
 setProvider(stub);
@@ -420,27 +431,66 @@ try {
   // the tool present and unused — she answers from memory and then says she
   // cannot reach the web. It must be small, for the sake of the pause before
   // she speaks, and it must not be nothing.
-  const budget = grounded.config.thinkingConfig?.thinkingBudget;
-  assert.ok(
-    budget === undefined || budget > 0,
-    `thinking must not be switched off while a tool is attached, got ${budget}`,
-  );
-  assert.ok(
-    budget === undefined || budget <= 1024,
-    `and must stay small, or every reply waits on it — got ${budget}`,
-  );
+  const thinking = grounded.config.thinkingConfig;
+  assert.ok(thinking, 'deliberation must always be set explicitly, never left to default');
+
+  // Which of the two it is depends on the generation, and asserting on the
+  // wrong one is how this check quietly became vacuous once before: on a 3.x
+  // model `thinkingBudget` is undefined, so every `budget === undefined || …`
+  // passed without testing anything.
+  if (thinking.thinkingLevel !== undefined) {
+    assert.notEqual(
+      String(thinking.thinkingLevel).toLowerCase(),
+      'minimal',
+      'thinking must not be switched off while a tool is attached',
+    );
+    assert.notEqual(
+      String(thinking.thinkingLevel).toLowerCase(),
+      'high',
+      'and must stay modest, or every reply waits on it',
+    );
+  } else {
+    const budget = thinking.thinkingBudget;
+    assert.ok(
+      budget !== undefined && budget > 0,
+      `thinking must not be switched off while a tool is attached, got ${budget}`,
+    );
+    assert.ok(budget <= 1024, `and must stay small — got ${budget}`);
+  }
 
   const plain = provider.params({
     system: 's',
     turns: [{role: 'user', text: 'hello'}],
     fast: true,
   });
-  assert.equal(
-    plain.config.thinkingConfig?.thinkingBudget,
-    0,
+  const idle = plain.config.thinkingConfig;
+  assert.ok(
+    idle?.thinkingBudget === 0 ||
+      String(idle?.thinkingLevel).toLowerCase() === 'minimal',
     'without a tool, deliberation should still be off for speed',
   );
   ok('deliberation stays on whenever a tool is attached');
+
+  /*
+   * Nothing she runs on may be from a line with a published shutdown date.
+   *
+   * This is the check that would have caught the fixtures above. It is not
+   * about 2.5 specifically — it is that a model generation is a thing with an
+   * end date, and the failure when one arrives is total and silent: every
+   * request 404s, which looks identical to a typo in a model name.
+   */
+  for (const [what, model] of [
+    ['the model she thinks with', config.model],
+    ['the model she thinks harder with', config.hardModel],
+    ['the model that listens', config.transcribeModel],
+    ['the model that speaks', config.speechModel],
+  ] as const) {
+    assert.ok(
+      !/^gemini-2\./.test(model),
+      `${what} (${model}) is on the 2.5 line, which shuts down on 20 October 2026`,
+    );
+  }
+  ok('nothing she runs on is from a retired model line');
 
   // Every model she actually uses must have a known price. An unrecognised one
   // is charged at the dearest rate in the table rather than ignored — which is
@@ -449,6 +499,7 @@ try {
   // stop her early against a cap she had not really reached.
   for (const [what, model] of [
     ['the model she thinks with', config.model],
+    ['the model she thinks harder with', config.hardModel],
     ['the model that listens', config.transcribeModel],
     ['the model that speaks', config.speechModel],
   ] as const) {
@@ -468,13 +519,13 @@ try {
    * she stops understanding anything said aloud, and nothing on screen says why.
    */
   const heard: string[] = [];
-  const deaf = new GeminiProvider('unused', 'gemini-2.5-flash');
+  const deaf = new GeminiProvider('unused', config.model);
   (deaf as unknown as {client: unknown}).client = {
     models: {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       generateContent: async (params: any) => {
         heard.push(params.model);
-        if (params.model !== 'gemini-2.5-flash') {
+        if (params.model !== config.model) {
           throw new Error('models/whatever is not found for API version v1beta');
         }
         return {text: 'the words that were said', usageMetadata: {}};
@@ -485,7 +536,7 @@ try {
   const rescued = await deaf.transcribe({audio: SPOKEN_AUDIO, mimeType: 'audio/wav'});
   assert.equal(rescued, 'the words that were said', 'she must still hear');
   assert.equal(heard.length, 2, 'one attempt, then one fallback — not a loop');
-  assert.equal(heard[1], 'gemini-2.5-flash', 'falling back to the model that is alive');
+  assert.equal(heard[1], config.model, 'falling back to the model that is alive');
   ok('a retired transcription model falls back rather than making her deaf');
 
   // ---- how hard she thinks, per sentence ---------------------------------
@@ -537,16 +588,159 @@ try {
     2048 + THINKING.hard,
     'thinking must not be taken out of the room left for the answer',
   );
-  assert.equal(considered.config.thinkingConfig?.thinkingBudget, THINKING.hard);
+  const {levelFor, levelsFor, thinkingFor} = await import('../server/llm/thinking');
+  assert.deepEqual(
+    considered.config.thinkingConfig,
+    thinkingFor(config.transcribeModel, THINKING.hard),
+    'the deliberation asked for must reach the model, in whichever dialect it speaks',
+  );
   ok('thinking is added to the output ceiling rather than eating the reply');
 
   // The floor from the bug above still holds, whatever a caller asks for.
-  assert.equal(
+  assert.deepEqual(
     provider.params({system: 's', turns: [], think: 0, tools: declarations()}).config
-      .thinkingConfig?.thinkingBudget,
-    THINKING.reflex,
+      .thinkingConfig,
+    thinkingFor(config.transcribeModel, THINKING.reflex),
     'a tool in hand means she must be allowed enough thought to reach for it',
   );
+
+  /*
+   * The two generations do not take the same parameter, and sending both is
+   * a 400 rather than a preference — so a model that lands on the wrong side
+   * of this fork does not degrade, it fails every single call.
+   */
+  assert.ok(
+    'thinkingBudget' in thinkingFor('gemini-2.5-flash', 1024),
+    'the 2.5 line takes a token budget',
+  );
+  assert.ok(
+    'thinkingLevel' in thinkingFor('gemini-3.8-flash', 1024),
+    'the 3.x line takes a named level',
+  );
+  for (const model of ['gemini-2.5-flash', 'gemini-3.8-flash', 'gemini-3.1-pro']) {
+    const sent = thinkingFor(model, 1024);
+    assert.ok(
+      !('thinkingBudget' in sent && 'thinkingLevel' in sent),
+      `${model} must never be sent both budget and level — that is a 400, not a preference`,
+    );
+  }
+  ok('each model generation is asked for deliberation in its own dialect');
+
+  /*
+   * Pro has no middle setting. Asking for one is rejected, which would make
+   * every hard question fail while the same question on Flash succeeded — a
+   * bug that reads as "Pro is broken" rather than as a two-value enum.
+   */
+  assert.deepEqual(levelsFor(config.hardModel), ['low', 'high'], 'Pro offers two levels');
+  for (const tokens of [0, THINKING.reflex, THINKING.ordinary, THINKING.hard]) {
+    assert.ok(
+      levelsFor(config.hardModel).includes(levelFor(config.hardModel, tokens)),
+      `${tokens} tokens must map to a level Pro actually offers`,
+    );
+  }
+  assert.equal(
+    levelFor(config.hardModel, THINKING.ordinary),
+    'low',
+    'a level Pro lacks rounds down, never up — paying more than asked is the worse error',
+  );
+  assert.equal(
+    levelFor(config.model, 0),
+    'minimal',
+    'nothing to think about still means nothing to think about',
+  );
+  assert.equal(
+    levelFor(config.model, THINKING.reflex),
+    'low',
+    'a reflex must stay above minimal, or she holds a tool and never reaches for it',
+  );
+  ok('a model is never asked for a thinking level it does not offer');
+
+  /*
+   * Which till she is billed at.
+   *
+   * This is not a preference. Google's free-trial terms say the $300 credit
+   * "can't pay for Gemini API in AI Studio costs" — so the key path and the
+   * credit are mutually exclusive, and a half-configured Vertex silently
+   * falls back to the key, spending real money while appearing to work.
+   * Every one of these failures is invisible until the statement arrives.
+   */
+  const {serviceAccount, vertexSettings} = await import('../server/llm/vertex');
+  const billing = {
+    project: process.env.GCP_PROJECT_ID,
+    location: process.env.GCP_LOCATION,
+    json: process.env.GCP_SERVICE_ACCOUNT_JSON,
+  };
+  const restore = () => {
+    for (const [name, value] of [
+      ['GCP_PROJECT_ID', billing.project],
+      ['GCP_LOCATION', billing.location],
+      ['GCP_SERVICE_ACCOUNT_JSON', billing.json],
+    ] as const) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  };
+
+  const KEY =
+    '-----BEGIN PRIVATE KEY-----\nMIIBOgIBAAJBAKj3\n-----END PRIVATE KEY-----\n';
+
+  delete process.env.GCP_PROJECT_ID;
+  delete process.env.GCP_SERVICE_ACCOUNT_JSON;
+  assert.equal(vertexSettings(), null, 'no project and no key is simply the old path');
+
+  // Half-configured must not quietly pass. A project with no credentials and
+  // credentials with no project both fail identically at the network layer,
+  // hours later, as a 403 that says nothing about which half is missing.
+  process.env.GCP_PROJECT_ID = 'ai-agents-508818';
+  assert.equal(vertexSettings(), null, 'a project with no credentials is not configured');
+  delete process.env.GCP_PROJECT_ID;
+  process.env.GCP_SERVICE_ACCOUNT_JSON = JSON.stringify({
+    client_email: 'x@y.iam.gserviceaccount.com',
+    private_key: KEY,
+  });
+  assert.equal(vertexSettings(), null, 'credentials with no project are not configured');
+
+  // The commonest real failure: a dashboard stores the PEM's newlines as the
+  // two characters backslash-n. The key looks perfect on screen and the
+  // parser rejects it with a signature error that mentions nothing about
+  // newlines.
+  process.env.GCP_SERVICE_ACCOUNT_JSON = JSON.stringify({
+    client_email: 'x@y.iam.gserviceaccount.com',
+    private_key: KEY.replace(/\n/g, '\\n'),
+  });
+  assert.ok(
+    serviceAccount()?.private_key.includes('\n'),
+    'escaped newlines in the private key must be repaired, not passed through',
+  );
+
+  // Something that is not a service account key at all — usually an OAuth
+  // client secret, which is the neighbouring button in the console.
+  process.env.GCP_SERVICE_ACCOUNT_JSON = JSON.stringify({installed: {client_id: 'x'}});
+  assert.equal(serviceAccount(), null, 'an OAuth client secret is not a service account');
+  process.env.GCP_SERVICE_ACCOUNT_JSON = 'not json at all';
+  assert.equal(serviceAccount(), null, 'unparseable credentials are refused, not thrown');
+
+  process.env.GCP_PROJECT_ID = 'ai-agents-508818';
+  process.env.GCP_SERVICE_ACCOUNT_JSON = JSON.stringify({
+    client_email: 'x@y.iam.gserviceaccount.com',
+    private_key: KEY,
+  });
+  delete process.env.GCP_LOCATION;
+  const live = vertexSettings();
+  assert.equal(live?.project, 'ai-agents-508818');
+  assert.equal(live?.location, 'europe-west4', 'a sane region without being told');
+  assert.ok(
+    new GeminiProvider('unused', config.model).onVertex,
+    'with a project and credentials she must bill through Cloud, not the key',
+  );
+
+  restore();
+  assert.equal(
+    new GeminiProvider('unused', config.model).onVertex,
+    vertexSettings() !== null,
+    'and the environment must be left exactly as it was found',
+  );
+  ok('she bills through the till the credits can actually pay');
   ok('no caller can think its way past the tool-calling floor');
 
   /*
@@ -562,7 +756,7 @@ try {
    * provider's loop and nothing above it can see the difference.
    */
   const rounds: {tools: boolean}[] = [];
-  const relentless = new GeminiProvider('unused', 'gemini-2.5-flash');
+  const relentless = new GeminiProvider('unused', config.model);
   (relentless as unknown as {client: unknown}).client = {
     models: {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -612,7 +806,7 @@ try {
    * there is still time to say what she managed.
    */
   const roundsRun: {tools: boolean}[] = [];
-  const dawdler = new GeminiProvider('unused', 'gemini-2.5-flash');
+  const dawdler = new GeminiProvider('unused', config.model);
   (dawdler as unknown as {client: unknown}).client = {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     models: {
@@ -712,28 +906,62 @@ try {
   // ---- spending ----------------------------------------------------------
   // A cap that only tells you afterwards is not a cap, so it is checked before
   // the request goes out. Charged from reported token usage, not guessed.
-  const {monthlyCap, record: bill, requireBudget, spend} = await import(
-    '../server/budget'
-  );
+  const {
+    afterwardsCap,
+    creditsExpired,
+    poolExpiry,
+    poolSize,
+    record: bill,
+    requireBudget,
+    spend,
+    standing,
+  } = await import('../server/budget');
+
   const startingSpend = (await spend()).dollars;
-  await bill('gemini-2.5-flash', 1_000_000, 1_000_000);
+  await bill('gemini-3.8-flash', 1_000_000, 1_000_000);
   const after = await spend();
   assert.ok(after.dollars > startingSpend, 'usage must be counted');
   assert.equal(
     Math.round((after.dollars - startingSpend) * 100) / 100,
-    2.8,
+    4.5,
     'charged at the published rate for that model',
   );
   ok('spending is counted from real token usage');
 
-  await bill('gemini-2.5-flash', 20_000_000, 20_000_000);
+  // The pool draws down, and `dollars` and `pool` are not the same number:
+  // one is this month, the other is the whole credit and never resets.
+  const drawn = await spend();
+  assert.ok(drawn.pool > 0, 'spending on credit draws the pool down');
+  const now = await standing();
+  assert.equal(now.against, 'pool', 'while the credit lasts, it is what pays');
+  assert.equal(
+    Math.round((now.spent + now.remaining) * 100) / 100,
+    poolSize(),
+    'spent and remaining must account for the whole pool',
+  );
+  ok('the credit pool is tracked separately from the month');
+
+  // The auto-revert is not a scheduled job that could fail to run — it is
+  // simply which limit applies once the date has passed. Proven by asking
+  // about a date after expiry rather than by waiting until December.
+  const afterExpiry = new Date(poolExpiry().getTime() + 24 * 60 * 60 * 1000);
+  assert.ok(creditsExpired(afterExpiry), 'the credit expires on its published date');
+  const onCard = await standing(afterExpiry);
+  assert.equal(onCard.against, 'card', 'past expiry, spending is the user\'s own money');
+  assert.equal(onCard.limit, afterwardsCap(), 'and the small monthly cap takes over');
+  assert.ok(
+    onCard.limit < poolSize(),
+    'the cap after the credit must be smaller than the credit, or it is not a revert',
+  );
+  ok('the cap reverts on its own the day the credit expires');
+
+  await bill('gemini-3.8-flash', 400_000_000, 400_000_000);
   await assert.rejects(
     requireBudget(),
-    /limit you set/,
-    'past the cap, she must refuse before spending more',
+    /stopped rather than letting it run onto your card/,
+    'past the pool, she must refuse before spending more',
   );
-  assert.ok(monthlyCap() > 0);
-  ok('she stops when the monthly cap is reached');
+  ok('she stops before the credit runs onto the card');
 
   // ---- attention modes ---------------------------------------------------
   // These are not decoration: the mode has to reach the model, or "Focus" is

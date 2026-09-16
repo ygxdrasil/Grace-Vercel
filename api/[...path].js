@@ -11,49 +11,115 @@ dotenv.config();
 
 // server/config.ts
 import path from "node:path";
+
+// server/llm/vertex.ts
+function repairNewlines(pem) {
+  return pem.includes("\\n") && !pem.includes("\n") ? pem.replace(/\\n/g, "\n") : pem;
+}
+function serviceAccount() {
+  const raw = process.env.GCP_SERVICE_ACCOUNT_JSON?.trim();
+  if (!raw) return null;
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    console.error(
+      "[grace] GCP_SERVICE_ACCOUNT_JSON is set but is not valid JSON. Paste the whole downloaded file, including the outermost braces."
+    );
+    return null;
+  }
+  if (!parsed.client_email || !parsed.private_key) {
+    console.error(
+      "[grace] GCP_SERVICE_ACCOUNT_JSON parsed but has no client_email or private_key. That is usually an OAuth client secret rather than a service account key."
+    );
+    return null;
+  }
+  return { ...parsed, private_key: repairNewlines(parsed.private_key) };
+}
+function vertexSettings() {
+  const project = process.env.GCP_PROJECT_ID?.trim();
+  const credentials = serviceAccount();
+  if (!project && !credentials) return null;
+  if (!project || !credentials) {
+    console.error(
+      `[grace] Vertex is half-configured: ${project ? "GCP_SERVICE_ACCOUNT_JSON is missing" : "GCP_PROJECT_ID is missing"}. Falling back to the AI Studio key, which the Cloud credits cannot pay for.`
+    );
+    return null;
+  }
+  return {
+    project,
+    /*
+     * Region matters more than it looks.
+     *
+     * Not every model is served from every region, and a model that is absent
+     * answers 404 rather than saying "try somewhere else" — the same shape of
+     * error as a model that has been retired, which is a genuinely confusing
+     * thing to debug. europe-west4 is the default because it is close to the
+     * user and carries the widest European model selection; us-central1 gets
+     * new models first and is the place to look when something is missing.
+     */
+    location: process.env.GCP_LOCATION?.trim() || "europe-west4",
+    credentials
+  };
+}
+
+// server/config.ts
 var config = {
   apiKey: process.env.GEMINI_API_KEY ?? "",
   /**
    * The model she thinks with.
    *
-   * Flash, not Flash-Lite. Lite was chosen for speed before she had any
-   * tools, and it turned out not to call them — it answered "I am a large
-   * language model and cannot access real-time information" while holding a
-   * working search tool. Deciding to use a tool is the thing small models are
-   * worst at, and a fast wrong answer is not cheaper than a slower right one.
+   * She spent her life so far on gemini-2.5-flash, which was the right choice
+   * for a free tier and is now simply a dead end: the whole 2.5 line shuts
+   * down on 20 October 2026. Staying would mean she stopped working one
+   * Tuesday morning with no warning and no error anyone could read.
    *
-   * Still the 2.5 line: grounding is marked "not available" on the free tier
-   * for 3.x, so moving up a generation would cost her the web.
+   * 3.8 Flash is the replacement, and it is not a sideways move. It is the
+   * first Flash that reasons in several steps and calls tools iteratively
+   * rather than picking one and answering — which is exactly the thing she
+   * was worst at, and exactly what the deliberation work in shared/effort.ts
+   * was built to compensate for.
+   *
+   * On introductory pricing until 31 December, at half its 2027 rate.
    */
-  model: process.env.GRACE_MODEL ?? "gemini-2.5-flash",
+  model: process.env.GRACE_MODEL ?? "gemini-3.8-flash",
+  /**
+   * The model she thinks with when the question deserves it.
+   *
+   * New. Until now every sentence went to the same model and the only dial
+   * was how long it was allowed to deliberate — which bought her more
+   * thinking, but never better thinking. A hard question got more tokens of
+   * the same reasoning.
+   *
+   * Pro costs roughly three times Flash per token and is reserved for the
+   * handful of turns a day that shared/effort.ts rates `hard`. Everything
+   * else — every command, every ordinary exchange — stays on Flash, which is
+   * what keeps the credits lasting ninety days instead of nine.
+   */
+  hardModel: process.env.GRACE_HARD_MODEL ?? "gemini-3.1-pro",
   /**
    * The model that listens.
    *
-   * This was deliberately the same model she thinks with, on the reasoning
-   * that mishearing a name costs far more than half a second and this runs
-   * only once per spoken turn. That reasoning was sound and the arithmetic
-   * behind it was wrong.
+   * Still the lightest thing that can do the job, for the reason worked out
+   * when this was split off: a single spoken exchange is six or seven
+   * requests, not one, and transcription is the one of them that is
+   * transcription rather than judgement. The context hint — names and topic
+   * in play — does most of the work a heavier model was being paid for.
    *
-   * A single spoken exchange is not one request. It is one to hear, one to
-   * three to answer — each tool she reaches for is another round trip — and
-   * several more to speak the reply, which gets split into chunks. Six or
-   * seven requests for "Grace, sleep mode". The free tier allows a few
-   * hundred a day, so an ordinary evening exhausts it, and she spends the
-   * rest of the night saying her free limit has ended.
-   *
-   * The lighter model has roughly four times that daily allowance and costs a
-   * third as much per token, for a job that is transcription rather than
-   * judgement. It takes audio in and gives text back, which is the whole
-   * requirement. The context hint below — the names and topic in play — is
-   * doing much of the work that the heavier model was being paid for.
-   *
-   * Reversible without a deploy: set GRACE_TRANSCRIBE_MODEL back to
-   * gemini-2.5-flash. Do that the moment she starts getting names wrong,
-   * because that is the cost this trade is being made against.
+   * Reversible without a deploy: set GRACE_TRANSCRIBE_MODEL to the thinking
+   * model. Do that the moment she starts getting names wrong, because that
+   * is the cost this trade is made against.
    */
-  transcribeModel: process.env.GRACE_TRANSCRIBE_MODEL ?? "gemini-2.5-flash-lite",
-  /** The model that gives her a voice. Separate from the one that thinks. */
-  speechModel: process.env.GRACE_SPEECH_MODEL ?? "gemini-2.5-flash-preview-tts",
+  transcribeModel: process.env.GRACE_TRANSCRIBE_MODEL ?? "gemini-3.5-flash-lite",
+  /**
+   * The model that gives her a voice. Separate from the one that thinks.
+   *
+   * The `-preview` suffix is load-bearing and is not decoration: there is no
+   * `gemini-3.1-flash-tts`, and asking for one answers 404 — the same shape of
+   * error as a retired model, which is a miserable thing to debug. Google
+   * ships TTS on the preview channel and has done for both generations.
+   */
+  speechModel: process.env.GRACE_SPEECH_MODEL ?? "gemini-3.1-flash-tts-preview",
   /**
    * Which of the prebuilt voices she speaks in. Kore is composed and even,
    * which is the brief: calm, formal, unhurried.
@@ -83,7 +149,7 @@ var config = {
   deployed: Boolean(process.env.VERCEL ?? process.env.GRACE_DEPLOYED)
 };
 function isConfigured() {
-  return config.apiKey.length > 0;
+  return config.apiKey.length > 0 || vertexSettings() !== null;
 }
 
 // server/crypto.ts
@@ -528,61 +594,119 @@ async function report(token2, results) {
 
 // server/budget.ts
 var RATES = {
+  "gemini-3.8-flash": { in: 0.75, out: 3.75 },
+  "gemini-3.1-pro": { in: 2, out: 12 },
+  "gemini-3.5-flash-lite": { in: 0.1, out: 0.4 },
+  "gemini-3.1-flash-tts-preview": { in: 0.5, out: 10 },
+  // The outgoing line. Kept priced until it shuts down on 20 October, because
+  // an unpriced model is charged at the fallback below, and being wrong about
+  // her spending in the fortnight before a migration is exactly when it
+  // matters most to be right.
   "gemini-2.5-flash": { in: 0.3, out: 2.5 },
   "gemini-2.5-flash-lite": { in: 0.1, out: 0.4 },
   "gemini-2.5-flash-preview-tts": { in: 0.5, out: 10 }
 };
-var FALLBACK = { in: 1, out: 20 };
+var FALLBACK = { in: 4, out: 18 };
+function poolExpiry() {
+  const set = process.env.GRACE_CREDITS_EXPIRE;
+  const parsed = set ? new Date(set) : /* @__PURE__ */ new Date("2026-12-16T00:00:00Z");
+  return Number.isNaN(parsed.getTime()) ? /* @__PURE__ */ new Date("2026-12-16T00:00:00Z") : parsed;
+}
+function poolSize() {
+  const set = Number(process.env.GRACE_CREDIT_POOL);
+  return Number.isFinite(set) && set > 0 ? set : 300;
+}
+function afterwardsCap() {
+  const set = Number(process.env.GRACE_MONTHLY_CAP);
+  return Number.isFinite(set) && set > 0 ? set : 10;
+}
+function creditsExpired(now = /* @__PURE__ */ new Date()) {
+  return now >= poolExpiry();
+}
 var store3 = new Document("spend", () => ({
   month: currentMonth(),
   dollars: 0,
   requests: 0,
+  pool: 0,
   stoppedAt: null
 }));
 function currentMonth() {
   return (/* @__PURE__ */ new Date()).toISOString().slice(0, 7);
 }
-function monthlyCap() {
-  const set = Number(process.env.GRACE_MONTHLY_CAP);
-  return Number.isFinite(set) && set > 0 ? set : 10;
-}
 var cached = null;
 async function spend() {
   if (!cached) cached = await store3.read();
   if (cached.month !== currentMonth()) {
-    cached = { month: currentMonth(), dollars: 0, requests: 0, stoppedAt: null };
+    cached = {
+      month: currentMonth(),
+      dollars: 0,
+      requests: 0,
+      pool: cached.pool ?? 0,
+      stoppedAt: null
+    };
     await store3.write(cached);
   }
   return cached;
 }
+async function standing(now = /* @__PURE__ */ new Date()) {
+  const current = await spend();
+  if (creditsExpired(now)) {
+    const limit2 = afterwardsCap();
+    return {
+      against: "card",
+      spent: current.dollars,
+      limit: limit2,
+      remaining: Math.max(0, limit2 - current.dollars),
+      elapsed: null
+    };
+  }
+  const limit = poolSize();
+  const expiry = poolExpiry().getTime();
+  const opened = expiry - 90 * 24 * 60 * 60 * 1e3;
+  const through = (now.getTime() - opened) / (expiry - opened);
+  return {
+    against: "pool",
+    spent: current.pool,
+    limit,
+    remaining: Math.max(0, limit - current.pool),
+    elapsed: Math.max(0, Math.min(1, through))
+  };
+}
 var OverBudget = class extends Error {
-  constructor(dollars) {
+  constructor(standing2) {
     super(
-      `I have spent about $${dollars.toFixed(2)} this month, which is the limit you set. I will start again next month, or you can raise the cap.`
+      standing2.against === "pool" ? `I have used the whole $${standing2.limit.toFixed(0)} of Google credit \u2014 about $${standing2.spent.toFixed(2)} of it. I have stopped rather than letting it run onto your card. Raise GRACE_CREDIT_POOL if there is more credit than I know about.` : `I have spent about $${standing2.spent.toFixed(2)} this month against a $${standing2.limit.toFixed(0)} limit, and the Google credit is gone, so this would be your own money. I will start again next month, or you can raise the cap.`
     );
-    this.dollars = dollars;
+    this.standing = standing2;
     this.name = "OverBudget";
   }
 };
 async function requireBudget() {
-  const current = await spend();
-  if (current.dollars >= monthlyCap()) throw new OverBudget(current.dollars);
+  const now = await standing();
+  if (now.remaining <= 0) throw new OverBudget(now);
 }
 async function record(model, inputTokens, outputTokens, cachedTokens = 0) {
   const rate = RATES[model] ?? FALLBACK;
   const fresh2 = Math.max(0, inputTokens - cachedTokens);
   const cost = (fresh2 * rate.in + cachedTokens * rate.in * 0.25 + outputTokens * rate.out) / 1e6;
   const current = await spend();
+  const onPool = !creditsExpired();
   const next = {
     ...current,
     dollars: current.dollars + cost,
+    // The pool only draws down while it is actually paying. After expiry the
+    // spending is real money and belongs to the month, not to the credit.
+    pool: (current.pool ?? 0) + (onPool ? cost : 0),
     requests: current.requests + 1,
     byModel: {
       ...current.byModel,
       [model]: (current.byModel?.[model] ?? 0) + cost
     },
-    stoppedAt: current.dollars + cost >= monthlyCap() ? current.stoppedAt ?? (/* @__PURE__ */ new Date()).toISOString() : current.stoppedAt
+    stoppedAt: current.stoppedAt
   };
+  const spentNow = onPool ? next.pool : next.dollars;
+  const limitNow = onPool ? poolSize() : afterwardsCap();
+  if (spentNow >= limitNow) next.stoppedAt = current.stoppedAt ?? (/* @__PURE__ */ new Date()).toISOString();
   cached = next;
   await store3.write(next);
 }
@@ -746,6 +870,45 @@ function effortFor(text) {
   return at("ordinary", "ordinary conversation");
 }
 
+// server/llm/thinking.ts
+import { ThinkingLevel } from "@google/genai";
+function speaksLevels(model) {
+  const generation = Number(/gemini-(\d+)/.exec(model)?.[1]);
+  return Number.isFinite(generation) && generation >= 3;
+}
+var LEVELS_ALLOWED = [
+  { match: /pro/i, levels: ["low", "high"] },
+  { match: /lite/i, levels: ["minimal", "low", "medium", "high"] }
+];
+var ORDER = ["minimal", "low", "medium", "high"];
+function nameFor(tokens) {
+  if (tokens <= 0) return "minimal";
+  if (tokens <= THINKING.reflex) return "low";
+  if (tokens <= THINKING.ordinary) return "medium";
+  return "high";
+}
+function nearest(level, allowed) {
+  if (allowed.includes(level)) return level;
+  const wanted = ORDER.indexOf(level);
+  const below = ORDER.filter((l, i) => i < wanted && allowed.includes(l)).pop();
+  return below ?? allowed.find((l) => ORDER.indexOf(l) > wanted) ?? allowed[0];
+}
+function levelsFor(model) {
+  return LEVELS_ALLOWED.find((entry) => entry.match.test(model))?.levels ?? ORDER;
+}
+function levelFor(model, tokens) {
+  return nearest(nameFor(tokens), levelsFor(model));
+}
+var AS_SDK = {
+  minimal: ThinkingLevel.MINIMAL,
+  low: ThinkingLevel.LOW,
+  medium: ThinkingLevel.MEDIUM,
+  high: ThinkingLevel.HIGH
+};
+function thinkingFor(model, tokens) {
+  return speaksLevels(model) ? { thinkingLevel: AS_SDK[levelFor(model, tokens)] } : { thinkingBudget: tokens };
+}
+
 // server/llm/gemini.ts
 var TRANSCRIBE_PROMPT = `Write out what is said in this recording.
 
@@ -800,7 +963,14 @@ var GeminiProvider = class {
   constructor(apiKey, model) {
     this.model = model;
     this.name = "gemini";
-    this.client = new GoogleGenAI({ apiKey });
+    const vertex = vertexSettings();
+    this.onVertex = vertex !== null;
+    this.client = vertex ? new GoogleGenAI({
+      vertexai: true,
+      project: vertex.project,
+      location: vertex.location,
+      googleAuthOptions: { credentials: vertex.credentials }
+    }) : new GoogleGenAI({ apiKey });
   }
   async *stream(request) {
     await requireBudget();
@@ -837,7 +1007,7 @@ var GeminiProvider = class {
             yield chunk.text;
           }
         }
-        meter(this.model, usage2);
+        meter(request.model ?? this.model, usage2);
         if (calls.length === 0 || !request.onToolCall) return;
         history.push({
           role: "model",
@@ -857,7 +1027,7 @@ var GeminiProvider = class {
       }
       const { config: settings } = this.params({ ...request, tools: [], search: false });
       const closing = await this.client.models.generateContentStream({
-        model: this.model,
+        model: request.model ?? this.model,
         contents: history,
         config: settings
       });
@@ -869,7 +1039,7 @@ var GeminiProvider = class {
           yield chunk.text;
         }
       }
-      meter(this.model, closingUsage);
+      meter(request.model ?? this.model, closingUsage);
       return;
     } catch (error) {
       if (!request.search || spoken) throw error;
@@ -887,14 +1057,14 @@ var GeminiProvider = class {
       if (chunk.usageMetadata) usage = chunk.usageMetadata;
       if (chunk.text) yield chunk.text;
     }
-    meter(this.model, usage);
+    meter(request.model ?? this.model, usage);
   }
   async complete(request) {
     await requireBudget();
     const response = await this.client.models.generateContent(
       this.params(request)
     );
-    meter(this.model, response.usageMetadata);
+    meter(request.model ?? this.model, response.usageMetadata);
     return response.text ?? "";
   }
   /**
@@ -951,7 +1121,9 @@ ${request.context}` : TRANSCRIBE_PROMPT
         // one failure mode that matters.
         temperature: 0,
         abortSignal: request.signal,
-        thinkingConfig: { thinkingBudget: 0 }
+        // Transcription has nothing to deliberate about, and this model is
+        // 3.x, where a budget of zero is spelled differently.
+        thinkingConfig: thinkingFor(model, 0)
       }
     });
     meter(model, response.usageMetadata);
@@ -996,6 +1168,7 @@ ${request.text}` }]
    * than restating this logic and testing a copy of it.
    */
   params(request) {
+    const answering = request.model ?? this.model;
     const config2 = {
       systemInstruction: request.system,
       temperature: request.temperature ?? 0.7,
@@ -1014,14 +1187,15 @@ ${request.text}` }]
       config2.tools = [{ googleSearch: {} }];
     }
     if (think !== void 0) {
-      config2.thinkingConfig = {
-        thinkingBudget: config2.tools ? Math.max(THINKING.reflex, think) : think
-      };
+      config2.thinkingConfig = thinkingFor(
+        answering,
+        config2.tools ? Math.max(THINKING.reflex, think) : think
+      );
     } else if (request.fast) {
-      config2.thinkingConfig = { thinkingBudget: config2.tools ? THINKING.reflex : 0 };
+      config2.thinkingConfig = thinkingFor(answering, config2.tools ? THINKING.reflex : 0);
     }
     return {
-      model: this.model,
+      model: request.model ?? this.model,
       contents: request.turns.map((turn) => ({
         role: turn.role === "assistant" ? "model" : "user",
         parts: [{ text: turn.text }]
@@ -3799,7 +3973,7 @@ async function setColour(said2, colour) {
 }
 function nameOfColour(packed) {
   const channels = [packed >> 16 & 255, packed >> 8 & 255, packed & 255];
-  let nearest = "something";
+  let nearest2 = "something";
   let best = Infinity;
   for (const [name, rgb] of Object.entries(COLOURS)) {
     const distance = rgb.reduce(
@@ -3808,10 +3982,10 @@ function nameOfColour(packed) {
     );
     if (distance < best) {
       best = distance;
-      nearest = name;
+      nearest2 = name;
     }
   }
-  return nearest;
+  return nearest2;
 }
 async function survey(said2) {
   const chosen = await pick(said2);
@@ -5473,6 +5647,20 @@ async function takeTurn({
       // and her considered one.
       think: deliberation.think,
       temperature: deliberation.temperature,
+      /*
+       * The handful of turns a day worth paying Pro rates for.
+       *
+       * Deliberation used to be the only dial, which bought more of the same
+       * reasoning rather than better reasoning — a hard question got a longer
+       * run at the same thinking. This is the other half: the turns already
+       * judged `hard` go to the better model as well as getting more room.
+       *
+       * Left undefined otherwise, so every command and every ordinary
+       * exchange stays on Flash. That ratio is what makes the credit last
+       * ninety days rather than nine; Pro on everything would cost roughly
+       * three times as much for no gain on "turn the lights off".
+       */
+      ...deliberation.effort === "hard" ? { model: config.hardModel } : {},
       // Enough left to write the answer, speak it, and record it after the
       // last tool comes back. The hosting stops the whole request dead at
       // sixty seconds and returns nothing — no reply and no reason — so the
@@ -5731,7 +5919,7 @@ function createApi() {
         tools: allTools().map((tool) => tool.name),
         google: googleConfigured(),
         playstation: psnConfigured(),
-        cap: monthlyCap()
+        cap: (await standing()).limit
       });
     })
   );
@@ -5840,6 +6028,7 @@ function createApi() {
         getSummary()
       ]);
       const money = await spend();
+      const now = await standing();
       const state = {
         messages,
         profile: profile2,
@@ -5851,7 +6040,14 @@ function createApi() {
         storage: { backend: getBackend().name, encrypted: Boolean(config.secret) },
         spend: {
           dollars: Math.round(money.dollars * 100) / 100,
-          cap: monthlyCap(),
+          cap: now.limit,
+          // Which pot this is coming out of, and how far through the funded
+          // window she is. A bare number of dollars spent says nothing about
+          // whether that is on track or alarming.
+          against: now.against,
+          pool: Math.round(now.spent * 100) / 100,
+          remaining: Math.round(now.remaining * 100) / 100,
+          elapsed: now.elapsed === null ? null : Math.round(now.elapsed * 100) / 100,
           requests: money.requests,
           byModel: Object.fromEntries(
             Object.entries(money.byModel ?? {}).map(([model, dollars]) => [

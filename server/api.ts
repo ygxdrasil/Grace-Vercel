@@ -16,7 +16,7 @@ import {
   requireAuth,
 } from './auth';
 import {bridgeStatus, bridgeToken, claim, report, rollBridgeToken} from './bridge';
-import {monthlyCap, spend} from './budget';
+import {spend, standing} from './budget';
 import {config, isConfigured} from './config';
 import {keyStatus, loadKeys, setKey} from './keys';
 import {learnFrom, worthLearningFrom} from './learn';
@@ -196,7 +196,7 @@ export function createApi(): Express {
         tools: allTools().map((tool) => tool.name),
         google: googleConfigured(),
         playstation: psnConfigured(),
-        cap: monthlyCap(),
+        cap: (await standing()).limit,
       });
     }),
   );
@@ -363,6 +363,7 @@ export function createApi(): Express {
       ]);
 
       const money = await spend();
+      const now = await standing();
       const state: GraceState = {
         messages,
         profile,
@@ -374,7 +375,14 @@ export function createApi(): Express {
         storage: {backend: getBackend().name, encrypted: Boolean(config.secret)},
         spend: {
           dollars: Math.round(money.dollars * 100) / 100,
-          cap: monthlyCap(),
+          cap: now.limit,
+          // Which pot this is coming out of, and how far through the funded
+          // window she is. A bare number of dollars spent says nothing about
+          // whether that is on track or alarming.
+          against: now.against,
+          pool: Math.round(now.spent * 100) / 100,
+          remaining: Math.round(now.remaining * 100) / 100,
+          elapsed: now.elapsed === null ? null : Math.round(now.elapsed * 100) / 100,
           requests: money.requests,
           byModel: Object.fromEntries(
             Object.entries(money.byModel ?? {}).map(([model, dollars]) => [

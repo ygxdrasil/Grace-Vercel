@@ -115,11 +115,22 @@ export interface GraceState {
   summary: string | null;
   /** Where memory is kept, and whether it is encrypted at rest. */
   storage: {backend: string; encrypted: boolean};
-  /** What she has spent this month against her cap, in dollars. */
+  /** What she has spent against whichever limit is currently in force. */
   spend: {
     dollars: number;
     cap: number;
     requests: number;
+    /**
+     * Which pot is paying: Google's promotional credit, or the card behind
+     * it. The distinction is the whole difference between "spending fast" and
+     * "spending your money", and a bare dollar figure carries neither.
+     */
+    against: 'pool' | 'card';
+    /** Drawn from the credit pool so far. Equals `dollars` only on the card. */
+    pool: number;
+    remaining: number;
+    /** How far through the funded window, 0–1. Null once the credit is gone. */
+    elapsed: number | null;
     /** Where it went — chat, speech, transcription — so nobody guesses. */
     byModel?: Record<string, number>;
   };

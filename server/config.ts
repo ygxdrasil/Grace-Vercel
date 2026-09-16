@@ -1,5 +1,6 @@
 import './env.ts';
 import path from 'node:path';
+import {vertexSettings} from './llm/vertex';
 
 /**
  * Grace reads her settings from the environment so the same build can run as a
@@ -11,46 +12,60 @@ export const config = {
   /**
    * The model she thinks with.
    *
-   * Flash, not Flash-Lite. Lite was chosen for speed before she had any
-   * tools, and it turned out not to call them — it answered "I am a large
-   * language model and cannot access real-time information" while holding a
-   * working search tool. Deciding to use a tool is the thing small models are
-   * worst at, and a fast wrong answer is not cheaper than a slower right one.
+   * She spent her life so far on gemini-2.5-flash, which was the right choice
+   * for a free tier and is now simply a dead end: the whole 2.5 line shuts
+   * down on 20 October 2026. Staying would mean she stopped working one
+   * Tuesday morning with no warning and no error anyone could read.
    *
-   * Still the 2.5 line: grounding is marked "not available" on the free tier
-   * for 3.x, so moving up a generation would cost her the web.
+   * 3.8 Flash is the replacement, and it is not a sideways move. It is the
+   * first Flash that reasons in several steps and calls tools iteratively
+   * rather than picking one and answering — which is exactly the thing she
+   * was worst at, and exactly what the deliberation work in shared/effort.ts
+   * was built to compensate for.
+   *
+   * On introductory pricing until 31 December, at half its 2027 rate.
    */
-  model: process.env.GRACE_MODEL ?? 'gemini-2.5-flash',
+  model: process.env.GRACE_MODEL ?? 'gemini-3.8-flash',
+
+  /**
+   * The model she thinks with when the question deserves it.
+   *
+   * New. Until now every sentence went to the same model and the only dial
+   * was how long it was allowed to deliberate — which bought her more
+   * thinking, but never better thinking. A hard question got more tokens of
+   * the same reasoning.
+   *
+   * Pro costs roughly three times Flash per token and is reserved for the
+   * handful of turns a day that shared/effort.ts rates `hard`. Everything
+   * else — every command, every ordinary exchange — stays on Flash, which is
+   * what keeps the credits lasting ninety days instead of nine.
+   */
+  hardModel: process.env.GRACE_HARD_MODEL ?? 'gemini-3.1-pro',
 
   /**
    * The model that listens.
    *
-   * This was deliberately the same model she thinks with, on the reasoning
-   * that mishearing a name costs far more than half a second and this runs
-   * only once per spoken turn. That reasoning was sound and the arithmetic
-   * behind it was wrong.
+   * Still the lightest thing that can do the job, for the reason worked out
+   * when this was split off: a single spoken exchange is six or seven
+   * requests, not one, and transcription is the one of them that is
+   * transcription rather than judgement. The context hint — names and topic
+   * in play — does most of the work a heavier model was being paid for.
    *
-   * A single spoken exchange is not one request. It is one to hear, one to
-   * three to answer — each tool she reaches for is another round trip — and
-   * several more to speak the reply, which gets split into chunks. Six or
-   * seven requests for "Grace, sleep mode". The free tier allows a few
-   * hundred a day, so an ordinary evening exhausts it, and she spends the
-   * rest of the night saying her free limit has ended.
-   *
-   * The lighter model has roughly four times that daily allowance and costs a
-   * third as much per token, for a job that is transcription rather than
-   * judgement. It takes audio in and gives text back, which is the whole
-   * requirement. The context hint below — the names and topic in play — is
-   * doing much of the work that the heavier model was being paid for.
-   *
-   * Reversible without a deploy: set GRACE_TRANSCRIBE_MODEL back to
-   * gemini-2.5-flash. Do that the moment she starts getting names wrong,
-   * because that is the cost this trade is being made against.
+   * Reversible without a deploy: set GRACE_TRANSCRIBE_MODEL to the thinking
+   * model. Do that the moment she starts getting names wrong, because that
+   * is the cost this trade is made against.
    */
-  transcribeModel: process.env.GRACE_TRANSCRIBE_MODEL ?? 'gemini-2.5-flash-lite',
+  transcribeModel: process.env.GRACE_TRANSCRIBE_MODEL ?? 'gemini-3.5-flash-lite',
 
-  /** The model that gives her a voice. Separate from the one that thinks. */
-  speechModel: process.env.GRACE_SPEECH_MODEL ?? 'gemini-2.5-flash-preview-tts',
+  /**
+   * The model that gives her a voice. Separate from the one that thinks.
+   *
+   * The `-preview` suffix is load-bearing and is not decoration: there is no
+   * `gemini-3.1-flash-tts`, and asking for one answers 404 — the same shape of
+   * error as a retired model, which is a miserable thing to debug. Google
+   * ships TTS on the preview channel and has done for both generations.
+   */
+  speechModel: process.env.GRACE_SPEECH_MODEL ?? 'gemini-3.1-flash-tts-preview',
 
   /**
    * Which of the prebuilt voices she speaks in. Kore is composed and even,
@@ -89,6 +104,14 @@ export const config = {
   deployed: Boolean(process.env.VERCEL ?? process.env.GRACE_DEPLOYED),
 } as const;
 
+/**
+ * Whether she can reach a model at all.
+ *
+ * Two ways now, and either will do: a Vertex project with a service account,
+ * or an AI Studio key. The first is what the Cloud credits can pay for; the
+ * second is what runs on a developer's laptop without a Cloud project. Asking
+ * for both would make her harder to run for no benefit.
+ */
 export function isConfigured(): boolean {
-  return config.apiKey.length > 0;
+  return config.apiKey.length > 0 || vertexSettings() !== null;
 }

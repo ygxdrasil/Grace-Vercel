@@ -36,6 +36,17 @@ export interface GenerateRequest {
    * present and untouched.
    */
   think?: number;
+
+  /**
+   * Which model answers this particular turn.
+   *
+   * Absent means the one she normally thinks with. Set for the small number
+   * of turns a day that are worth paying Pro rates for — a judgement made per
+   * sentence in shared/effort.ts, not per session, because the alternative is
+   * choosing once between an assistant that is slow and expensive about
+   * "lights off" and one that is shallow about the questions that matter.
+   */
+  model?: string;
   /**
    * When to stop starting new rounds of tool calls, as an epoch millisecond.
    *

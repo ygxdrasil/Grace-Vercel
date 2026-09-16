@@ -4,6 +4,8 @@ import * as budget from '../budget';
 import {THINKING} from '../../shared/effort';
 import {config} from '../config';
 import {chosenVoice} from '../keys';
+import {thinkingFor} from './thinking';
+import {vertexSettings} from './vertex';
 import type {
   GenerateRequest,
   LlmProvider,
@@ -119,11 +121,33 @@ export class GeminiProvider implements LlmProvider {
   readonly name = 'gemini';
   private client: GoogleGenAI;
 
+  /** True when billed through Cloud, which is the only till the credits work at. */
+  readonly onVertex: boolean;
+
   constructor(
     apiKey: string,
     readonly model: string,
   ) {
-    this.client = new GoogleGenAI({apiKey});
+    const vertex = vertexSettings();
+    this.onVertex = vertex !== null;
+
+    /*
+     * Same SDK, same models, two doors.
+     *
+     * `vertexai: true` swaps the endpoint and the authentication underneath
+     * without changing a single call site — which is the whole reason this
+     * migration is a constructor change rather than a rewrite. Credentials go
+     * in as an object rather than a file path, because Vercel has no
+     * filesystem to put a key file on.
+     */
+    this.client = vertex
+      ? new GoogleGenAI({
+          vertexai: true,
+          project: vertex.project,
+          location: vertex.location,
+          googleAuthOptions: {credentials: vertex.credentials},
+        })
+      : new GoogleGenAI({apiKey});
   }
 
   async *stream(request: GenerateRequest): AsyncIterable<string> {
@@ -180,7 +204,7 @@ export class GeminiProvider implements LlmProvider {
           }
         }
 
-        meter(this.model, usage);
+        meter(request.model ?? this.model, usage);
 
         // Nothing to do: that was her answer.
         if (calls.length === 0 || !request.onToolCall) return;
@@ -220,7 +244,7 @@ export class GeminiProvider implements LlmProvider {
        */
       const {config: settings} = this.params({...request, tools: [], search: false});
       const closing = await this.client.models.generateContentStream({
-        model: this.model,
+        model: request.model ?? this.model,
         contents: history,
         config: settings,
       });
@@ -233,7 +257,7 @@ export class GeminiProvider implements LlmProvider {
           yield chunk.text;
         }
       }
-      meter(this.model, closingUsage);
+      meter(request.model ?? this.model, closingUsage);
 
       return;
     } catch (error) {
@@ -259,7 +283,7 @@ export class GeminiProvider implements LlmProvider {
       if (chunk.usageMetadata) usage = chunk.usageMetadata;
       if (chunk.text) yield chunk.text;
     }
-    meter(this.model, usage);
+    meter(request.model ?? this.model, usage);
   }
 
   async complete(request: GenerateRequest): Promise<string> {
@@ -267,7 +291,7 @@ export class GeminiProvider implements LlmProvider {
     const response = await this.client.models.generateContent(
       this.params(request),
     );
-    meter(this.model, response.usageMetadata);
+    meter(request.model ?? this.model, response.usageMetadata);
     return response.text ?? '';
   }
 
@@ -332,7 +356,9 @@ export class GeminiProvider implements LlmProvider {
         // one failure mode that matters.
         temperature: 0,
         abortSignal: request.signal,
-        thinkingConfig: {thinkingBudget: 0},
+        // Transcription has nothing to deliberate about, and this model is
+        // 3.x, where a budget of zero is spelled differently.
+        thinkingConfig: thinkingFor(model, 0),
       },
     });
 
@@ -383,6 +409,9 @@ export class GeminiProvider implements LlmProvider {
    * than restating this logic and testing a copy of it.
    */
   params(request: GenerateRequest) {
+    // Pro and Flash do not take the same thinking vocabulary, and Pro has no
+    // `medium`. Whichever model is actually answering decides both.
+    const answering = request.model ?? this.model;
     const config: GenerateContentConfig = {
       systemInstruction: request.system,
       temperature: request.temperature ?? 0.7,
@@ -438,16 +467,23 @@ export class GeminiProvider implements LlmProvider {
      * the tool present and untouched: she answers from memory and then says,
      * quite correctly, that she cannot reach the web.
      */
+    /*
+     * The 3.x line changed how this is asked for, and the two ways are
+     * mutually exclusive: sending both `thinkingBudget` and `thinkingLevel`
+     * in one request is a 400, not a preference. So which one goes out is
+     * decided by the model, in one place, in ./thinking.
+     */
     if (think !== undefined) {
-      config.thinkingConfig = {
-        thinkingBudget: config.tools ? Math.max(THINKING.reflex, think) : think,
-      };
+      config.thinkingConfig = thinkingFor(
+        answering,
+        config.tools ? Math.max(THINKING.reflex, think) : think,
+      );
     } else if (request.fast) {
-      config.thinkingConfig = {thinkingBudget: config.tools ? THINKING.reflex : 0};
+      config.thinkingConfig = thinkingFor(answering, config.tools ? THINKING.reflex : 0);
     }
 
     return {
-      model: this.model,
+      model: request.model ?? this.model,
       contents: request.turns.map((turn) => ({
         role: turn.role === 'assistant' ? 'model' : 'user',
         parts: [{text: turn.text}],
