@@ -53,7 +53,7 @@ export function Core({level = 0, active = false, size = 420}: CoreProps) {
      * them down in a spiral that never repeats, which looks deliberate
      * because it is.
      */
-    const COUNT = 320;
+    const COUNT = 520;
     const golden = Math.PI * (3 - Math.sqrt(5));
     const points = Array.from({length: COUNT}, (_, i) => {
       const y = 1 - (i / (COUNT - 1)) * 2;
@@ -90,7 +90,7 @@ export function Core({level = 0, active = false, size = 420}: CoreProps) {
       // The haze the cloud sits in, so the middle reads as lit rather than as
       // a gap between dots.
       const haze = ctx.createRadialGradient(mid, mid, 0, mid, mid, span * 1.5);
-      haze.addColorStop(0, `rgb(${accent} / ${0.13 + loud * 0.12})`);
+      haze.addColorStop(0, `rgb(${accent} / ${0.2 + loud * 0.14})`);
       haze.addColorStop(1, `rgb(${accent} / 0)`);
       ctx.fillStyle = haze;
       ctx.fillRect(0, 0, size, size);
@@ -109,8 +109,8 @@ export function Core({level = 0, active = false, size = 420}: CoreProps) {
         const py = mid + point.y * span * point.shell;
 
         ctx.beginPath();
-        ctx.arc(px, py, 0.5 + depth * 1.3, 0, Math.PI * 2);
-        ctx.fillStyle = `rgb(${accent} / ${(0.12 + depth * 0.62) * (hot ? 1 : 0.72)})`;
+        ctx.arc(px, py, 0.55 + depth * 1.5, 0, Math.PI * 2);
+        ctx.fillStyle = `rgb(${accent} / ${(0.18 + depth * 0.78) * (hot ? 1 : 0.85)})`;
         ctx.fill();
       }
 
@@ -128,7 +128,7 @@ export function Core({level = 0, active = false, size = 420}: CoreProps) {
     <span
       key={inset}
       aria-hidden
-      className="pointer-events-none absolute rounded-full border border-ice"
+      className="pointer-events-none absolute rounded-full border-[1.5px] border-ice"
       style={{
         inset,
         opacity,
@@ -141,9 +141,9 @@ export function Core({level = 0, active = false, size = 420}: CoreProps) {
 
   return (
     <div className="relative grid place-items-center" style={{width: size, height: size}}>
-      {ring('0%', 64, false, 0.3)}
-      {ring('7%', 44, true, 0.18)}
-      {ring('15%', 96, false, 0.22)}
+      {ring('0%', 64, false, 0.55)}
+      {ring('7%', 44, true, 0.34)}
+      {ring('15%', 96, false, 0.4)}
       <canvas ref={canvasRef} style={{width: size, height: size}} aria-hidden />
     </div>
   );

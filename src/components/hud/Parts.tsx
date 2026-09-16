@@ -212,10 +212,23 @@ export function Row({
         </span>
       </div>
       {share !== undefined && (
-        <div className="mt-1 h-[2px] w-full bg-ice/10">
+        /*
+         * The track is always drawn, and the fill has a floor.
+         *
+         * A bar at zero with no track is invisible, so a column of them at
+         * rest looked like a column of plain text — the panel only became a
+         * panel once something happened. The floor means a real zero still
+         * shows a lit sliver, which reads as "measured and currently nothing"
+         * rather than as "not wired up".
+         */
+        <div className="mt-1 h-[2px] w-full bg-ice/[0.08]">
           <div
             className="h-full transition-[width] duration-700 ease-out"
-            style={{width: `${Math.max(0, Math.min(1, share)) * 100}%`, background: colour}}
+            style={{
+              width: `${Math.max(1.5, Math.min(1, share) * 100)}%`,
+              background: colour,
+              opacity: share <= 0 ? 0.35 : 1,
+            }}
           />
         </div>
       )}

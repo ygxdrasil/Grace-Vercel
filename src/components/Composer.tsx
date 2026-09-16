@@ -48,10 +48,10 @@ function ToggleButton({
       title={label}
       aria-label={label}
       aria-pressed={active}
-      className={`grid h-10 w-10 place-items-center rounded-full border transition disabled:cursor-not-allowed disabled:opacity-30 ${
+      className={`grid h-9 w-9 place-items-center border transition disabled:cursor-not-allowed disabled:opacity-30 ${
         active
           ? 'border-ice/40 bg-ice/15 text-ice'
-          : 'border-edge bg-surface text-mist hover:text-slate-200'
+          : 'border-ice/15 bg-void/40 text-mist/60 hover:border-ice/35 hover:text-ice'
       }`}>
       {children}
     </button>
@@ -96,7 +96,7 @@ export function Composer({
   };
 
   return (
-    <div className="flex items-center gap-2 border-t border-edge/70 bg-surface/60 px-4 py-3 backdrop-blur">
+    <div className="flex items-center gap-2 bg-void/60 px-3 py-2">
       <ToggleButton
         active={micOn}
         disabled={!micSupported}
@@ -137,10 +137,10 @@ export function Composer({
         aria-label={
           recording ? 'Listening — stops on its own when you finish' : 'Speak to Grace'
         }
-        className={`relative flex shrink-0 items-center gap-1.5 overflow-hidden rounded-full border px-3 py-2 text-sm transition disabled:opacity-40 ${
+        className={`readout relative flex shrink-0 items-center gap-1.5 overflow-hidden border px-3 py-2.5 transition disabled:opacity-40 ${
           recording
             ? 'border-ice/60 bg-ice/20 text-ice'
-            : 'border-edge bg-surface text-mist hover:text-slate-200'
+            : 'border-ice/15 bg-void/40 text-mist/60 hover:border-ice/35 hover:text-ice'
         }`}>
         {recording && (
           <span
@@ -160,10 +160,10 @@ export function Composer({
           type="button"
           onClick={onTalk}
           aria-label="Listen for a spoken request"
-          className={`hidden shrink-0 rounded-full border px-3 py-2 text-sm transition lg:block ${
+          className={`readout hidden shrink-0 border px-3 py-2.5 transition lg:block ${
             awake
               ? 'border-ice/50 bg-ice/20 text-ice'
-              : 'border-edge bg-surface text-mist hover:text-slate-200'
+              : 'border-ice/15 bg-void/40 text-mist/60 hover:border-ice/35 hover:text-ice'
           }`}>
           {awake ? 'Listening' : 'Wake'}
         </button>
@@ -242,8 +242,9 @@ export function Composer({
               submit();
             }
           }}
-          placeholder="Say something to Grace, or / for commands"
-          className="w-full rounded-full border border-edge bg-surface px-4 py-2.5 text-sm text-slate-200 placeholder:text-mist/50 focus:border-ice/40 focus:outline-none"
+          placeholder="SAY SOMETHING, OR / FOR COMMANDS"
+          className="w-full border border-ice/15 bg-void/40 px-3 py-2.5 text-xs uppercase tracking-[0.12em] text-ice/90 placeholder:text-mist/30 focus:border-ice/40 focus:outline-none"
+          style={{fontFamily: 'var(--font-mono)'}}
         />
       </div>
 
@@ -252,7 +253,7 @@ export function Composer({
           type="button"
           onClick={onStop}
           aria-label="Stop"
-          className="grid h-10 w-10 place-items-center rounded-full border border-edge bg-surface text-mist transition hover:text-slate-200">
+          className="grid h-9 w-9 place-items-center border border-ice/15 bg-void/40 text-mist/60 transition hover:border-ice/35 hover:text-ice">
           <Square size={15} />
         </button>
       ) : (
@@ -261,7 +262,7 @@ export function Composer({
           onClick={submit}
           disabled={!draft.trim()}
           aria-label="Send"
-          className="grid h-10 w-10 place-items-center rounded-full border border-ice/40 bg-ice/15 text-ice transition hover:bg-ice/25 disabled:opacity-25">
+          className="grid h-9 w-9 place-items-center border border-ice/40 bg-ice/10 text-ice transition hover:bg-ice/20 disabled:opacity-25">
           <Send size={16} />
         </button>
       )}

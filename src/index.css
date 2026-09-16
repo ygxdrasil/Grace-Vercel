@@ -430,7 +430,7 @@
   z-index: -20;
   background:
     radial-gradient(38rem 30rem at 22% 28%, rgb(var(--accent) / 0.22), transparent 62%),
-    radial-gradient(34rem 28rem at 78% 68%, rgb(var(--accent-2) / 0.18), transparent 60%),
+    radial-gradient(34rem 28rem at 78% 68%, rgb(var(--accent) / 0.08), transparent 60%),
     radial-gradient(50rem 40rem at 50% 110%, rgb(var(--accent) / 0.10), transparent 70%);
   filter: blur(0.5rem);
   animation: drift 48s ease-in-out infinite;
@@ -442,7 +442,7 @@
   inset: -25%;
   z-index: -20;
   background:
-    radial-gradient(30rem 26rem at 68% 22%, rgb(var(--accent-2) / 0.16), transparent 58%),
+    radial-gradient(30rem 26rem at 68% 22%, rgb(var(--accent) / 0.07), transparent 58%),
     radial-gradient(26rem 24rem at 28% 78%, rgb(var(--accent) / 0.13), transparent 56%);
   filter: blur(1.2rem);
   mix-blend-mode: screen;
