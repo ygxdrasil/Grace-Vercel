@@ -154,6 +154,18 @@ var config = {
   summarizeAfter: 48,
   /** Set GRACE_LEARN=false to stop Grace building a profile of you. */
   learnFromConversation: process.env.GRACE_LEARN !== "false",
+  /**
+   * Where the machine holding her voice can be reached.
+   *
+   * Empty until the outpost exists, and empty is a supported state rather
+   * than a broken one: without it she falls back to the older way of
+   * speaking — record, transcribe, think, reply — which is slower and cannot
+   * be interrupted, but works. A missing voice must degrade to a worse voice,
+   * never to silence.
+   */
+  outpost: process.env.GRACE_OUTPOST_URL ?? "",
+  /** The voice she speaks in during a live conversation. */
+  liveModel: process.env.GRACE_LIVE_MODEL ?? "gemini-3.8-live",
   /** True on Vercel and friends, where an open instance is a public one. */
   deployed: Boolean(process.env.VERCEL ?? process.env.GRACE_DEPLOYED)
 };
@@ -6006,6 +6018,24 @@ function createApi() {
         res.status(401).json({ error: "no" });
         return;
       }
+      if (req.body?.probe) {
+        res.json({ ok: true });
+        return;
+      }
+      const calling = String(req.body?.tool ?? "").trim();
+      if (calling) {
+        const args = req.body?.args ?? {};
+        if (!allTools().some((tool) => tool.name === calling)) {
+          res.json({ result: `I have no tool called ${calling}.` });
+          return;
+        }
+        try {
+          res.json({ result: (await runTool({ name: calling, args })).result });
+        } catch (error) {
+          res.json({ result: `That failed: ${error.message}` });
+        }
+        return;
+      }
       const text = String(req.body?.text ?? "").trim().slice(0, 2e3);
       if (!text) {
         res.json({ reply: "I didn\u2019t catch that.", spoken: "I didn\u2019t catch that.", acted: [], open: [] });
@@ -6317,6 +6347,17 @@ function createApi() {
         token: await relayToken(),
         url: relayUrl(req.headers["x-forwarded-host"], req.headers.host, config.deployed),
         ...await relayStatus()
+      });
+    })
+  );
+  api.get(
+    "/voice-key",
+    guard(async (_req, res) => {
+      res.json({
+        live: Boolean(config.outpost),
+        url: config.outpost,
+        token: config.outpost ? await relayToken() : null,
+        model: config.liveModel
       });
     })
   );

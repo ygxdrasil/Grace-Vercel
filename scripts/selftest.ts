@@ -2946,6 +2946,58 @@ try {
   assert.equal(spokenBack.reply, REPLY, 'the relay runs a real turn, not a stub of one');
   ok('a valid token gets a full answer back');
 
+  /*
+   * The voice runs somewhere else, and must not become a second Grace.
+   *
+   * The machine holding a spoken conversation open has her tool list but
+   * none of her hands: every tool call travels back here and is carried out
+   * by the same code a typed conversation uses. If that seam ever breaks
+   * open — if the outpost grows its own copy of the tools — the two Graces
+   * drift, and the drift shows up as her denying she did something she had
+   * just done out loud.
+   */
+  const probed = await call('/relay', {
+    method: 'POST',
+    body: JSON.stringify({token: relayKey.token, probe: true}),
+  });
+  assert.equal(probed.status, 200, 'the outpost must be able to check a token');
+  assert.equal(
+    (
+      await call('/relay', {
+        method: 'POST',
+        body: JSON.stringify({token: 'not-the-token', probe: true}),
+      })
+    ).status,
+    401,
+    'and must be refused when the token is wrong, like every other way in',
+  );
+
+  const ran = await call('/relay', {
+    method: 'POST',
+    body: JSON.stringify({
+      token: relayKey.token,
+      tool: 'list_reminders',
+      args: {},
+    }),
+  });
+  assert.equal(ran.status, 200, 'a tool called by the voice must actually run');
+  assert.ok(
+    typeof (await ran.json()).result === 'string',
+    'and must answer with something the model can say out loud',
+  );
+
+  const madeUp = await call('/relay', {
+    method: 'POST',
+    body: JSON.stringify({token: relayKey.token, tool: 'drop_the_database', args: {}}),
+  });
+  assert.equal(madeUp.status, 200, 'an invented tool is answered, not crashed on');
+  assert.match(
+    (await madeUp.json()).result,
+    /no tool called/i,
+    'and is refused by name rather than run',
+  );
+  ok('the voice borrows her hands rather than growing its own');
+
   // The whole point of one pipeline: what arrives by phone is in the same
   // conversation as what was typed, or walking in the door and carrying on
   // does not work.

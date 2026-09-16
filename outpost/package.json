@@ -1,0 +1,14 @@
+{
+  "name": "grace-outpost",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "The machine that holds Grace's voice open.",
+  "scripts": {
+    "start": "node outpost.mjs"
+  },
+  "dependencies": {
+    "@google/genai": "^2.4.0",
+    "ws": "^8.18.0"
+  }
+}

@@ -299,6 +299,52 @@ export function createApi(): Express {
         return;
       }
 
+      /*
+       * The outpost checking that a browser's token is still good.
+       *
+       * It asks before opening a voice session, and asking is the point: the
+       * check goes through her rather than against a copy the outpost keeps,
+       * so replacing the token in her side panel drops every live
+       * conversation at once. A cached copy would make the "replace the
+       * token" button quietly untrue, which is the worst kind of security
+       * control — one that reports success and does nothing.
+       */
+      if (req.body?.probe) {
+        res.json({ok: true});
+        return;
+      }
+
+      /*
+       * A single tool call, arriving from the voice.
+       *
+       * The model holding the spoken conversation lives on the outpost and
+       * has her tool list, but none of her hands. When it decides to turn a
+       * light off, the decision comes here and is carried out by exactly the
+       * code that would have carried it out in a typed conversation — same
+       * permissions, same confirmations, same memory.
+       *
+       * The alternative was letting the outpost own a copy of the tools,
+       * which would work on the first day and drift within a week. The drift
+       * would surface as her denying she had done something she had just
+       * done, and it would be nearly impossible to reproduce.
+       */
+      const calling = String(req.body?.tool ?? '').trim();
+      if (calling) {
+        const args = (req.body?.args ?? {}) as Record<string, unknown>;
+        if (!allTools().some((tool) => tool.name === calling)) {
+          res.json({result: `I have no tool called ${calling}.`});
+          return;
+        }
+        try {
+          res.json({result: (await runTool({name: calling, args})).result});
+        } catch (error) {
+          // Handed back as a result rather than thrown, so the model can say
+          // what went wrong out loud instead of the conversation dying.
+          res.json({result: `That failed: ${(error as Error).message}`});
+        }
+        return;
+      }
+
       const text = String(req.body?.text ?? '').trim().slice(0, 2000);
       if (!text) {
         // Siri hands over an empty string when it mishears silence, and it does
@@ -721,6 +767,31 @@ export function createApi(): Express {
         token: await relayToken(),
         url: relayUrl(req.headers['x-forwarded-host'], req.headers.host, config.deployed),
         ...(await relayStatus()),
+      });
+    }),
+  );
+
+  /*
+   * Where to talk to her, and what to say to be let in.
+   *
+   * The token is the relay's, deliberately — one key for everything that
+   * reaches her from outside her own page, so that replacing it in the side
+   * panel closes every door at once rather than most of them. Two tokens
+   * would mean rolling one and believing you were safe.
+   *
+   * `live` is false when no outpost is configured, which is a normal state
+   * and not an error: she then speaks the older way, by recording and
+   * replying. The browser needs to know which, because the two are entirely
+   * different pieces of machinery on its side.
+   */
+  api.get(
+    '/voice-key',
+    guard(async (_req, res) => {
+      res.json({
+        live: Boolean(config.outpost),
+        url: config.outpost,
+        token: config.outpost ? await relayToken() : null,
+        model: config.liveModel,
       });
     }),
   );

@@ -100,6 +100,20 @@ export const config = {
   /** Set GRACE_LEARN=false to stop Grace building a profile of you. */
   learnFromConversation: process.env.GRACE_LEARN !== 'false',
 
+  /**
+   * Where the machine holding her voice can be reached.
+   *
+   * Empty until the outpost exists, and empty is a supported state rather
+   * than a broken one: without it she falls back to the older way of
+   * speaking — record, transcribe, think, reply — which is slower and cannot
+   * be interrupted, but works. A missing voice must degrade to a worse voice,
+   * never to silence.
+   */
+  outpost: process.env.GRACE_OUTPOST_URL ?? '',
+
+  /** The voice she speaks in during a live conversation. */
+  liveModel: process.env.GRACE_LIVE_MODEL ?? 'gemini-3.8-live',
+
   /** True on Vercel and friends, where an open instance is a public one. */
   deployed: Boolean(process.env.VERCEL ?? process.env.GRACE_DEPLOYED),
 } as const;
