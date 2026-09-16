@@ -36,18 +36,22 @@
    * lines rather than a hundred class renames — which is precisely why it was
    * worth naming them for their job instead of their hue.
    */
-  --color-void: #01060b;
-  --color-surface: #061019;
-  --color-raised: #0a1826;
-  --color-edge: #123249;
-  --color-mist: #7da2bd;
-  --color-ice: #4cd7ff;
+  --color-void: #04090f;
+  --color-surface: #08131c;
+  --color-raised: #0b1a26;
+  --color-edge: #14313f;
+  /* The dim label colour. Most text on the panel is this, not white — a HUD
+     reads as instrumentation partly because almost nothing on it is bright. */
+  --color-mist: #6d94a6;
+  /* Green means running and healthy; it is never used for anything else. */
+  --color-live: #4ade80;
+  --color-ice: #45c8dc;
   /* Amber, and rationed. It means attention — a warning, a confirmation, a
      thing waiting on you. Everywhere else stays blue, so that when something
      does go amber it is the only warm thing on the screen and cannot be
      missed. A palette where the alert colour is also decoration has no alert
      colour. */
-  --color-ember: #ffb545;
+  --color-ember: #e8a33d;
 }
 
 /**
@@ -111,8 +115,8 @@
 }
 
 :root {
-  --accent: 76 215 255;
-  --accent-2: 255 181 69;
+  --accent: 69 200 220;
+  --accent-2: 232 163 61;
 }
 
 /**

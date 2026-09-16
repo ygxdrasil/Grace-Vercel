@@ -6106,6 +6106,10 @@ function createApi() {
         policies,
         ready: isConfigured(),
         model: config.model,
+        // How many she actually has, counted rather than written down. The
+        // panel shows this, and a hardcoded number would drift the first time
+        // a tool was added and then be quietly wrong forever.
+        tools: allTools().length,
         mode,
         summary,
         storage: { backend: getBackend().name, encrypted: Boolean(config.secret) },

@@ -762,6 +762,19 @@ try {
   );
   ok('what the panel says about her is read from something, never invented');
 
+  // The panel prints how many tools she has. Counted, never written down —
+  // a hardcoded figure drifts the first time a tool is added and is then
+  // quietly wrong forever, which on a panel built to be trusted is worse
+  // than showing nothing.
+  const shown = (await (await call('/state')).json()) as {tools: number};
+  assert.equal(
+    shown.tools,
+    allTools().length,
+    'the tool count on the panel must be the number she actually has',
+  );
+  assert.ok(shown.tools > 0, 'and she has some');
+  ok('the tool count is counted rather than claimed');
+
   /*
    * Which till she is billed at.
    *

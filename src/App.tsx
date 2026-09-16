@@ -586,6 +586,7 @@ export default function App() {
             doing: grace.live.doing,
           }}
           asking={Boolean(grace.asked)}
+          tools={state.tools}
         />
       )}
 

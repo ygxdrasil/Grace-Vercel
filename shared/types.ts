@@ -110,6 +110,8 @@ export interface GraceState {
   /** False when no API key is configured, so the UI can explain itself. */
   ready: boolean;
   model: string;
+  /** How many tools she currently has. Counted server-side, never assumed. */
+  tools: number;
   mode: ModeState;
   /** What she has folded away from older conversations. Null before any. */
   summary: string | null;

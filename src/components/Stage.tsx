@@ -1,27 +1,28 @@
-import {X} from 'lucide-react';
 import {useEffect} from 'react';
 import type {DayView, GraceState} from '../../shared/types';
-import {BEARING_WEIGHT, bearingOf, bearingWarns, type Reading} from '../../shared/bearing';
+import {bearingOf, bearingWarns, type Reading} from '../../shared/bearing';
 import type {Mode} from '../hooks/useGrace';
-import {Reactor} from './Reactor';
-import {Field, Gauge, Polar} from './hud/Parts';
+import {Core} from './hud/Core';
+import {Polar} from './hud/Parts';
 
 /**
- * Her, taking over the screen — as an instrument panel.
+ * The panel, laid out the way the reference is laid out.
  *
- * The laptop in the corner of the room stops being a laptop showing an app.
- * Everything is sized to be read from across a room rather than from arm's
- * length, which remains the only design rule that matters at this distance.
+ * Structure first, because the structure is most of the resemblance: a thin
+ * rule across the top carrying identity and state, two narrow columns of
+ * readouts pinned hard to the edges, the instrument alone in the middle with
+ * nothing but brackets near it, and a ticker along the bottom.
  *
- * The arrangement is the one a cockpit uses, because the problem is the same:
- * one thing you watch constantly in the middle, the quantities that drift
- * slowly down one side, the ones that move in real time down the other, and a
- * line along the bottom for whatever just happened.
+ * Then the type, which is the rest of it. Everything is small, upper case,
+ * widely tracked and dim — almost nothing on a real panel is bright, and the
+ * handful of things that are bright are the things that matter. The
+ * temptation is to make labels readable at a glance; the reference resists
+ * it, and resisting it is why the reference looks like equipment.
  *
- * Every readout here is real. Nothing is drawn that cannot be filled with a
- * true value — which matters more than it sounds, because a panel of invented
- * telemetry is indistinguishable from a panel of real telemetry, and once you
- * suspect one number of being decorative you stop trusting all of them.
+ * Every figure is read from something. The Japanese captions in the reference
+ * are the one thing not reproduced: filler text in a language neither of us
+ * is reading would be decoration pretending to be data, which is the single
+ * thing this panel is built not to do.
  */
 
 interface Props {
@@ -32,42 +33,88 @@ interface Props {
   now: Date;
   onTalk: () => void;
   onClose: () => void;
-  /** Whether the live voice is running, or she has fallen back to recording. */
   live?: {available: boolean; state: string; doing: string | null};
-  /** Something she has asked and you have not answered. */
   asking?: boolean;
+  tools?: number;
 }
 
 const LABEL: Record<Mode, string> = {
-  offline: 'Offline',
-  idle: 'Ready',
-  waiting: 'Standby',
-  listening: 'Listening',
-  thinking: 'Thinking',
-  speaking: 'Speaking',
+  offline: 'OFFLINE',
+  idle: 'READY',
+  waiting: 'STANDBY',
+  listening: 'LISTENING',
+  thinking: 'THINKING',
+  speaking: 'SPEAKING',
 };
 
-function Column({side, children}: {side: 'left' | 'right'; children: React.ReactNode}) {
+/** A section rule with a label sitting on it. */
+function Head({children}: {children: React.ReactNode}) {
   return (
-    <aside
-      className={`hidden w-60 shrink-0 flex-col gap-5 overflow-y-auto scroll-thin px-4 py-5 lg:flex ${
-        side === 'left' ? 'border-r' : 'border-l'
-      } border-ice/12`}>
-      {children}
-    </aside>
+    <div className="mb-2 flex items-center gap-2">
+      <span className="readout whitespace-nowrap text-ice/55">{children}</span>
+      <span className="h-px flex-1 bg-ice/15" />
+    </div>
   );
 }
 
-function Group({title, children}: {title: string; children: React.ReactNode}) {
+/**
+ * One row: label, bar, value.
+ *
+ * `tone` is not styling for its own sake. Green means running, amber means
+ * something wants you, cyan is everything else — and because those meanings
+ * are fixed, a glance down the column tells you whether anything is wrong
+ * without reading a single word.
+ */
+function Row({
+  label,
+  value,
+  share,
+  tone = 'ice',
+}: {
+  label: string;
+  value: string;
+  share?: number;
+  tone?: 'ice' | 'live' | 'warn';
+}) {
+  const colour =
+    tone === 'live'
+      ? 'var(--color-live)'
+      : tone === 'warn'
+        ? 'var(--color-ember)'
+        : 'rgb(var(--accent))';
+
   return (
-    <section className="space-y-2.5">
-      <h2 className="readout border-b border-ice/12 pb-1.5 text-ice/60">{title}</h2>
-      {children}
-    </section>
+    <div className="mb-2">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="readout truncate text-mist/50">{label}</span>
+        <span className="readout shrink-0 tabular-nums" style={{color: colour}}>
+          {value}
+        </span>
+      </div>
+      {share !== undefined && (
+        <div className="mt-1 h-[2px] w-full bg-ice/10">
+          <div
+            className="h-full transition-[width] duration-700 ease-out"
+            style={{width: `${Math.max(0, Math.min(1, share)) * 100}%`, background: colour}}
+          />
+        </div>
+      )}
+    </div>
   );
 }
 
-export function Stage({state, day, mode, level, now, onTalk, onClose, live, asking}: Props) {
+export function Stage({
+  state,
+  day,
+  mode,
+  level,
+  now,
+  onTalk,
+  onClose,
+  live,
+  asking,
+  tools,
+}: Props) {
   useEffect(() => {
     const escape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose();
@@ -86,176 +133,200 @@ export function Stage({state, day, mode, level, now, onTalk, onClose, live, aski
   };
   const bearing = bearingOf(reading);
   const warn = bearingWarns(bearing);
+  const busy = mode === 'thinking' || mode === 'speaking' || Boolean(live?.doing);
 
   const spend = state.spend;
   const onPool = spend.against === 'pool';
-  /*
-   * Ahead of where the money should be, or behind it.
-   *
-   * The credit has to last a fixed number of days, so "how much is left" on
-   * its own says nothing — half of it gone is excellent in December and
-   * alarming in September. This compares what has been spent against how much
-   * of the window has passed, and only goes amber when it is genuinely ahead.
-   */
-  const pace =
+  const used = onPool ? spend.pool : spend.dollars;
+  // Amber on pace, not on amount: half the pool gone is excellent in December
+  // and alarming in September.
+  const ahead =
     onPool && spend.elapsed !== null && spend.elapsed > 0.05
-      ? spend.pool / spend.cap / spend.elapsed
-      : 1;
+      ? used / spend.cap / spend.elapsed > 1.35
+      : false;
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-void">
+    <div
+      className="fixed inset-0 z-50 flex flex-col bg-void"
+      style={{fontFamily: 'var(--font-mono)'}}>
+      {/* ---- top rule ---- */}
       <header className="flex shrink-0 items-center justify-between gap-4 border-b border-ice/15 px-4 py-2">
         <div className="flex min-w-0 items-center gap-4">
-          <span className="readout text-ice">G.R.A.C.E.</span>
-          <span className="readout text-mist/50">{LABEL[mode]}</span>
-          <span className="readout hidden text-mist/35 sm:inline">
-            [{live?.available ? 'LIVE' : 'RELAY'}]
+          <span
+            className="whitespace-nowrap text-[0.78rem] tracking-[0.34em] text-ice"
+            style={{textShadow: '0 0 12px rgb(var(--accent) / 0.55)'}}>
+            G.R.A.C.E.
+          </span>
+          <span className="readout flex items-center gap-1.5 text-mist/60">
+            <span
+              className="h-1.5 w-1.5 rounded-full"
+              style={{
+                background: warn ? 'var(--color-ember)' : 'rgb(var(--accent))',
+                boxShadow: `0 0 6px ${warn ? 'var(--color-ember)' : 'rgb(var(--accent))'}`,
+              }}
+            />
+            {LABEL[mode]}
+          </span>
+          <span className="readout hidden text-mist/30 md:inline">
+            [{live?.available ? 'LIVE NATIVE AUDIO' : 'RELAY FALLBACK'}]
+          </span>
+          <span className="readout hidden text-mist/30 lg:inline">
+            TLS {state.storage.encrypted ? 'OK' : '---'}
           </span>
         </div>
-        <div className="flex items-center gap-4">
-          <span className="readout tabular-nums text-ice/70">
-            {now.toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit'})}
-          </span>
+
+        <div className="flex items-baseline gap-4">
+          <div className="text-right">
+            <div className="text-lg leading-none tabular-nums text-ice">
+              {now.toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit'})}
+            </div>
+            <div className="readout mt-0.5 text-mist/35">
+              {now.toISOString().slice(0, 10)}
+            </div>
+          </div>
           <button
             type="button"
             onClick={onClose}
             aria-label="Leave full screen"
-            className="text-mist/60 transition hover:text-ice">
-            <X size={16} />
+            className="readout text-mist/40 transition hover:text-ice">
+            ESC
           </button>
         </div>
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <Column side="left">
-          <Group title="Credit">
-            <Gauge
-              label={onPool ? 'Pool used' : 'This month'}
-              value={onPool ? spend.pool : spend.dollars}
-              of={spend.cap}
-              shown={`$${(onPool ? spend.pool : spend.dollars).toFixed(2)}`}
-              warn={pace > 1.35 || spend.remaining <= 0}
+        {/* ---- left column ---- */}
+        <aside className="hidden w-52 shrink-0 flex-col overflow-y-auto scroll-thin px-3 py-4 lg:flex">
+          <Head>VITALS</Head>
+          <Row
+            label={onPool ? 'CREDIT' : 'MONTH'}
+            value={`$${used.toFixed(3)}`}
+            share={used / spend.cap}
+            tone={ahead ? 'warn' : 'ice'}
+          />
+          {spend.elapsed !== null && (
+            <Row
+              label="WINDOW"
+              value={`${Math.round(spend.elapsed * 100)}%`}
+              share={spend.elapsed}
             />
-            {spend.elapsed !== null && (
-              <Gauge
-                label="Window elapsed"
-                value={spend.elapsed}
-                shown={`${Math.round(spend.elapsed * 100)}%`}
-              />
-            )}
-            <Field label="Requests" value={String(spend.requests)} />
-            <Field label="Paying" value={onPool ? 'Google credit' : 'Your card'} />
-          </Group>
+          )}
+          <Row label="REQUESTS" value={String(spend.requests)} />
+          <Row
+            label="VOICE"
+            value={live?.available ? 'OPEN' : 'RELAY'}
+            tone={live?.available ? 'live' : 'ice'}
+          />
+          <Row
+            label="MEMORY"
+            value={state.ready ? 'RUNNING' : 'IDLE'}
+            tone={state.ready ? 'live' : 'ice'}
+          />
+          <Row label="STORE" value={state.storage.backend.toUpperCase()} />
+          <Row label="CRYPTO" value={state.storage.encrypted ? 'AES-256' : 'NONE'} />
 
-          <Group title="Today">
+          <div className="mt-4">
+            <Head>OUTSTANDING</Head>
             {day && day.reminders.length > 0 ? (
               <ul className="space-y-1">
-                {day.reminders.slice(0, 5).map((one) => (
-                  <li key={one.id} className="truncate text-xs text-slate-300" title={one.text}>
+                {day.reminders.slice(0, 6).map((one) => (
+                  <li
+                    key={one.id}
+                    className="readout truncate text-mist/60"
+                    title={one.text}>
                     {one.text}
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="readout text-mist/40">Nothing outstanding</p>
+              <p className="readout text-mist/25">NONE</p>
             )}
-          </Group>
+          </div>
 
-          <Group title="She has been">
+          <div className="mt-4">
+            <Head>LOG</Head>
             {day && day.deeds.length > 0 ? (
               <ul className="space-y-1">
-                {day.deeds.slice(0, 6).map((deed) => (
-                  <li key={deed.id} className="truncate text-xs text-mist/70" title={deed.text}>
+                {day.deeds.slice(0, 8).map((deed) => (
+                  <li
+                    key={deed.id}
+                    className="readout truncate text-mist/40"
+                    title={deed.text}>
                     {deed.text}
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="readout text-mist/40">Quiet so far</p>
+              <p className="readout text-mist/25">QUIET</p>
             )}
-          </Group>
-        </Column>
+          </div>
+        </aside>
 
-        {/* Her. */}
-        <div className="relative flex min-w-0 flex-1 flex-col items-center justify-center px-6">
-          {/* Corner brackets. They frame her as the instrument rather than as
-              the empty middle of a layout, which is the whole job of the four
-              cheapest elements on this screen. */}
+        {/* ---- centre ---- */}
+        <main className="relative flex min-w-0 flex-1 flex-col items-center justify-center">
           {(
             [
-              ['left-6 top-6', 'border-l-2 border-t-2'],
-              ['right-6 top-6', 'border-r-2 border-t-2'],
-              ['bottom-6 left-6', 'border-b-2 border-l-2'],
-              ['bottom-6 right-6', 'border-b-2 border-r-2'],
+              ['left-5 top-5', 'border-l border-t'],
+              ['right-5 top-5', 'border-r border-t'],
+              ['bottom-5 left-5', 'border-b border-l'],
+              ['bottom-5 right-5', 'border-b border-r'],
             ] as const
           ).map(([place, edges]) => (
             <span
               key={place}
               aria-hidden
-              className={`pointer-events-none absolute h-7 w-7 border-ice/25 ${place} ${edges}`}
+              className={`pointer-events-none absolute h-8 w-8 border-ice/30 ${place} ${edges}`}
             />
           ))}
 
-          <p className="font-serif text-[4.5rem] leading-none tracking-tight text-slate-100 tabular-nums sm:text-[6rem]">
-            {now.toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit'})}
-          </p>
-          <p className="readout mt-1 text-mist/40">
-            {now.toLocaleDateString('en-GB', {weekday: 'long', day: 'numeric', month: 'long'})}
-          </p>
+          <button
+            type="button"
+            onClick={onTalk}
+            aria-label="Talk to Grace"
+            className="rounded-full outline-none transition-transform focus-visible:ring-1 focus-visible:ring-ice/50 active:scale-[0.99]">
+            <Core level={level} active={busy} size={420} />
+          </button>
 
-          <div className="mt-6">
-            <Reactor mode={mode} level={level} onPress={onTalk} size="stage" />
+          {/* State, then bearing. Two lines because they answer different
+              questions: what is happening, and how she is going about it. */}
+          <p className="mt-6 text-[0.8rem] tracking-[0.42em] text-ice/85">{LABEL[mode]}</p>
+          <p
+            className="mt-2 text-[0.62rem] uppercase tracking-[0.3em] transition-opacity duration-700"
+            style={{color: warn ? 'var(--color-ember)' : 'rgb(var(--accent) / 0.55)'}}>
+            {live?.doing ? live.doing.replace(/_/g, ' ') : bearing}
+          </p>
+        </main>
+
+        {/* ---- right column ---- */}
+        <aside className="hidden w-52 shrink-0 flex-col overflow-y-auto scroll-thin px-3 py-4 lg:flex">
+          <Head>MIC LEVEL / POLAR</Head>
+          <div className="grid place-items-center py-1">
+            <Polar level={level} live={mode === 'listening' || mode === 'waiting'} size={150} />
           </div>
 
-          {/*
-           * What she is doing, and how she is going about it.
-           *
-           * Two lines rather than one, because they answer different
-           * questions. The first is what is happening — thinking, speaking,
-           * standing by. The second is her bearing, which is what a mood
-           * stands in for: how hard she is concentrating, whether she is
-           * busy, whether she is waiting on you. She has no feelings and this
-           * invents none; every word of it is read from something measured.
-           */}
-          <p className="readout mt-5 text-mist/55">{LABEL[mode]}</p>
-          <p
-            className="mt-1 text-sm uppercase tracking-[0.3em] transition-opacity duration-700"
-            style={{
-              color: warn ? 'var(--color-ember)' : 'rgb(var(--accent))',
-              opacity: BEARING_WEIGHT[bearing],
-            }}>
-            {bearing}
-          </p>
-          {live?.doing && (
-            <p className="readout mt-2 text-ice/50">{live.doing.replace(/_/g, ' ')}</p>
-          )}
-        </div>
+          <div className="mt-3">
+            <Head>AUDIO LEVEL</Head>
+            <Row label="RMS" value={level.toFixed(3)} share={level} />
+          </div>
 
-        <Column side="right">
-          <Group title="Mic level / polar">
-            <div className="grid place-items-center py-1">
-              <Polar level={level} live={mode === 'listening' || mode === 'waiting'} />
-            </div>
-            <Gauge label="Audio level" value={level} shown={level.toFixed(3)} />
-          </Group>
-
-          <Group title="Session">
-            <Field label="Model" value={state.model} />
-            <Field label="Voice" value={live?.available ? 'Live, native' : 'Recorded'} />
-            <Field label="Bearing" value={bearing} />
-            <Field label="Memory" value={state.storage.backend} />
-            <Field label="At rest" value={state.storage.encrypted ? 'Encrypted' : 'Plain'} />
-            <Field label="Confirms" value={`${state.policies.length} rules`} />
-          </Group>
-        </Column>
+          <div className="mt-3">
+            <Head>SESSION</Head>
+            <Row label="MODEL" value={state.model} />
+            <Row label="VOICE" value={live?.available ? 'NATIVE' : 'RECORDED'} />
+            <Row label="LANG" value="EN-GB" />
+            <Row label="WAKE" value="GRACE" />
+            <Row label="BEARING" value={bearing.toUpperCase()} tone={warn ? 'warn' : 'ice'} />
+            <Row label="TOOLS" value={tools === undefined ? '--' : String(tools)} />
+            <Row label="CONFIRMS" value={String(state.policies.length)} />
+            <Row label="PAYING" value={onPool ? 'CREDIT' : 'CARD'} tone={onPool ? 'ice' : 'warn'} />
+          </div>
+        </aside>
       </div>
 
-      {/* The ticker. The last thing she said, along the bottom, because on a
-          screen across a room the most recent sentence is the only part of
-          the conversation you can actually read. */}
-      <footer className="flex shrink-0 items-center gap-3 border-t border-ice/15 px-4 py-2">
-        <span className="readout shrink-0 text-ice/50">Last</span>
-        <p className="truncate text-xs text-mist/70">
+      {/* ---- bottom ticker ---- */}
+      <footer className="flex shrink-0 items-center gap-3 border-t border-ice/15 px-4 py-1.5">
+        <span className="readout shrink-0 text-ice/45">LAST</span>
+        <p className="readout truncate normal-case tracking-normal text-mist/60">
           {state.messages[state.messages.length - 1]?.text ?? 'Nothing said yet.'}
         </p>
       </footer>
