@@ -29,6 +29,7 @@ import {useFreshness} from './hooks/useFreshness';
 import {useRooms} from './hooks/useRooms';
 import {useChats} from './hooks/useChats';
 import {MANY_CONVERSATIONS} from './lib/features';
+import {Module} from './components/hud/Module';
 import {Sidebar} from './components/Sidebar';
 import {Install} from './components/Install';
 import {useTheme} from './hooks/useTheme';
@@ -260,20 +261,41 @@ export default function App() {
       <div className="grain" />
       <div className="vignette" />
 
-      <header className="flex items-center justify-between border-b border-edge/70 px-4 py-3 sm:px-5">
-        <h1 className="flex items-baseline gap-2 font-serif text-xl tracking-wide text-slate-100">
-          Grace
-          {rooms.room && rooms.room.id !== 'grace' && (
-            <span className={`text-xs tracking-[0.18em] uppercase ${accent.text}`}>
-              {rooms.room.name}
-            </span>
-          )}
-        </h1>
-
-        <div className="flex items-center gap-2 sm:gap-4">
-          <span className="hidden items-center gap-2 text-xs text-mist sm:flex">
-            <span className={`h-1.5 w-1.5 rounded-full ${MODE_DOT[mode]}`} />
+      {/* The status bar, rather than a page heading.
+          A title that says the name of the application is the least useful
+          thing a bar like this can carry — you know what you opened. What
+          earns the space is what is true right now: which room, what she is
+          doing, and whether the voice is the live one or the fallback. */}
+      <header className="relative z-10 flex items-center justify-between gap-3 border-b border-ice/15 bg-void/40 px-3 py-2 sm:px-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="readout text-ice/80">
+            {rooms.room && rooms.room.id !== 'grace' ? rooms.room.name : 'Grace'}
+          </span>
+          <span
+            className="readout hidden items-center gap-1.5 text-mist/60 sm:flex"
+            aria-live="polite">
+            <span className={`h-1 w-1 rounded-full ${MODE_DOT[mode]}`} />
             {MODE_LABEL[mode]}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2 sm:gap-3">
+          {/* Which voice is actually running.
+              This is here because its absence cost a day: the live voice was
+              blocked by a security header, she fell back to recording and
+              replying, and the fallback works well enough that nobody could
+              tell. Two states that behave almost identically need to be
+              legible somewhere, or the broken one passes for the working one. */}
+          <span
+            className={`readout hidden sm:inline ${
+              grace.live.available ? 'text-ice/60' : 'text-mist/40'
+            }`}
+            title={
+              grace.live.available
+                ? 'Live voice — she hears you while she is talking'
+                : 'Fallback voice — records, then replies. She cannot be interrupted.'
+            }>
+            {grace.live.available ? 'LIVE' : 'RELAY'}
           </span>
           <button
             type="button"
@@ -367,10 +389,19 @@ export default function App() {
         </aside>
 
         <section
-          className={`min-w-0 flex-1 flex-col lg:flex ${
+          className={`min-w-0 flex-1 flex-col p-3 lg:flex ${
             tab === 'talk' ? 'flex' : 'hidden'
           }`}>
-          <div className="min-h-0 flex-1">
+          {/* Framed rather than bare.
+              The conversation used to run edge to edge, which made it the
+              page itself. Inside a labelled frame it becomes one instrument
+              among several — which is the point of the arrangement, and also
+              what stops a long transcript reading as the whole application. */}
+          <Module
+            label="Conversation"
+            fill
+            status={grace.live.state === 'closed' ? undefined : grace.live.state}
+            className="min-h-0 flex-1">
             <Transcript
               messages={grace.messages}
               streaming={grace.streaming}
@@ -381,7 +412,7 @@ export default function App() {
               heard={grace.micOn ? grace.ambient.heard : ''}
               onOpener={(text) => void grace.send(text, 'text')}
             />
-          </div>
+          </Module>
         </section>
 
         {state && (

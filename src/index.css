@@ -1,9 +1,27 @@
-@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@200;300;400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Inter:wght@200;300;400;500&display=swap');
 @import "tailwindcss";
 
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-serif: "Instrument Serif", ui-serif, Georgia, serif;
+  /*
+   * The instrument typeface, and where it stops.
+   *
+   * Share Tech Mono is what makes a panel read as a readout rather than as a
+   * card: fixed width, squared terminals, numbers that line up. It is used
+   * for every label, status, figure and heading.
+   *
+   * It is deliberately not used for what she says. A monospace face is
+   * tiring over a paragraph — the even spacing that makes a column of
+   * numbers legible is exactly what makes prose hard to scan — and her
+   * sentences are the one thing on this screen that is meant to be read
+   * rather than glanced at. Inter keeps those.
+   *
+   * `--font-serif` keeps its name so nothing has to be renamed, and now
+   * points at the mono face. Every heading that used to be a serif becomes a
+   * readout, in one line.
+   */
+  --font-serif: "Share Tech Mono", ui-monospace, SFMono-Regular, monospace;
+  --font-mono: "Share Tech Mono", ui-monospace, SFMono-Regular, monospace;
 
   /*
    * Arc reactor, not amethyst.
@@ -39,6 +57,59 @@
  * doing that by swapping Tailwind classes everywhere would mean every panel
  * knowing which room it is in. One variable on the root means none of them do.
  */
+/*
+ * The room she is in.
+ *
+ * Not a page with a dark background — a screen. The vignette pushes the
+ * corners down so the middle reads as lit, the grain stops the large flat
+ * areas banding on a cheap panel, and the haze behind centre is what makes
+ * her look like a light source rather than a drawing of one.
+ *
+ * All three are painted once and never animated. A blur that large costs
+ * real time to rasterise and nothing at all to keep on screen, which is the
+ * distinction that matters on a page left open all day — and the reason this
+ * can look expensive without being expensive.
+ *
+ * The grain is inlined as a data URI rather than fetched. The policy forbids
+ * loading images from anywhere else, and rightly: a background texture is
+ * not worth a hole in it.
+ */
+.room::before,
+.room::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.room::before {
+  background:
+    radial-gradient(ellipse 120% 90% at 50% 45%, rgb(var(--accent) / 0.07), transparent 60%),
+    radial-gradient(ellipse at center, var(--color-surface) 0%, var(--color-void) 70%);
+}
+
+.room::after {
+  /* Fractal noise, about 400 bytes, tiled. Sits at a few percent so it is
+     felt rather than seen. */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+  opacity: 0.035;
+  mix-blend-mode: overlay;
+}
+
+/* Thin rules that read as a machined edge rather than a border. */
+.hairline {
+  border: 1px solid rgb(var(--accent) / 0.16);
+}
+
+/* The chrome voice: small, spaced, upper case. Used for every label. */
+.readout {
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 0.65rem;
+}
+
 :root {
   --accent: 76 215 255;
   --accent-2: 255 181 69;

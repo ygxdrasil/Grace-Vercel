@@ -144,11 +144,30 @@ export function Reactor({
         }}
       />
 
+      {/* Her name, at the centre of the instrument.
+          Sits above the core rather than replacing it: the light is what
+          moves, the lettering is what stays still, and a name that pulsed
+          would be a logo animation rather than a readout. */}
+      <span
+        className="pointer-events-none absolute z-10 select-none"
+        style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: size === 'stage' ? '1.5rem' : '1.05rem',
+          letterSpacing: '0.42em',
+          // The tracking pushes the text right; half of it back centres it.
+          textIndent: '0.42em',
+          color: 'rgb(var(--accent))',
+          opacity: Math.min(1, lit + 0.25),
+          textShadow: `0 0 ${size === 'stage' ? 26 : 16}px rgb(var(--accent) / 0.8)`,
+        }}>
+        GRACE
+      </span>
+
       {/* The core. Small, bright, and the only filled shape here. */}
       <span
         className="absolute rounded-full bg-ice"
         style={{
-          inset: '46%',
+          inset: '44%',
           opacity: Math.min(1, lit + 0.2),
           boxShadow: `0 0 ${size === 'stage' ? 40 : 26}px rgb(var(--accent) / ${lit * 0.55})`,
           animation:

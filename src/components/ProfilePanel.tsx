@@ -145,7 +145,7 @@ export function ProfilePanel({
         open ? 'translate-x-0' : 'translate-x-full'
       }`}>
       <div className="flex items-center justify-between border-b border-edge/70 px-5 py-4">
-        <h2 className="font-serif text-lg text-slate-100">Settings</h2>
+        <h2 className="font-serif text-base uppercase tracking-[0.16em] text-slate-100">Settings</h2>
         <button
           type="button"
           onClick={onClose}
