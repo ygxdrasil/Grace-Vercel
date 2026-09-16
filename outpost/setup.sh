@@ -107,6 +107,21 @@ if ! gcloud compute firewall-rules describe grace-outpost-web --quiet >/dev/null
     --description="Grace's voice, over TLS" --quiet
 fi
 
+say "Reserving a permanent address"
+# Without this the address is temporary, and a temporary address is released
+# the moment the machine is stopped — which is exactly what you are told to do
+# to save money overnight. You would stop it, start it the next morning, and
+# find her voice pointing at an address that now belongs to a stranger.
+#
+# A reserved address costs a few pence a month while the machine is off and
+# nothing at all while it is running.
+if ! gcloud compute addresses describe "$NAME" --region="${ZONE%-*}" \
+  --quiet >/dev/null 2>&1; then
+  gcloud compute addresses create "$NAME" --region="${ZONE%-*}" --quiet
+fi
+RESERVED="$(gcloud compute addresses describe "$NAME" --region="${ZONE%-*}" \
+  --format='get(address)')"
+
 say "Creating the machine (this takes a minute)"
 if ! gcloud compute instances describe "$NAME" --zone="$ZONE" --quiet >/dev/null 2>&1; then
   gcloud compute instances create "$NAME" \
@@ -118,7 +133,21 @@ if ! gcloud compute instances describe "$NAME" --zone="$ZONE" --quiet >/dev/null
     --tags=grace-outpost \
     --service-account="${ACCOUNT}@${PROJECT}.iam.gserviceaccount.com" \
     --scopes=https://www.googleapis.com/auth/cloud-platform \
+    --address="$RESERVED" \
     --quiet
+fi
+
+# A machine created before this script reserved addresses is still on a
+# temporary one. Moving it over is two operations and saves the address
+# changing under her the first time you stop the machine overnight.
+CURRENT="$(gcloud compute instances describe "$NAME" --zone="$ZONE" \
+  --format='get(networkInterfaces[0].accessConfigs[0].natIP)')"
+if [ "$CURRENT" != "$RESERVED" ]; then
+  say "Moving the machine onto the permanent address"
+  gcloud compute instances delete-access-config "$NAME" --zone="$ZONE" \
+    --access-config-name="external-nat" --quiet
+  gcloud compute instances add-access-config "$NAME" --zone="$ZONE" \
+    --access-config-name="external-nat" --address="$RESERVED" --quiet
 fi
 
 IP="$(gcloud compute instances describe "$NAME" --zone="$ZONE" \
