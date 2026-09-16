@@ -228,6 +228,48 @@ try {
   );
   ok('vercel.json function patterns match files that exist');
 
+  /*
+   * The policy must permit the voice it is deployed alongside.
+   *
+   * `connect-src 'self'` was correct-looking and silently disabled the live
+   * voice for a day: the browser holds a socket to the outpost, that is a
+   * different origin, the connection was refused, and she fell back to
+   * recording and replying. The fallback works well enough that it read as
+   * success. Nothing failed loudly; the feature simply was not running.
+   *
+   * Two things are checked, because two things can drift. The policy must
+   * name the outpost, and the CDN's copy in vercel.json — which is what the
+   * browser actually receives, since the page never touches this code — must
+   * say the same as the copy the server sends.
+   */
+  const {OUTPOST, SECURITY_HEADERS} = await import('../shared/headers');
+  const policy = SECURITY_HEADERS['Content-Security-Policy'] ?? '';
+  assert.ok(
+    policy.includes(OUTPOST),
+    'the policy must permit a socket to the outpost, or the voice cannot open one',
+  );
+
+  const served = vercel.headers
+    ?.flatMap((entry) => entry.headers ?? [])
+    .find((header) => header.key === 'Content-Security-Policy')?.value;
+  assert.ok(served, 'vercel.json must declare a policy; the CDN never runs this code');
+  assert.equal(
+    served,
+    policy,
+    'the CDN copy and the server copy must agree — the browser only ever sees the CDN one',
+  );
+
+  if (process.env.GRACE_OUTPOST_URL) {
+    // The address in the policy and the address she is told to dial have to
+    // be the same host. They are set in different files, months apart.
+    assert.equal(
+      new URL(process.env.GRACE_OUTPOST_URL).origin,
+      new URL(OUTPOST).origin,
+      'she is configured to dial an outpost the policy does not allow',
+    );
+  }
+  ok('the policy permits the voice it ships with, in both copies');
+
   // ---- the lock ----------------------------------------------------------
   assert.equal((await call('/state')).status, 401, 'locked before signing in');
   ok('closed to anyone without the password');

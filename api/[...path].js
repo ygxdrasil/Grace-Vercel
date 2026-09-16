@@ -5211,6 +5211,7 @@ function forgetAvailable() {
 }
 
 // shared/headers.ts
+var OUTPOST = "wss://35-228-41-171.nip.io";
 var POLICY = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline'",
@@ -5218,7 +5219,21 @@ var POLICY = [
   "font-src 'self' https://fonts.gstatic.com data:",
   "img-src 'self' data: blob:",
   "media-src 'self' blob: data:",
-  "connect-src 'self'",
+  /*
+   * Her voice lives on another machine, so 'self' is not enough.
+   *
+   * This was 'self' alone, which reads as correct and quietly broke the
+   * feature it was written before: the browser holds a socket open to the
+   * outpost, and that is a different origin. The connection was refused, she
+   * fell back to recording and replying, and the fallback works well enough
+   * that it looked like success. A security header that silently disables a
+   * feature is worse than one that breaks it loudly.
+   *
+   * Named explicitly rather than allowing `wss:` generally. The address is
+   * reserved and does not change on its own; if the outpost ever moves, this
+   * has to move with it, and the self-test below fails if it does not.
+   */
+  `connect-src 'self' ${OUTPOST}`,
   "worker-src 'self'",
   "object-src 'none'",
   "base-uri 'self'",
