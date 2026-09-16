@@ -708,6 +708,61 @@ try {
   ok('a model is never asked for a thinking level it does not offer');
 
   /*
+   * Her bearing, which is not a mood and must not drift into being one.
+   *
+   * The screen shows a word for how she is — and she has no feelings, so
+   * every one of those words has to be read from something measured. An
+   * invented one would be a decoration that lies, and this particular lie
+   * gets believed, because a panel saying "cheerful" is very hard to read as
+   * "nothing here is being measured".
+   */
+  const {bearingOf, bearingWarns} = await import('../shared/bearing');
+
+  assert.equal(bearingOf({offline: true}), 'dormant');
+  assert.equal(bearingOf({listening: true}), 'attentive');
+  assert.equal(bearingOf({thinking: true, effort: 'hard'}), 'deliberating');
+  assert.equal(bearingOf({thinking: true, effort: 'reflex'}), 'brisk');
+  assert.equal(bearingOf({thinking: true, effort: 'ordinary'}), 'considering');
+  assert.equal(bearingOf({speaking: true}), 'speaking');
+  assert.equal(bearingOf({acting: true}), 'occupied');
+
+  // Ahead of everything else, including things she is actively doing. It is
+  // the only state on the list you can do something about, and burying it
+  // under "occupied" would make the panel worse than having none.
+  assert.equal(
+    bearingOf({asking: true, acting: true, speaking: true, thinking: true}),
+    'waiting on you',
+    'a question you have not answered outranks whatever she is busy with',
+  );
+  assert.ok(
+    bearingWarns(bearingOf({asking: true})),
+    'and is the one bearing that takes the warm colour',
+  );
+
+  // Offline beats everything, including a pending question. A switched-off
+  // assistant is not waiting on you; she is not there.
+  assert.equal(bearingOf({offline: true, asking: true, thinking: true}), 'dormant');
+
+  // Exactly one bearing may be warm. If two were, the colour would stop
+  // meaning "this one needs you" and start meaning nothing.
+  const every = [
+    bearingOf({offline: true}),
+    bearingOf({listening: true}),
+    bearingOf({thinking: true, effort: 'hard'}),
+    bearingOf({thinking: true, effort: 'reflex'}),
+    bearingOf({thinking: true}),
+    bearingOf({speaking: true}),
+    bearingOf({acting: true}),
+    bearingOf({asking: true}),
+  ];
+  assert.equal(
+    every.filter(bearingWarns).length,
+    1,
+    'more than one warm state means the warm colour no longer says anything',
+  );
+  ok('what the panel says about her is read from something, never invented');
+
+  /*
    * Which till she is billed at.
    *
    * This is not a preference. Google's free-trial terms say the $300 credit

@@ -580,6 +580,12 @@ export default function App() {
           now={now}
           onTalk={talk}
           onClose={() => setStage(false)}
+          live={{
+            available: grace.live.available,
+            state: grace.live.state,
+            doing: grace.live.doing,
+          }}
+          asking={Boolean(grace.asked)}
         />
       )}
 
