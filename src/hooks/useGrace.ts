@@ -14,6 +14,7 @@ import {chimeAct, chimeDone, chimeWake} from '../lib/chime.ts';
 import {NeedsPassword, type SessionStatus} from '../lib/api.ts';
 import {usePulse} from './usePulse.ts';
 import {useAmbient} from '../voice/useAmbient.ts';
+import {useLive} from '../voice/useLive.ts';
 import {COMMANDS, parseCommand, type Parsed} from '../../shared/commands.ts';
 
 export type VoiceMode = 'all' | 'answers' | 'off';
@@ -406,12 +407,70 @@ export function useGrace() {
     void api.voiceGuard().then(setGuard).catch(() => {});
   }, []);
 
+  /*
+   * The spoken conversation, when there is a machine to hold one open.
+   *
+   * Declared before the listener below because the listener has to know
+   * whether this is running: while a live session is up, the model on the
+   * other end is doing the hearing, the turn-taking and the interrupting.
+   * Leaving the older path awake at the same time would have two different
+   * pieces of machinery answering the same sentence, which shows up as her
+   * replying twice and being billed twice.
+   *
+   * Both halves of what is said are threaded into the transcript here, so
+   * the spoken Grace and the typed one are visibly the same conversation.
+   */
+  const spokenIdRef = useRef(0);
+  const appendSpoken = useCallback(
+    (speaker: 'user' | 'grace', text: string) => {
+      const said = text.trim();
+      if (!said) return;
+      spokenIdRef.current += 1;
+      setMessages((current) => {
+        const last = current[current.length - 1];
+        /*
+         * Transcription arrives in pieces as the sentence is spoken, not as
+         * one finished line. Appending each piece separately turns "put the
+         * kettle on" into three messages. Growing the last one instead keeps
+         * it a sentence — but only when the same person is still talking.
+         */
+        if (last?.speaker === speaker && last.via === 'voice' && last.id.startsWith('live-')) {
+          return [...current.slice(0, -1), {...last, text: `${last.text} ${said}`.trim()}];
+        }
+        return [
+          ...current,
+          {
+            id: `live-${speaker}-${spokenIdRef.current}`,
+            speaker,
+            text: said,
+            at: new Date().toISOString(),
+            via: 'voice' as const,
+          },
+        ];
+      });
+    },
+    [],
+  );
+
+  const live = useLive({
+    deviceId,
+    onHeard: (text) => appendSpoken('user', text),
+    onSaid: (text) => appendSpoken('grace', text),
+  });
+
   const ambient = useAmbient({
     enabled: micOn,
     deviceId,
     // Her own voice must never wake her, and the recorder must never be
     // fighting her for the microphone.
-    paused: busy || speech.speaking || recorder.state !== 'idle' || transcribing,
+    paused:
+      busy ||
+      speech.speaking ||
+      recorder.state !== 'idle' ||
+      transcribing ||
+      // A live session is holding the conversation; this listener's only
+      // remaining job is the wake word that started it.
+      live.state !== 'closed',
     onRequest: handleRequest,
     guard,
     /*
@@ -440,6 +499,35 @@ export function useGrace() {
     if (ambient.awake && !wasAwakeRef.current) chimeWake();
     wasAwakeRef.current = ambient.awake;
   }, [ambient.awake]);
+
+  /*
+   * Her name opens the line.
+   *
+   * This is the whole reason the wake word stays in the browser. The session
+   * on the other end bills for every minute it is open, listening or not, so
+   * leaving one running would be roughly two hundred dollars a month spent on
+   * silence. The browser listens for nothing but her name, which costs
+   * nothing, and only then is anything opened that costs anything at all.
+   *
+   * The result is what was actually asked for — no button, she is simply
+   * there — with the part that would have emptied the account removed.
+   */
+  useEffect(() => {
+    if (ambient.awake && live.available && live.state === 'closed') void live.begin();
+  }, [ambient.awake, live]);
+
+  /*
+   * Told to leave it, or cut off mid-sentence, must hang up too.
+   *
+   * Otherwise the meter keeps running on a conversation that is visibly over,
+   * for as long as the idle timer takes to notice — and "she stopped talking"
+   * would not mean "she stopped costing money".
+   */
+  const liveEnd = live.end;
+  useEffect(() => {
+    if (!ambient.dormant) return;
+    liveEnd();
+  }, [ambient.dormant, liveEnd]);
 
   ambientAwakeRef.current = ambient.awake || ambient.state === 'hearing';
   // So /sleep reaches the listener without this hook depending on its order.
@@ -557,6 +645,8 @@ export function useGrace() {
     session,
     state,
     messages,
+    /** The spoken conversation: whether it is possible, and what it is doing. */
+    live,
     streaming,
     searched,
     actions,
