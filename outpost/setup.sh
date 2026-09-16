@@ -14,6 +14,57 @@
 
 set -euo pipefail
 
+# Everything this needs is settled before anything is created.
+#
+# It used to read the token near the end, when it was writing the service
+# file — which meant a missing one failed *after* building a virtual machine,
+# leaving a half-made thing behind and no clue which half. Anything that can
+# be checked before the first side effect is checked here.
+#
+# Asking is deliberate rather than requiring an exported variable: the first
+# attempt at this had people copy a placeholder in angle brackets straight
+# into the shell, where `<` is a redirect, and the error it produced said
+# nothing whatsoever about tokens.
+
+if [ -z "${GRACE_URL:-}" ]; then
+  read -rp "Grace's address [https://grace-vercel.vercel.app]: " GRACE_URL
+  GRACE_URL="${GRACE_URL:-https://grace-vercel.vercel.app}"
+fi
+
+if [ -z "${GRACE_OUTPOST_TOKEN:-}" ]; then
+  echo
+  echo "The token is in Grace's side panel, under the section about your phone."
+  echo "It is the same one Siri uses. Paste it here (it will not be shown):"
+  read -rs GRACE_OUTPOST_TOKEN
+  echo
+fi
+
+case "$GRACE_URL" in
+  https://*) ;;
+  *) echo "Grace's address must start with https:// — got '$GRACE_URL'" >&2; exit 1 ;;
+esac
+
+if [ "${#GRACE_OUTPOST_TOKEN}" -lt 16 ]; then
+  # Long enough to be the real thing. A placeholder, a shell error or an empty
+  # paste all land here, and all of them would otherwise build a machine that
+  # silently refuses every connection.
+  echo "That does not look like the token (too short). Copy it from the side panel." >&2
+  exit 1
+fi
+
+export GRACE_URL GRACE_OUTPOST_TOKEN
+
+echo "Checking that address and token actually work before building anything..."
+if ! curl -fsS -X POST "${GRACE_URL%/}/api/relay" \
+  -H 'content-type: application/json' \
+  -d "{\"token\":\"${GRACE_OUTPOST_TOKEN}\",\"probe\":true}" >/dev/null 2>&1; then
+  echo >&2
+  echo "Grace refused that token, or could not be reached at $GRACE_URL." >&2
+  echo "Nothing has been created. Check the token in her side panel and try again." >&2
+  exit 1
+fi
+echo "Good — she recognised it."
+
 PROJECT="${GCP_PROJECT_ID:-ai-agents-508818}"
 ZONE="${GCE_ZONE:-europe-north1-b}"
 NAME="${GCE_NAME:-grace-outpost}"
@@ -111,8 +162,8 @@ npm install --omit=dev --no-audit --no-fund >/dev/null 2>&1
 sudo tee /etc/grace-outpost.env >/dev/null <<ENV
 GCP_PROJECT_ID=${PROJECT}
 GCP_LOCATION=${GCP_LOCATION:-global}
-GRACE_URL=${GRACE_URL:?set GRACE_URL to your Grace address before running this}
-GRACE_OUTPOST_TOKEN=${GRACE_OUTPOST_TOKEN:?set GRACE_OUTPOST_TOKEN to the token from Grace}
+GRACE_URL=${GRACE_URL}
+GRACE_OUTPOST_TOKEN=${GRACE_OUTPOST_TOKEN}
 PORT=8787
 ENV
 sudo chmod 600 /etc/grace-outpost.env
