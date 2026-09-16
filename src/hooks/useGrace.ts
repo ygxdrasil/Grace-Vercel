@@ -51,7 +51,49 @@ export function useGrace() {
   } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /*
+   * Whether she is listening for her name.
+   *
+   * This was the one preference that was never saved. Every other setting —
+   * her voice, the room, the theme — survived a reload; this one silently
+   * went back to off. So she was deaf after every refresh, every deploy and
+   * every time the phone dropped the tab, the microphone button showed as
+   * off, and the only thing that worked was pressing Speak. Which looks
+   * exactly like the wake word being broken, and is not.
+   *
+   * Restored rather than simply defaulted on, and only when permission has
+   * already been granted. Defaulting on outright would throw a microphone
+   * prompt at anyone opening her for the first time, before she has said a
+   * word — and a permission asked for out of nowhere is a permission people
+   * refuse. Once it is granted, she picks listening back up by herself and
+   * never asks again.
+   */
   const [micOn, setMicOn] = useState(false);
+  const micChosenRef = useRef(false);
+
+  useEffect(() => {
+    if (localStorage.getItem('grace-mic') === 'off') {
+      micChosenRef.current = true;
+      return;
+    }
+    const decide = (granted: boolean) => {
+      if (granted) setMicOn(true);
+      micChosenRef.current = true;
+    };
+    navigator.permissions
+      // Not in every browser's list, and a rejected query must not leave her
+      // permanently deaf — it only means we cannot know without asking.
+      ?.query({name: 'microphone' as PermissionName})
+      .then((status) => decide(status.state === 'granted'))
+      .catch(() => decide(false)) ?? decide(false);
+  }, []);
+
+  useEffect(() => {
+    // Not before the line above has decided, or the initial `false` would be
+    // written straight over the saved preference on every single load.
+    if (!micChosenRef.current) return;
+    localStorage.setItem('grace-mic', micOn ? 'on' : 'off');
+  }, [micOn]);
   /**
    * How much she says out loud, kept per device.
    *

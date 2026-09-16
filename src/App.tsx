@@ -133,6 +133,25 @@ export default function App() {
     if (opening.urls.length > 0) open(opening.urls);
   }, [opening, enter, open]);
 
+  /*
+   * A question she has asked opens the transcript.
+   *
+   * She can ask before doing something — that is the whole confirmation
+   * mechanism, and the answer is a set of buttons. With the transcript
+   * closed those buttons are on a screen nobody is looking at: the panel
+   * would show WAITING ON YOU and give you no way to answer, which is worse
+   * than not asking at all, because the action then silently never happens.
+   *
+   * Placed here, above the early returns, because it is a hook. Put below
+   * them it runs on some renders and not others, and React tears the whole
+   * tree down with "rendered more hooks than during the previous render" —
+   * which presents as a black screen, exactly like the last one.
+   */
+  const asked = grace.asked;
+  useEffect(() => {
+    if (asked) setShowTalk(true);
+  }, [asked]);
+
   // Nothing of hers renders until the session is settled, so a lapsed cookie
   // can't flash her transcript on screen first. But an unreachable server used
   // to leave this as a blank glow forever, with nothing to explain it.
