@@ -2,6 +2,7 @@ import {X} from 'lucide-react';
 import {useEffect} from 'react';
 import type {DayView, GraceState} from '../../shared/types';
 import type {Mode} from '../hooks/useGrace';
+import {Reactor} from './Reactor';
 import {Waveform} from './Waveform';
 
 /**
@@ -145,7 +146,11 @@ export function Stage({state, day, mode, level, now, onTalk, onClose}: Props) {
           </p>
 
           <div className="mt-8 w-full max-w-2xl">
-            <Waveform mode={mode} level={level} height={180} onPress={onTalk} />
+            {/* Her, and then her voice. The reactor is the thing you look
+                at across a room; the trace underneath is the detail you only
+                read when you are close enough to care. */}
+            <Reactor mode={mode} level={level} onPress={onTalk} size="stage" />
+            <Waveform mode={mode} level={level} height={64} />
           </div>
 
           <p className="mt-4 text-sm uppercase tracking-[0.28em] text-mist/70">

@@ -145,7 +145,7 @@ export function ProfilePanel({
         open ? 'translate-x-0' : 'translate-x-full'
       }`}>
       <div className="flex items-center justify-between border-b border-edge/70 px-5 py-4">
-        <h2 className="font-serif text-lg text-slate-100">What Grace knows</h2>
+        <h2 className="font-serif text-lg text-slate-100">Settings</h2>
         <button
           type="button"
           onClick={onClose}
@@ -171,93 +171,22 @@ export function ProfilePanel({
           </p>
         </Section>
 
-        {(Object.keys(KIND_LABEL) as MemoryKind[]).map((kind) => {
-          const entries = profile.entries.filter(
-            (entry) => entry.kind === kind && !entry.supersededAt,
-          );
-          if (entries.length === 0) return null;
-
-          return (
-            <Section key={kind} title={KIND_LABEL[kind]}>
-              <ul className="space-y-1.5">
-                {entries.map((entry) => (
-                  <li
-                    key={entry.id}
-                    className="group flex items-start gap-2 rounded-lg border border-edge/60 bg-void/60 px-3 py-2">
-                    <span className="flex-1 text-sm leading-relaxed text-slate-300">
-                      {entry.text}
-                      {entry.source === 'inferred' && (
-                        <span className="ml-1.5 text-[0.68rem] text-mist/50">
-                          inferred
-                        </span>
-                      )}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => onSupersede(entry.text)}
-                      aria-label="No longer true"
-                      title="No longer true — file it, keep the record"
-                      className="mt-0.5 text-mist/40 opacity-0 transition hover:text-ice focus:opacity-100 group-hover:opacity-100">
-                      <Clock size={13} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onForget(entry.id)}
-                      aria-label="Forget this"
-                      title="Delete outright — for a genuine mistake"
-                      className="mt-0.5 text-mist/40 opacity-0 transition hover:text-rose-300 focus:opacity-100 group-hover:opacity-100">
-                      <Trash2 size={14} />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </Section>
-          );
-        })}
-
-        {(profile.style ?? []).length > 0 && (
-          <Section title="How she deals with you">
-            <ul className="space-y-1.5">
-              {(profile.style ?? []).map((note) => (
-                <li
-                  key={note.id}
-                  className="rounded-lg border border-edge/60 bg-void/60 px-3 py-2 text-sm leading-relaxed text-slate-300">
-                  {note.text}
-                  {note.timesSeen >= 3 && (
-                    <span className="ml-1.5 text-[0.68rem] text-mist/50">consistently</span>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </Section>
-        )}
-
-        {profile.entries.some((entry) => entry.supersededAt) && (
-          <Section title="No longer true">
-            <ul className="space-y-1.5">
-              {profile.entries
-                .filter((entry) => entry.supersededAt)
-                .slice(-8)
-                .map((entry) => (
-                  <li
-                    key={entry.id}
-                    className="rounded-lg border border-edge/40 bg-void/40 px-3 py-2 text-sm leading-relaxed text-mist/50 line-through">
-                    {entry.text}
-                  </li>
-                ))}
-            </ul>
-            <p className="text-xs leading-relaxed text-mist/40">
-              Kept, not deleted — that something changed is worth knowing too.
-            </p>
-          </Section>
-        )}
-
-        {profile.entries.length === 0 && (
-          <p className="text-sm leading-relaxed text-mist/60">
-            She hasn’t learned anything about you yet. That builds up as you talk.
-          </p>
-        )}
-
+        {/*
+         * What she remembers used to be listed here, and is not any more.
+         *
+         * It was accurate, it was well made, and nobody ever acted on it. A
+         * panel that exists to be read rather than used is furniture, and
+         * this one was furniture about surveillance — a standing list of
+         * things she had noticed about you, which is an uncomfortable thing
+         * to be shown daily and served no purpose beyond being shown.
+         *
+         * She still remembers everything. Ask her what she knows and she
+         * will tell you, and she can be told to forget it. The difference is
+         * that it is now a conversation instead of a wall.
+         *
+         * What stays below is what this panel is actually for: the things
+         * you come here to change.
+         */}
         <Section title="Before she acts">
           <ul className="space-y-1.5">
             {current.map((entry) => (

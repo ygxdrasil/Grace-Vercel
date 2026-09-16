@@ -14,7 +14,7 @@ import {NotesPanel, SituationsPanel} from './Keep';
 import {Connections, LiveFeed, SpendGauge, Weather} from './Panels';
 import {GithubPanel, WorkflowsPanel} from './Work';
 import {Faculties, type Faculty} from './Faculties';
-import {Waveform} from './Waveform';
+import {Reactor} from './Reactor';
 
 /** Kept in step with server/modes.ts, which is where the behaviour lives. */
 const MODES: {id: AttentionMode; label: string; blurb: string}[] = [
@@ -183,7 +183,7 @@ export function Dashboard({
       <div className="flex flex-col items-center">
         {/* The orb is the control now, not an ornament. Pressing it is the one
             way in that cannot be got wrong. */}
-        <Waveform mode={mode} level={micLevel} onPress={onTalk} />
+        <Reactor mode={mode} level={micLevel} onPress={onTalk} />
         <p className="mt-1 text-[0.65rem] uppercase tracking-[0.2em] text-mist/60">
           {micBusy ? 'Working' : MODE_LABEL[mode]}
         </p>
