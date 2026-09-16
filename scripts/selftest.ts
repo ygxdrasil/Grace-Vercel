@@ -728,7 +728,12 @@ try {
   delete process.env.GCP_LOCATION;
   const live = vertexSettings();
   assert.equal(live?.project, 'ai-agents-508818');
-  assert.equal(live?.location, 'europe-west4', 'a sane region without being told');
+  assert.equal(
+    live?.location,
+    'global',
+    'the newest Flash models are served only from global; an EU-pinned ' +
+      'region answers 403 for them, indistinguishably from a missing role',
+  );
   assert.ok(
     new GeminiProvider('unused', config.model).onVertex,
     'with a project and credentials she must bill through Cloud, not the key',

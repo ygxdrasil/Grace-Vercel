@@ -49,16 +49,25 @@ function vertexSettings() {
   return {
     project,
     /*
-     * Region matters more than it looks.
+     * Region matters more than it looks, and `global` is not a cop-out.
      *
-     * Not every model is served from every region, and a model that is absent
-     * answers 404 rather than saying "try somewhere else" — the same shape of
-     * error as a model that has been retired, which is a genuinely confusing
-     * thing to debug. europe-west4 is the default because it is close to the
-     * user and carries the widest European model selection; us-central1 gets
-     * new models first and is the place to look when something is missing.
+     * The newest Flash models — 3.6, 3.7, 3.8 — are served only from the
+     * global region. The EU-pinned regions (europe-west4 and friends) exist
+     * to guarantee data residency and the price of that guarantee is being a
+     * generation behind: they top out at 3.5 Flash.
+     *
+     * Getting this wrong is genuinely nasty to debug, because Google answers
+     * a model that is absent from a region with the same 403 as a model you
+     * lack permission for — "denied on resource ... (or it may not exist)".
+     * One message, two completely different causes, and the obvious reading
+     * is the wrong one. This defaulted to europe-west4 and cost an hour.
+     *
+     * So: global, because the choice made here was the best models. Set
+     * GCP_LOCATION to europe-west4 to pin the data to the EU instead, and
+     * expect to drop to gemini-3.5-flash when you do — a newer model will
+     * simply 403.
      */
-    location: process.env.GCP_LOCATION?.trim() || "europe-west4",
+    location: process.env.GCP_LOCATION?.trim() || "global",
     credentials
   };
 }
