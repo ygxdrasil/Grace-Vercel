@@ -170,6 +170,49 @@ export default function App() {
     return <Lock status={session} onSubmit={grace.signIn} />;
   }
 
+  /*
+   * She is signed in, and her state has not arrived yet.
+   *
+   * This guard is why the screen went black. A signed-in session and a loaded
+   * state are two different things — the cookie is settled locally, the state
+   * is a request — and for the moment between them `state` is null. Every
+   * readout below reads from it, so the first render threw, React unmounted
+   * the tree, and what was left was the background colour.
+   *
+   * The old layout never hit this because it guarded each panel separately
+   * with `state && (...)`. Consolidating the readouts into one place made the
+   * guard a single point rather than a dozen, which is better — but the
+   * single point has to actually exist.
+   *
+   * Drawn as the panel with nothing in it rather than as a spinner, so the
+   * frame you see first is the frame you keep.
+   */
+  if (!state) {
+    return (
+      <div
+        className="fixed inset-0 grid place-items-center bg-void"
+        style={{fontFamily: 'var(--font-mono)'}}>
+        <div className="field pointer-events-none" />
+        <div className="vignette" />
+        <div className="relative text-center">
+          <p
+            className="text-[0.78rem] tracking-[0.34em] text-ice"
+            style={{textShadow: '0 0 12px rgb(var(--accent) / 0.5)'}}>
+            G.R.A.C.E.
+          </p>
+          <p className="readout mt-3 text-mist/40">
+            {grace.error ? 'NO LINK' : 'INITIALISING'}
+          </p>
+          {grace.error && (
+            <p className="readout mt-4 max-w-xs normal-case tracking-normal text-ember/80">
+              {grace.error}
+            </p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   const notice =
     mode === 'offline'
       ? 'No Gemini API key found. Set GEMINI_API_KEY where Grace is running, then restart or redeploy her.'
@@ -585,7 +628,7 @@ export default function App() {
       <Install />
       <Timers enabled={session === 'ok' || session === 'open'} />
 
-      {state && (
+      {(
         <ProfilePanel
           open={panelOpen}
           profile={state.profile}
