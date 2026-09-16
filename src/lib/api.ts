@@ -178,6 +178,35 @@ export async function speak(
   return {audio: body.audio, mimeType: body.mimeType ?? 'audio/wav'};
 }
 
+/**
+ * Where to hold a conversation, if she can hold one at all.
+ *
+ * `live` is false whenever no outpost is configured, which is an ordinary
+ * state rather than a fault: she then speaks the older way, by recording and
+ * replying. The browser has to know which, because the two are completely
+ * different machinery on this side — one holds a socket open and streams,
+ * the other posts a file and waits.
+ */
+export interface VoiceKey {
+  live: boolean;
+  url: string;
+  token: string | null;
+  model: string;
+}
+
+export async function voiceKey(): Promise<VoiceKey> {
+  try {
+    const response = await fetch('/api/voice-key');
+    if (!response.ok) throw new Error(String(response.status));
+    return await response.json();
+  } catch {
+    // Unreachable is the same as unconfigured as far as this is concerned:
+    // fall back to the way of speaking that does not need her to answer a
+    // question first. A voice that fails closed is worse than a slower one.
+    return {live: false, url: '', token: null, model: ''};
+  }
+}
+
 export async function webCheck(): Promise<Record<string, unknown>> {
   const response = await expectOk(await fetch('/api/web-check', {method: 'POST'}));
   return response.json();
