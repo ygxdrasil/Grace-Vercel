@@ -141,6 +141,20 @@ export function Core({level = 0, active = false, size = 420}: CoreProps) {
 
   return (
     <div className="relative grid place-items-center" style={{width: size, height: size}}>
+      {/* Four heavy arcs at the cardinal points, turning slowest of all. They
+          are the frame the lighter rings turn inside — the reference has
+          them, and without them the rings read as loading spinners. */}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute rounded-full border-[3px] border-ice"
+        style={{
+          inset: '-3%',
+          opacity: 0.4,
+          animation: 'reactorSpin 140s linear infinite',
+          clipPath:
+            'polygon(38% 0, 62% 0, 62% 8%, 38% 8%, 38% 0, 100% 38%, 100% 62%, 92% 62%, 92% 38%, 100% 38%, 62% 100%, 38% 100%, 38% 92%, 62% 92%, 62% 100%, 0 62%, 0 38%, 8% 38%, 8% 62%, 0 62%)',
+        }}
+      />
       {ring('0%', 64, false, 0.55)}
       {ring('7%', 44, true, 0.34)}
       {ring('15%', 96, false, 0.4)}

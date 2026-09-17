@@ -3190,10 +3190,35 @@ try {
    * The briefing has to be hers — her name in it, her tool list — and come
    * from the one function the typed path also uses, so the two cannot drift.
    */
+  /*
+   * The brake reaches the voice.
+   *
+   * A spoken session costs money from the moment it opens and the outpost
+   * cannot see the pool, so it asks for her briefing first and is refused
+   * when the credit is gone. By this point in the suite the pool has been
+   * deliberately exhausted, which makes this the natural place to prove it.
+   */
+  const refusedVoice = await call('/relay', {
+    method: 'POST',
+    body: JSON.stringify({token: relayKey.token, brief: true}),
+  });
+  assert.equal(refusedVoice.status, 402, 'past the pool, no new voice session');
+  assert.match(
+    ((await refusedVoice.json()) as {error: string}).error,
+    /credit|limit/i,
+    'and the refusal says why, in words the outpost can pass on',
+  );
+
+  // With room to spend, the same request briefs her. Restored afterwards so
+  // nothing below inherits a raised cap.
+  const realPool = process.env.GRACE_CREDIT_POOL;
+  process.env.GRACE_CREDIT_POOL = '1000000';
   const briefed = await call('/relay', {
     method: 'POST',
     body: JSON.stringify({token: relayKey.token, brief: true}),
   });
+  if (realPool === undefined) delete process.env.GRACE_CREDIT_POOL;
+  else process.env.GRACE_CREDIT_POOL = realPool;
   assert.equal(briefed.status, 200);
   const herBrief = (await briefed.json()) as {system: string; tools: {name: string}[]};
   assert.match(herBrief.system, /Grace/, 'the briefing must be hers, by name');

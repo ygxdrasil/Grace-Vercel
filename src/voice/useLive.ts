@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useRef, useState} from 'react';
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {voiceKey, type VoiceKey} from '../lib/api';
 import {acquire, type MicLease} from './mic';
 import {LiveVoice, type LiveState, type Sight} from './live';
@@ -245,17 +245,24 @@ export function useLive({deviceId, onHeard, onSaid, ready = true}: LiveOptions =
     };
   }, [end]);
 
-  return {
-    available: Boolean(key?.live),
-    state,
-    doing,
-    trouble,
-    begin,
-    end,
-    say: (text) => voiceRef.current?.say(text),
-    outLevel,
-    seeing,
-    see,
-    blind,
-  };
+  const say = useCallback((text: string) => voiceRef.current?.say(text), []);
+
+  // One object for as long as nothing in it changes. Effects elsewhere depend
+  // on this; a fresh object every render made them run every render.
+  return useMemo(
+    () => ({
+      available: Boolean(key?.live),
+      state,
+      doing,
+      trouble,
+      begin,
+      end,
+      say,
+      outLevel,
+      seeing,
+      see,
+      blind,
+    }),
+    [key?.live, state, doing, trouble, begin, end, say, outLevel, seeing, see, blind],
+  );
 }

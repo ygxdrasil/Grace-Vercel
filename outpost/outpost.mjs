@@ -205,15 +205,43 @@ sockets.on('connection', async (browser, request) => {
   };
 
   // Who she is, this time. Every session, because what she knows changes.
+  // This is also where the spend brake reaches the voice: she refuses the
+  // briefing when the credit is gone, in words that can be passed straight
+  // to the person who asked.
   let brief;
   try {
-    brief = await askGrace(token, {brief: true});
+    const response = await fetch(`${settings.grace}/api/relay`, {
+      method: 'POST',
+      headers: {'content-type': 'application/json'},
+      body: JSON.stringify({token, brief: true}),
+    });
+    if (response.status === 402) {
+      const {error} = await response.json().catch(() => ({error: 'the credit has run out'}));
+      toBrowser({type: 'trouble', detail: error});
+      browser.close(1008, 'over budget');
+      return;
+    }
+    if (!response.ok) throw new Error(`Grace answered ${response.status}`);
+    brief = await response.json();
   } catch (error) {
     console.error('[outpost] could not get her briefing:', error.message);
     toBrowser({type: 'trouble', detail: 'could not reach Grace for her briefing'});
     browser.close(1011, 'no briefing');
     return;
   }
+
+  /*
+   * The books for this session.
+   *
+   * Google bills the line by the minute of audio in and out — every second it
+   * is open counts as input, silence included, and every second she speaks
+   * counts as output. The outpost is the only thing that knows either figure,
+   * so it keeps them and hands them over when the line closes. Output is
+   * measured from the audio actually sent: 16-bit samples at 24kHz, so bytes
+   * over 48,000 is seconds.
+   */
+  const openedAt = Date.now();
+  let outputBytes = 0;
 
   try {
     session = await google.live.connect({
@@ -270,6 +298,8 @@ sockets.on('connection', async (browser, request) => {
 
           for (const part of content?.modelTurn?.parts ?? []) {
             if (part.inlineData?.data) {
+              // Base64 is four characters per three bytes.
+              outputBytes += Math.floor((part.inlineData.data.length * 3) / 4);
               toBrowser({type: 'audio', data: part.inlineData.data});
             }
           }
@@ -365,8 +395,14 @@ sockets.on('connection', async (browser, request) => {
   });
 
   browser.on('close', () => {
-    // Whatever was said last is not lost with the connection.
-    void flushHeard().then(flushSaid);
+    // Whatever was said last is not lost with the connection, and neither is
+    // the bill for it.
+    const audioIn = (Date.now() - openedAt) / 1000;
+    const audioOut = outputBytes / 48_000;
+    void flushHeard()
+      .then(flushSaid)
+      .then(() => askGrace(token, {record: true, audioIn, audioOut}))
+      .catch((error) => console.error('[outpost] could not report the minutes:', error.message));
     // Every open session is billed by the minute for as long as it is open,
     // whether or not anyone is talking. A leaked session is a meter running
     // in an empty room, and nothing would ever close it.

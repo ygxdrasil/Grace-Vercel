@@ -53,8 +53,23 @@ const RATES: Record<string, {in: number; out: number}> = {
   'gemini-2.5-flash-preview-tts': {in: 0.5, out: 10},
 };
 
+/**
+ * Dollars per minute of audio, for the voice.
+ *
+ * The live voice is not billed by the token in any way she can count — it is
+ * a session held open on another machine, and Google bills it by the minute
+ * of audio in and out. Until this table existed the meter simply did not see
+ * it. The voice is the single largest thing she spends on, so the credit
+ * gauge was under-reporting by exactly the amount that mattered, and the
+ * brake could not stop the one thing that most needed stopping.
+ */
+const AUDIO_RATES: Record<string, {inPerMin: number; outPerMin: number}> = {
+  'gemini-3.8-live': {inPerMin: 0.005, outPerMin: 0.018},
+};
+
 /** Anything unrecognised is charged at the dearest known rate, not ignored. */
 const FALLBACK = {in: 4, out: 18};
+const AUDIO_FALLBACK = {inPerMin: 0.02, outPerMin: 0.05};
 
 /**
  * Whether a model has a real price here, rather than the fallback.
@@ -67,6 +82,11 @@ const FALLBACK = {in: 4, out: 18};
  */
 export function priceOf(model: string): {in: number; out: number} | null {
   return RATES[model] ?? null;
+}
+
+/** Whether a voice model has a real per-minute price, for the same check. */
+export function audioPriceOf(model: string): {inPerMin: number; outPerMin: number} | null {
+  return AUDIO_RATES[model] ?? null;
 }
 
 /** When the promotional credit expires and the card becomes live. */
@@ -247,7 +267,29 @@ export async function record(
   const cost =
     (fresh * rate.in + cachedTokens * rate.in * 0.25 + outputTokens * rate.out) /
     1_000_000;
+  await charge(model, cost);
+}
 
+/**
+ * A spoken session, by the minute.
+ *
+ * Reported by the outpost when the line closes: how long it was open (every
+ * second of which Google bills as input, silence included) and how many
+ * seconds she actually spoke. Rounded up to the second, never down — the
+ * meter's one job is to never be under.
+ */
+export async function recordAudio(
+  model: string,
+  inputSeconds: number,
+  outputSeconds: number,
+): Promise<void> {
+  const rate = AUDIO_RATES[model] ?? AUDIO_FALLBACK;
+  const safe = (n: number) => (Number.isFinite(n) && n > 0 ? Math.ceil(n) : 0);
+  const cost = (safe(inputSeconds) * rate.inPerMin + safe(outputSeconds) * rate.outPerMin) / 60;
+  await charge(model, cost);
+}
+
+async function charge(model: string, cost: number): Promise<void> {
   const current = await spend();
   const onPool = !creditsExpired();
 

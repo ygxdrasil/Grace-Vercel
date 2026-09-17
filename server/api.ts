@@ -16,7 +16,7 @@ import {
   requireAuth,
 } from './auth';
 import {bridgeStatus, bridgeToken, claim, report, rollBridgeToken} from './bridge';
-import {spend, standing} from './budget';
+import {OverBudget, recordAudio, requireBudget, spend, standing} from './budget';
 import {config, isConfigured} from './config';
 import {keyStatus, loadKeys, setKey} from './keys';
 import {learnFrom, worthLearningFrom} from './learn';
@@ -340,6 +340,18 @@ export function createApi(): Express {
        * start of every session, because what she knows changes between them.
        */
       if (req.body?.brief) {
+        // The brake reaches the voice here. A session costs money from the
+        // moment it opens, and the outpost cannot see the pool — so it asks
+        // before opening, and is refused in words it can pass on.
+        try {
+          await requireBudget();
+        } catch (error) {
+          if (error instanceof OverBudget) {
+            res.status(402).json({error: error.message});
+            return;
+          }
+          throw error;
+        }
         const brief = await briefFor('voice');
         res.json({system: brief.system, tools: brief.tools});
         return;
@@ -357,6 +369,14 @@ export function createApi(): Express {
       const heard = String(req.body?.heard ?? '').trim().slice(0, 4000);
       const said = String(req.body?.said ?? '').trim().slice(0, 8000);
       if (req.body?.record) {
+        // How long the line was open and how long she spoke, from the
+        // outpost when it closes. Metered here because the outpost keeps no
+        // books, and unmetered voice would be the largest hole in them.
+        const audioIn = Number(req.body?.audioIn ?? 0);
+        const audioOut = Number(req.body?.audioOut ?? 0);
+        if (audioIn > 0 || audioOut > 0) {
+          void recordAudio(config.liveModel, audioIn, audioOut).catch(() => {});
+        }
         if (heard) await remember('user', heard, 'voice');
         if (said) await remember('grace', said, 'voice');
         if (heard && said && worthLearningFrom(heard)) {

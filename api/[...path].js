@@ -637,7 +637,11 @@ var RATES = {
   "gemini-2.5-flash-lite": { in: 0.1, out: 0.4 },
   "gemini-2.5-flash-preview-tts": { in: 0.5, out: 10 }
 };
+var AUDIO_RATES = {
+  "gemini-3.8-live": { inPerMin: 5e-3, outPerMin: 0.018 }
+};
 var FALLBACK = { in: 4, out: 18 };
+var AUDIO_FALLBACK = { inPerMin: 0.02, outPerMin: 0.05 };
 function poolExpiry() {
   const set = process.env.GRACE_CREDITS_EXPIRE;
   const parsed = set ? new Date(set) : /* @__PURE__ */ new Date("2026-12-16T00:00:00Z");
@@ -723,6 +727,15 @@ async function record(model, inputTokens, outputTokens, cachedTokens = 0) {
   const rate = RATES[model] ?? FALLBACK;
   const fresh2 = Math.max(0, inputTokens - cachedTokens);
   const cost = (fresh2 * rate.in + cachedTokens * rate.in * 0.25 + outputTokens * rate.out) / 1e6;
+  await charge(model, cost);
+}
+async function recordAudio(model, inputSeconds, outputSeconds) {
+  const rate = AUDIO_RATES[model] ?? AUDIO_FALLBACK;
+  const safe = (n) => Number.isFinite(n) && n > 0 ? Math.ceil(n) : 0;
+  const cost = (safe(inputSeconds) * rate.inPerMin + safe(outputSeconds) * rate.outPerMin) / 60;
+  await charge(model, cost);
+}
+async function charge(model, cost) {
   const current = await spend();
   const onPool = !creditsExpired();
   const next = {
@@ -6125,6 +6138,15 @@ function createApi() {
         return;
       }
       if (req.body?.brief) {
+        try {
+          await requireBudget();
+        } catch (error) {
+          if (error instanceof OverBudget) {
+            res.status(402).json({ error: error.message });
+            return;
+          }
+          throw error;
+        }
         const brief = await briefFor("voice");
         res.json({ system: brief.system, tools: brief.tools });
         return;
@@ -6132,6 +6154,12 @@ function createApi() {
       const heard = String(req.body?.heard ?? "").trim().slice(0, 4e3);
       const said2 = String(req.body?.said ?? "").trim().slice(0, 8e3);
       if (req.body?.record) {
+        const audioIn = Number(req.body?.audioIn ?? 0);
+        const audioOut = Number(req.body?.audioOut ?? 0);
+        if (audioIn > 0 || audioOut > 0) {
+          void recordAudio(config.liveModel, audioIn, audioOut).catch(() => {
+          });
+        }
         if (heard) await record2("user", heard, "voice");
         if (said2) await record2("grace", said2, "voice");
         if (heard && said2 && worthLearningFrom(heard)) {

@@ -448,6 +448,10 @@ export default function App() {
           )}
           <Row label="REQUESTS" value={String(state.spend.requests)} />
           <Row
+            label="VOICE SPENT"
+            value={`$${(state.spend.byModel?.[state.model.replace(/-flash$/, '-live')] ?? state.spend.byModel?.['gemini-3.8-live'] ?? 0).toFixed(2)}`}
+          />
+          <Row
             label="VOICE"
             value={grace.live.available ? 'OPEN' : 'RELAY'}
             tone={grace.live.available ? 'live' : 'ice'}
