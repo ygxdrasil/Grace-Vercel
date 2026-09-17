@@ -149,9 +149,19 @@ var config = {
    * search_memory, but a wider window means she does not have to think to
    * reach for it — which is the difference between remembering and looking up.
    */
-  verbatimTurns: 32,
-  /** Once the log passes this many turns, older ones fold into a summary. */
-  summarizeAfter: 48,
+  verbatimTurns: 96,
+  /**
+   * Once the log passes this many turns, older ones fold into a summary.
+   *
+   * Both figures were tripled together. They were set for a model with a
+   * small window and a free tier; she now thinks on a million-token window
+   * paid for by credit, and the commonest thing still wrong with her is
+   * forgetting something said an hour ago. Ninety-six verbatim turns is most
+   * of a day's conversation held word for word. The cost is real — a few
+   * thousand more input tokens per reply, roughly twenty dollars a month at
+   * heavy use — and it buys the thing an assistant is for.
+   */
+  summarizeAfter: 160,
   /** Set GRACE_LEARN=false to stop Grace building a profile of you. */
   learnFromConversation: process.env.GRACE_LEARN !== "false",
   /**

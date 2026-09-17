@@ -343,6 +343,16 @@ sockets.on('connection', async (browser, request) => {
       return;
     }
 
+    // A frame of what you are looking at, about once a second. Dropped rather
+    // than queued when the session is not open yet: a backlog of stale
+    // screenshots arriving all at once is the one thing worse than none.
+    if (note.type === 'video' && note.data) {
+      session?.sendRealtimeInput({
+        video: {data: note.data, mimeType: note.mimeType ?? 'image/jpeg'},
+      });
+      return;
+    }
+
     // Said rather than spoken — the fallback when the microphone is refused
     // or you would rather type in company.
     if (note.type === 'text' && note.text) {

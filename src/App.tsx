@@ -247,7 +247,9 @@ export default function App() {
   const notice =
     mode === 'offline'
       ? 'No Gemini API key found. Set GEMINI_API_KEY where Grace is running, then restart or redeploy her.'
-      : (grace.error ?? grace.ambient.error);
+      // The live line's complaints included — a camera that would not open,
+      // a session that failed — or a button that does nothing is all you get.
+      : (grace.error ?? grace.live.trouble ?? grace.ambient.error);
 
   /*
    * Everything the panel reads from, worked out once.
@@ -382,6 +384,26 @@ export default function App() {
             }`}>
             TRANSCRIPT
           </button>
+          {/* Her eyes, on request. Amber while open, because a camera that is
+              on is the one state on this screen that should never be missed. */}
+          {(['camera', 'screen'] as const).map((kind) => (
+            <button
+              key={kind}
+              type="button"
+              onClick={() =>
+                grace.live.seeing === kind ? grace.live.blind() : void grace.live.see(kind)
+              }
+              title={
+                kind === 'camera'
+                  ? 'Show her what the camera sees, while the line is open'
+                  : 'Show her your screen, while the line is open'
+              }
+              className={`readout transition ${
+                grace.live.seeing === kind ? 'text-ember' : 'text-mist/40 hover:text-ice/70'
+              }`}>
+              {kind.toUpperCase()}
+            </button>
+          ))}
           <button
             type="button"
             onClick={() => setShowFiles((open) => !open)}
@@ -538,7 +560,16 @@ export default function App() {
                 onClick={talk}
                 aria-label="Talk to Grace"
                 className="rounded-full outline-none transition-transform focus-visible:ring-1 focus-visible:ring-ice/50 active:scale-[0.99]">
-                <Core level={grace.recorder.level} active={busyNow} size={coreSize} />
+                <Core
+                  // Yours while you are talking, hers while she is. The one
+                  // thing on screen that moves in real time should move with
+                  // whoever is speaking.
+                  level={
+                    grace.live.state === 'speaking' ? grace.live.outLevel : grace.recorder.level
+                  }
+                  active={busyNow}
+                  size={coreSize}
+                />
               </button>
 
               <p className="mt-6 text-[0.8rem] tracking-[0.42em] text-ice/85">
@@ -618,6 +649,11 @@ export default function App() {
                 tone={grace.ambient.strangers >= 3 ? 'warn' : 'ice'}
               />
             )}
+            <Row
+              label="SEEING"
+              value={grace.live.seeing ? grace.live.seeing.toUpperCase() : 'NO'}
+              tone={grace.live.seeing ? 'warn' : 'ice'}
+            />
             <Row label="TOOLS" value={String(state.tools)} />
             <Row label="CONFIRMS" value={String(state.policies.length)} />
             <Row

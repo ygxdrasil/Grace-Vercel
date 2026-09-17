@@ -1,7 +1,7 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {voiceKey, type VoiceKey} from '../lib/api';
 import {acquire, type MicLease} from './mic';
-import {LiveVoice, type LiveState} from './live';
+import {LiveVoice, type LiveState, type Sight} from './live';
 
 /**
  * Holding a conversation, and — just as importantly — letting go of one.
@@ -43,6 +43,14 @@ export interface LiveVoiceControls {
   end: () => void;
   /** Typed rather than spoken, when the microphone is refused or you are not alone. */
   say: (text: string) => void;
+  /** How loud she is, 0 to 1. Zero whenever she is not talking. */
+  outLevel: number;
+  /** What she is being shown right now. */
+  seeing: Sight;
+  /** Show her the camera or the screen. Opens the line first if it is closed. */
+  see: (kind: Exclude<Sight, null>) => Promise<void>;
+  /** Stop showing her anything. */
+  blind: () => void;
 }
 
 interface LiveOptions {
@@ -67,6 +75,10 @@ export function useLive({deviceId, onHeard, onSaid, ready = true}: LiveOptions =
   const [state, setState] = useState<LiveState>('closed');
   const [doing, setDoing] = useState<string | null>(null);
   const [trouble, setTrouble] = useState<string | null>(null);
+  const [outLevel, setOutLevel] = useState(0);
+  const [seeing, setSeeing] = useState<Sight>(null);
+  /** Her level arrives per chunk, many times a second; the page need not. */
+  const levelAtRef = useRef(0);
 
   const voiceRef = useRef<LiveVoice | null>(null);
   const leaseRef = useRef<MicLease | null>(null);
@@ -101,6 +113,8 @@ export function useLive({deviceId, onHeard, onSaid, ready = true}: LiveOptions =
     leaseRef.current = null;
     setState('closed');
     setDoing(null);
+    setOutLevel(0);
+    setSeeing(null);
   }, []);
 
   /** Any sign of life postpones hanging up. */
@@ -160,6 +174,13 @@ export function useLive({deviceId, onHeard, onSaid, ready = true}: LiveOptions =
           setDoing(name);
           stayAwhile();
         },
+        onLevel: (level) => {
+          const now = performance.now();
+          if (level !== 0 && now - levelAtRef.current < 60) return;
+          levelAtRef.current = now;
+          setOutLevel(level);
+        },
+        onSight: (kind) => setSeeing(kind),
         onTrouble: (detail) => {
           setTrouble(detail);
           // Not left half-open. A session that has failed still costs money
@@ -179,6 +200,36 @@ export function useLive({deviceId, onHeard, onSaid, ready = true}: LiveOptions =
       openingRef.current = false;
     }
   }, [deviceId, end, stayAwhile]);
+
+  const see = useCallback(
+    async (kind: Exclude<Sight, null>) => {
+      if (!voiceRef.current) await begin();
+      const voice = voiceRef.current;
+      if (!voice) {
+        setTrouble('the live voice is not available, so there is nothing to show her');
+        return;
+      }
+      try {
+        const stream =
+          kind === 'screen'
+            ? await navigator.mediaDevices.getDisplayMedia({video: true, audio: false})
+            : await navigator.mediaDevices.getUserMedia({
+                video: {width: {ideal: 640}},
+                audio: false,
+              });
+        voice.watch(stream, kind);
+        stayAwhile();
+      } catch (error) {
+        // A refused permission, a device with no camera, or a phone that has
+        // no screen sharing at all. Said plainly rather than left as a button
+        // that does nothing.
+        setTrouble(`could not open the ${kind}: ${(error as Error).message}`);
+      }
+    },
+    [begin, stayAwhile],
+  );
+
+  const blind = useCallback(() => voiceRef.current?.blind(), []);
 
   /*
    * Closing the tab, navigating away, or the laptop going to sleep must all
@@ -202,5 +253,9 @@ export function useLive({deviceId, onHeard, onSaid, ready = true}: LiveOptions =
     begin,
     end,
     say: (text) => voiceRef.current?.say(text),
+    outLevel,
+    seeing,
+    see,
+    blind,
   };
 }

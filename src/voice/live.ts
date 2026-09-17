@@ -24,6 +24,9 @@ const SPEAKS_AT = 24_000;
 
 export type LiveState = 'closed' | 'opening' | 'ready' | 'listening' | 'speaking';
 
+/** What she is being shown, if anything. */
+export type Sight = 'camera' | 'screen' | null;
+
 export interface LiveHandlers {
   onState?: (state: LiveState) => void;
   /** What you said, as she heard it. */
@@ -33,6 +36,10 @@ export interface LiveHandlers {
   /** She reached for a tool. */
   onDoing?: (name: string) => void;
   onTrouble?: (detail: string) => void;
+  /** How loud she is right now, 0 to 1, so the instrument can move with her. */
+  onLevel?: (level: number) => void;
+  /** What she can see changed. Null when the eye closes, however it closes. */
+  onSight?: (kind: Sight) => void;
 }
 
 /**
@@ -110,6 +117,8 @@ export class LiveVoice {
   /** Everything currently queued to play, so it can all be stopped at once. */
   private playing = new Set<AudioBufferSourceNode>();
   private state: LiveState = 'closed';
+  /** The camera or screen being shown to her, and the clock that samples it. */
+  private eye: {stream: MediaStream; timer: number; video: HTMLVideoElement} | null = null;
 
   constructor(private readonly handlers: LiveHandlers = {}) {}
 
@@ -186,6 +195,7 @@ export class LiveVoice {
         this.play(String(note.data ?? ''));
         break;
       case 'interrupted':
+        this.handlers.onLevel?.(0);
         /*
          * You started talking over her.
          *
@@ -199,6 +209,7 @@ export class LiveVoice {
         this.moveTo('listening');
         break;
       case 'done':
+        this.handlers.onLevel?.(0);
         this.moveTo('listening');
         break;
       case 'trouble':
@@ -216,7 +227,16 @@ export class LiveVoice {
     const pcm = fromBase64(base64);
     const buffer = audio.createBuffer(1, pcm.length, SPEAKS_AT);
     const channel = buffer.getChannelData(0);
-    for (let i = 0; i < pcm.length; i += 1) channel[i] = (pcm[i] ?? 0) / 0x8000;
+    let peak = 0;
+    for (let i = 0; i < pcm.length; i += 1) {
+      const sample = pcm[i] ?? 0;
+      channel[i] = sample / 0x8000;
+      if (sample > peak) peak = sample;
+      else if (-sample > peak) peak = -sample;
+    }
+    // Reported as it arrives rather than as it plays: a visual that leads the
+    // sound by a few hundred milliseconds reads as her drawing breath.
+    this.handlers.onLevel?.(peak / 0x8000);
 
     const node = audio.createBufferSource();
     node.buffer = buffer;
@@ -254,6 +274,59 @@ export class LiveVoice {
     this.playAt = 0;
   }
 
+  /**
+   * Show her something: the camera, or the screen.
+   *
+   * One frame a second, as a small JPEG, over the same socket the audio uses.
+   * That rate is the whole cost model — the model bills every frame it is
+   * shown, and one a second is enough to answer "what am I looking at" and
+   * "which of these is the right button" while costing a few pence an hour.
+   * Ten a second would look smoother to nobody and cost ten times as much.
+   *
+   * Nothing is shown while the line is closed, and closing the line stops
+   * the camera. The browser's own indicator says when this is on; this never
+   * runs without it.
+   */
+  watch(stream: MediaStream, kind: Exclude<Sight, null>): void {
+    this.blind();
+
+    const video = document.createElement('video');
+    video.srcObject = stream;
+    video.muted = true;
+    video.playsInline = true;
+    void video.play().catch(() => {});
+
+    const canvas = document.createElement('canvas');
+    const frame = () => {
+      const socket = this.socket;
+      if (!socket || socket.readyState !== WebSocket.OPEN || video.videoWidth === 0) return;
+      const width = Math.min(640, video.videoWidth);
+      const height = Math.round((video.videoHeight / video.videoWidth) * width);
+      canvas.width = width;
+      canvas.height = height;
+      canvas.getContext('2d')?.drawImage(video, 0, 0, width, height);
+      const data = canvas.toDataURL('image/jpeg', 0.6).split(',')[1] ?? '';
+      if (data) socket.send(JSON.stringify({type: 'video', data, mimeType: 'image/jpeg'}));
+    };
+
+    this.eye = {stream, timer: window.setInterval(frame, 1000), video};
+    // The browser's own "stop sharing" button, or a camera being unplugged.
+    for (const track of stream.getVideoTracks()) {
+      track.addEventListener('ended', () => this.blind());
+    }
+    this.handlers.onSight?.(kind);
+  }
+
+  /** Stop showing her anything, and release the camera so its light goes off. */
+  blind(): void {
+    if (!this.eye) return;
+    window.clearInterval(this.eye.timer);
+    this.eye.stream.getTracks().forEach((track) => track.stop());
+    this.eye.video.srcObject = null;
+    this.eye = null;
+    this.handlers.onSight?.(null);
+  }
+
   /** Typed instead of spoken — in company, or when the microphone is refused. */
   say(text: string): void {
     if (this.socket?.readyState === WebSocket.OPEN) {
@@ -262,7 +335,9 @@ export class LiveVoice {
   }
 
   close(): void {
+    this.blind();
     this.hush();
+    this.handlers.onLevel?.(0);
     this.capture?.port.close();
     this.capture?.disconnect();
     this.source?.disconnect();

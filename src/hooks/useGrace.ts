@@ -588,6 +588,27 @@ export function useGrace() {
     liveEnd();
   }, [ambient.dormant, liveEnd]);
 
+  /*
+   * The line itself has a sound.
+   *
+   * A click when it opens, a falling note when it drops, a click each time
+   * she reaches for something. These are the sounds an instrument makes, and
+   * they answer a question the screen cannot answer across a room: is she
+   * still there.
+   */
+  const lineRef = useRef(live.state);
+  useEffect(() => {
+    const was = lineRef.current;
+    lineRef.current = live.state;
+    if (was === 'opening' && live.state !== 'closed' && live.state !== 'opening') chimeAct();
+    if (was !== 'closed' && live.state === 'closed' && !ambient.dormant) chimeDone();
+  }, [live.state, ambient.dormant]);
+  const doingRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (live.doing && live.doing !== doingRef.current) chimeAct();
+    doingRef.current = live.doing;
+  }, [live.doing]);
+
   ambientAwakeRef.current = ambient.awake || ambient.state === 'hearing';
   // So /sleep reaches the listener without this hook depending on its order.
   ambientRef.current = ambient.sleep;
@@ -682,9 +703,14 @@ export function useGrace() {
     // interface shows has to match what the microphone is doing.
     if (recorder.state === 'recording') return 'listening';
     if (recorder.state === 'working' || transcribing) return 'thinking';
+    // The live voice, which none of the older flags below know about. Without
+    // these the panel said STANDBY while she was mid-sentence.
+    if (live.state === 'speaking') return 'speaking';
+    if (live.state === 'opening' || live.doing) return 'thinking';
     if (speech.speaking) return 'speaking';
     if (busy) return 'thinking';
     if (!micOn) return 'idle';
+    if (live.state === 'listening' || live.state === 'ready') return 'listening';
     // Someone is talking in the room, whether or not it turns out to be for her.
     if (ambient.state === 'hearing' || ambient.awake) return 'listening';
     if (ambient.state === 'working') return 'thinking';
@@ -696,6 +722,8 @@ export function useGrace() {
     speech.speaking,
     busy,
     micOn,
+    live.state,
+    live.doing,
     ambient.state,
     ambient.awake,
   ]);

@@ -163,6 +163,13 @@ sudo apt-get install -y -qq nodejs caddy >/dev/null 2>&1 || {
     | sudo tee /etc/apt/sources.list.d/caddy-stable.list >/dev/null
   sudo apt-get update -qq && sudo apt-get install -y -qq caddy
 }
+# It patches itself. This is a machine on the public internet holding a port
+# open, and "remember to update it" is a plan that fails in about a month.
+# Security updates install on their own; nothing else does, so nothing that
+# works today is quietly replaced with something that does not.
+sudo apt-get install -y -qq unattended-upgrades >/dev/null 2>&1
+printf 'APT::Periodic::Update-Package-Lists "1";\nAPT::Periodic::Unattended-Upgrade "1";\n' \
+  | sudo tee /etc/apt/apt.conf.d/20auto-upgrades >/dev/null
 sudo mkdir -p /opt/grace-outpost
 sudo chown -R \$USER /opt/grace-outpost
 REMOTE
