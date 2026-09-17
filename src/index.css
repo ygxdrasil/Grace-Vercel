@@ -183,27 +183,9 @@
 
 /* Orb states. Each mode gets its own tempo rather than its own colour, so the
    thing reads as one object breathing differently. */
-@keyframes orbBreathe {
-  0%, 100% { transform: scale(1); opacity: 0.55; }
-  50% { transform: scale(1.06); opacity: 0.8; }
-}
 
-@keyframes orbListen {
-  0%, 100% { transform: scale(1.04); opacity: 0.95; }
-  50% { transform: scale(1.13); opacity: 1; }
-}
 
-@keyframes orbSpeak {
-  0% { transform: scale(1); }
-  25% { transform: scale(1.09); }
-  50% { transform: scale(1.02); }
-  75% { transform: scale(1.11); }
-  100% { transform: scale(1); }
-}
 
-@keyframes orbSpin {
-  to { transform: rotate(360deg); }
-}
 
 @keyframes reactorSpin {
   from { transform: rotate(0deg); }
@@ -215,17 +197,7 @@
   50% { opacity: 1; transform: scale(1.08); }
 }
 
-@keyframes ringOut {
-  0% { transform: scale(0.85); opacity: 0.6; }
-  100% { transform: scale(1.7); opacity: 0; }
-}
 
-.orb-idle { animation: orbBreathe 9s ease-in-out infinite; }
-.orb-waiting { animation: orbBreathe 4.5s ease-in-out infinite; }
-.orb-listening { animation: orbListen 1.9s ease-in-out infinite; }
-.orb-speaking { animation: orbSpeak 1.5s ease-in-out infinite; }
-.orb-spin { animation: orbSpin 3.4s linear infinite; }
-.orb-ring { animation: ringOut 2.6s ease-out infinite; }
 
 /* Satellites: the smaller orbs that carry each faculty's state. They drift on
    long, uneven periods so the group never falls into lockstep — a ring of
@@ -241,30 +213,13 @@
   50% { opacity: 0.9; transform: scale(1.25); }
 }
 
-@keyframes orbitSweep {
-  to { transform: rotate(360deg); }
-}
 
-@keyframes traceDash {
-  to { stroke-dashoffset: -1000; }
-}
 
 .satellite { animation: satelliteDrift 11s ease-in-out infinite; }
 .satellite-live { animation: satellitePulse 3.2s ease-in-out infinite; }
-.orbit-sweep { animation: orbitSweep 48s linear infinite; }
-.orbit-sweep-slow { animation: orbitSweep 96s linear infinite reverse; }
-.trace { animation: traceDash 14s linear infinite; }
 
 /* A second, deeper wash of light behind the first, moving against it. */
-@keyframes ambientCounter {
-  0%, 100% { transform: translate(0, 0) scale(1.05); opacity: 0.35; }
-  50% { transform: translate(-5%, 5%) scale(1); opacity: 0.6; }
-}
 
-.ambient-deep {
-  background: radial-gradient(circle at 35% 70%, rgba(251, 191, 36, 0.07), transparent 55%);
-  animation: ambientCounter 31s ease-in-out infinite;
-}
 
 @keyframes caretBlink {
   0%, 45% { opacity: 1; }
@@ -299,19 +254,9 @@
   .ambient,
   [style*='reactorSpin'],
   [style*='reactorPulse'],
-  .orb-idle,
-  .orb-waiting,
-  .orb-listening,
-  .orb-speaking,
-  .orb-spin,
-  .orb-ring,
   .rise,
   .satellite,
-  .satellite-live,
-  .orbit-sweep,
-  .orbit-sweep-slow,
-  .trace,
-  .ambient-deep {
+  .satellite-live {
     animation: none;
   }
 }
@@ -331,24 +276,7 @@
   100% { transform: translateX(220%); }
 }
 
-.sheen {
-  position: relative;
-  overflow: hidden;
-}
 
-.sheen::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    100deg,
-    transparent 20%,
-    rgb(125 211 252 / 0.07) 48%,
-    transparent 72%
-  );
-  animation: sheen 7s ease-in-out infinite;
-  pointer-events: none;
-}
 
 /* A number that has just changed, catching the light for a moment. */
 @keyframes settle {
@@ -366,10 +294,6 @@
   to { transform: scaleX(1); }
 }
 
-.sweep {
-  transform-origin: left;
-  animation: sweep 60s linear infinite;
-}
 
 /* Something she has just noticed, arriving rather than appearing. */
 @keyframes arrive {
@@ -395,7 +319,6 @@
 @media (prefers-reduced-motion: reduce) {
   .sheen::after,
   .settle,
-  .sweep,
   .arrive,
   .attend {
     animation: none;
@@ -437,18 +360,6 @@
   transition: background 1.2s ease;
 }
 
-.field-counter {
-  position: fixed;
-  inset: -25%;
-  z-index: -20;
-  background:
-    radial-gradient(30rem 26rem at 68% 22%, rgb(var(--accent) / 0.07), transparent 58%),
-    radial-gradient(26rem 24rem at 28% 78%, rgb(var(--accent) / 0.13), transparent 56%);
-  filter: blur(1.2rem);
-  mix-blend-mode: screen;
-  animation: counterDrift 67s ease-in-out infinite;
-  transition: background 1.2s ease;
-}
 
 /**
  * Grain.
@@ -689,7 +600,6 @@
 
 @media (prefers-reduced-motion: reduce) {
   .field,
-  .field-counter,
   .edge-run::before,
   .cascade {
     animation: none;

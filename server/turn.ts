@@ -76,6 +76,49 @@ export interface TurnRequest {
   hooks?: TurnHooks;
 }
 
+/**
+ * Who she is, right now, and what she can reach.
+ *
+ * Everything the prompt needs, gathered at once. Pulled out of takeTurn so
+ * that the voice — which runs on another machine and holds its own model
+ * session — is briefed from exactly the same place. Before this the outpost
+ * opened its session with no system prompt and no tools at all: a nameless
+ * model with no hands, wearing her voice. The typed Grace and the spoken one
+ * must be one person, and one person has one briefing.
+ */
+export async function briefFor(via: InputMode): Promise<{
+  system: string;
+  have: Awaited<ReturnType<typeof available>>;
+  turns: Awaited<ReturnType<typeof recentTurns>>;
+  tools: ReturnType<typeof declarations>;
+}> {
+  const [profile, summary, policies, turns, have, attention, briefing, style] =
+    await Promise.all([
+      getProfile(),
+      getSummary(),
+      getPolicies(),
+      recentTurns(),
+      available(),
+      getMode(),
+      buildBriefing().catch(() => null),
+      styleNote().catch(() => null),
+    ]);
+
+  const system = buildSystemPrompt({
+    available: have,
+    profile,
+    summary,
+    policies,
+    via,
+    now: new Date(),
+    mode: attention.mode,
+    briefing,
+    style,
+  });
+
+  return {system, have, turns, tools: declarations(have)};
+}
+
 export async function takeTurn({
   text,
   via,
@@ -101,36 +144,16 @@ export async function takeTurn({
    * any other. Waiting for them in sequence bought nothing at all; the cost was
    * simply the sum rather than the slowest.
    */
-  const [, , profile, summary, policies, turns, have, attention, briefing, style] =
-    await Promise.all([
-      record('user', text, via),
-      // The conversation is named after the first thing said in it, and moves
-      // to the top of the list every time it is used.
-      currentChat().then(async (id) => {
-        await titleFrom(id, text);
-        await touch(id);
-      }),
-      getProfile(),
-      getSummary(),
-      getPolicies(),
-      recentTurns(),
-      available(),
-      getMode(),
-      buildBriefing().catch(() => null),
-      styleNote().catch(() => null),
-    ]);
-
-  const system = buildSystemPrompt({
-    available: have,
-    profile,
-    summary,
-    policies,
-    via,
-    now: new Date(),
-    mode: attention.mode,
-    briefing,
-    style,
-  });
+  const [, , {system, have, turns}] = await Promise.all([
+    record('user', text, via),
+    // The conversation is named after the first thing said in it, and moves
+    // to the top of the list every time it is used.
+    currentChat().then(async (id) => {
+      await titleFrom(id, text);
+      await touch(id);
+    }),
+    briefFor(via),
+  ]);
 
   // The turn just recorded is not in `turns`, which was read alongside it.
   turns.push({role: 'user', text});

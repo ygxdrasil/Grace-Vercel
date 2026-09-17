@@ -1,4 +1,6 @@
 import {requiresConfirmation} from '../actions';
+import {hold, restore, take} from '../approvals';
+import {lastUserSaid} from '../memory';
 import {noteDeed} from '../journal';
 import {askTools} from './ask';
 import {consoleTools} from './console';
@@ -39,6 +41,73 @@ const TOOLS: Tool[] = [
   ...selfTools,
   ...lightTools,
 ];
+
+/**
+ * What counts as a yes.
+ *
+ * Deliberately narrow. "Yes", "go ahead", "send it", "do it" — the things a
+ * person says when agreeing to something they have just been asked. Not
+ * "maybe", not "what would that do", and not a sentence that merely contains
+ * the word yes somewhere. The cost of being too strict is that she asks
+ * again; the cost of being too loose is an email that went out.
+ */
+const AGREED =
+  /^\s*(yes|yeah|yep|yup|ok(ay)?|sure|go ahead|do it|confirm(ed)?|send it|approved?|please do|go on|fine|absolutely|of course|make it so)\b/i;
+
+/** A yes older than this is about something else. */
+const AGREEMENT_FRESH_MS = 3 * 60 * 1000;
+
+const confirmTool: Tool = {
+  name: 'confirm_action',
+  description:
+    'Run an action that was held for approval. Only call this after the user ' +
+    'has clearly said yes to the specific thing you described. Pass the id ' +
+    'you were given when the action was held.',
+  category: 'research',
+  parameters: {
+    id: {type: 'string', description: 'The id from the hold message.'},
+  },
+  required: ['id'],
+  run: async (args) => {
+    const id = String(args.id ?? '').trim();
+
+    /*
+     * The check that makes this a real gate.
+     *
+     * The model is asking to run something it was refused. Whether it may is
+     * decided by what the *user* last said — a record the server wrote from
+     * what actually arrived, which the model has no way to author. It has to
+     * be a plain yes, said after the action was held, and recently. A model
+     * that has talked itself into believing consent was given still cannot
+     * manufacture the sentence this reads.
+     */
+    const said = await lastUserSaid();
+    const entry = await take(id);
+    if (!entry) {
+      return `Nothing is held under "${id}" — it may have expired. Ask again if it still matters.`;
+    }
+    const agreed =
+      said !== null &&
+      AGREED.test(said.text) &&
+      new Date(said.at).getTime() >= new Date(entry.at).getTime() &&
+      Date.now() - new Date(said.at).getTime() < AGREEMENT_FRESH_MS;
+    if (!agreed) {
+      // Put back under the same id, so a genuine yes a moment later still works.
+      await restore(entry);
+      return (
+        `The user has not clearly said yes to that yet. Ask them plainly and ` +
+        `wait for their answer. Do not call this again until they have.`
+      );
+    }
+
+    const tool = findTool(entry.name);
+    if (!tool) return `The held action (${entry.name}) no longer exists.`;
+    const result = await tool.run(entry.args);
+    await noteDeed('acted', `${describe(tool.name, result)} (confirmed by you)`).catch(() => {});
+    return result;
+  },
+};
+TOOLS.push(confirmTool);
 
 export function allTools(): Tool[] {
   return TOOLS;
@@ -180,13 +249,25 @@ export async function runTool(call: ToolCall): Promise<ToolOutcome> {
   }
 
   // The policy layer, finally load-bearing rather than advisory.
-  if (await requiresConfirmation(tool.category, tool.destructive ?? false)) {
+  //
+  // The confirmer is exempt from it. It carries a stricter check of its own —
+  // a plain yes from the user, on the record, after the hold — and gating it
+  // by category would mean that the moment a category was set to "always
+  // ask", nothing in that category could ever be agreed to again.
+  if (
+    tool.name !== confirmTool.name &&
+    (await requiresConfirmation(tool.category, tool.destructive ?? false))
+  ) {
+    // Held under an id, so that saying yes runs exactly this and nothing else.
+    const receipt = await hold(tool.name, call.args);
     return {
       name: tool.name,
       ok: false,
       result:
         `That needs the user's explicit go-ahead first. Describe exactly what ` +
-        `you are about to do and ask them to confirm. Do not claim to have done it.`,
+        `you are about to do and ask them to confirm — then stop. Do not claim ` +
+        `to have done it. If they say yes, call confirm_action with the id ` +
+        `"${receipt.id}". It is held for five minutes.`,
       summary: `Waiting on approval for ${tool.name}`,
     };
   }

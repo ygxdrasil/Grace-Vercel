@@ -31,39 +31,28 @@ if [ -z "${GRACE_URL:-}" ]; then
   GRACE_URL="${GRACE_URL:-https://grace-vercel.vercel.app}"
 fi
 
-if [ -z "${GRACE_OUTPOST_TOKEN:-}" ]; then
-  echo
-  echo "The token is in Grace's side panel, under the section about your phone."
-  echo "It is the same one Siri uses. Paste it here (it will not be shown):"
-  read -rs GRACE_OUTPOST_TOKEN
-  echo
-fi
+# No token is needed here any more. The machine checks every caller's own
+# token against Grace, and asks her with that same token — so there is
+# nothing on this machine to go stale when the token is replaced.
 
 case "$GRACE_URL" in
   https://*) ;;
   *) echo "Grace's address must start with https:// — got '$GRACE_URL'" >&2; exit 1 ;;
 esac
 
-if [ "${#GRACE_OUTPOST_TOKEN}" -lt 16 ]; then
-  # Long enough to be the real thing. A placeholder, a shell error or an empty
-  # paste all land here, and all of them would otherwise build a machine that
-  # silently refuses every connection.
-  echo "That does not look like the token (too short). Copy it from the side panel." >&2
-  exit 1
-fi
+export GRACE_URL
 
-export GRACE_URL GRACE_OUTPOST_TOKEN
-
-echo "Checking that address and token actually work before building anything..."
-if ! curl -fsS -X POST "${GRACE_URL%/}/api/relay" \
-  -H 'content-type: application/json' \
-  -d "{\"token\":\"${GRACE_OUTPOST_TOKEN}\",\"probe\":true}" >/dev/null 2>&1; then
+echo "Checking that Grace answers at that address before building anything..."
+# Any HTTP answer at all proves she is there. 401 is the expected one — it is
+# her refusing a request with no token, which is exactly what she should do.
+STATUS="$(curl -sS -o /dev/null -w '%{http_code}' -X POST "${GRACE_URL%/}/api/relay" \
+  -H 'content-type: application/json' -d '{"probe":true}' 2>/dev/null || echo 000)"
+if [ "$STATUS" = "000" ]; then
   echo >&2
-  echo "Grace refused that token, or could not be reached at $GRACE_URL." >&2
-  echo "Nothing has been created. Check the token in her side panel and try again." >&2
+  echo "Nothing answered at $GRACE_URL. Nothing has been created. Check the address." >&2
   exit 1
 fi
-echo "Good — she recognised it."
+echo "Good — she is there (HTTP $STATUS)."
 
 PROJECT="${GCP_PROJECT_ID:-ai-agents-508818}"
 ZONE="${GCE_ZONE:-europe-north1-b}"
@@ -192,7 +181,6 @@ sudo tee /etc/grace-outpost.env >/dev/null <<ENV
 GCP_PROJECT_ID=${PROJECT}
 GCP_LOCATION=${GCP_LOCATION:-global}
 GRACE_URL=${GRACE_URL}
-GRACE_OUTPOST_TOKEN=${GRACE_OUTPOST_TOKEN}
 PORT=8787
 ENV
 sudo chmod 600 /etc/grace-outpost.env

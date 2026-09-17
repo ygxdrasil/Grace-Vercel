@@ -3,7 +3,9 @@ import {Boot} from './components/Boot';
 import {Composer} from './components/Composer';
 import {Core} from './components/hud/Core';
 import {Head, Polar, Row} from './components/hud/Parts';
+import {Files} from './components/Files';
 import {Install} from './components/Install';
+import {NotesPanel} from './components/Keep';
 import {Lock} from './components/Lock';
 import {Palette, type Command} from './components/Palette';
 import {ProfilePanel} from './components/ProfilePanel';
@@ -81,6 +83,16 @@ export default function App() {
    * are typing into.
    */
   const [showTalk, setShowTalk] = useState(false);
+  /*
+   * Documents and notes.
+   *
+   * These were per-room panels in the layout that was deleted, and deleting
+   * the layout took them with it — which mattered, because giving her a
+   * document to read is something you do, not something you look at. The
+   * panel shows nothing you do not need; it still has to let you hand her
+   * things.
+   */
+  const [showFiles, setShowFiles] = useState(false);
   const [booting, setBooting] = useState(
     () => typeof sessionStorage !== 'undefined' && !sessionStorage.getItem('grace-booted'),
   );
@@ -372,6 +384,14 @@ export default function App() {
           </button>
           <button
             type="button"
+            onClick={() => setShowFiles((open) => !open)}
+            className={`readout transition ${
+              showFiles ? 'text-ice' : 'text-mist/40 hover:text-ice/70'
+            }`}>
+            FILES
+          </button>
+          <button
+            type="button"
             onClick={() => setPanelOpen(true)}
             className="readout text-mist/40 transition hover:text-ice/70">
             CONFIG
@@ -641,6 +661,26 @@ export default function App() {
           onTalk={talk}
         />
       </div>
+
+      {showFiles && (
+        <div className="absolute inset-x-0 bottom-14 top-11 z-30 flex justify-center bg-void/80 p-4">
+          <div className="flex w-full max-w-3xl flex-col border border-ice/20 bg-surface/90">
+            <div className="flex items-center justify-between border-b border-ice/15 px-4 py-2">
+              <span className="readout text-ice/70">FILES &amp; NOTES</span>
+              <button
+                type="button"
+                onClick={() => setShowFiles(false)}
+                className="readout text-mist/40 transition hover:text-ice">
+                CLOSE
+              </button>
+            </div>
+            <div className="scroll-thin min-h-0 flex-1 space-y-6 overflow-y-auto p-4">
+              <Files />
+              <NotesPanel />
+            </div>
+          </div>
+        </div>
+      )}
 
       {booting && <Boot onDone={() => setBooting(false)} />}
       <Palette commands={commands} />

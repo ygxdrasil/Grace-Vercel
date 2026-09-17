@@ -50,6 +50,23 @@ export async function getMessages(): Promise<Message[]> {
   return (await logOf()).read();
 }
 
+/**
+ * The last thing the user said, and when.
+ *
+ * Exists for one reason: deciding whether an action she was told to ask about
+ * has actually been agreed to. That decision must rest on something the model
+ * cannot write — and the model cannot put words in the user's mouth here,
+ * because user turns are recorded by the server from what actually arrived.
+ */
+export async function lastUserSaid(): Promise<{text: string; at: string} | null> {
+  const log = await (await logOf()).read();
+  for (let i = log.length - 1; i >= 0; i -= 1) {
+    const message = log[i];
+    if (message?.speaker === 'user') return {text: message.text, at: message.at};
+  }
+  return null;
+}
+
 export function getProfile(): Promise<Profile> {
   return profile.read();
 }

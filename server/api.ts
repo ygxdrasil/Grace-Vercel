@@ -20,6 +20,8 @@ import {spend, standing} from './budget';
 import {config, isConfigured} from './config';
 import {keyStatus, loadKeys, setKey} from './keys';
 import {learnFrom, worthLearningFrom} from './learn';
+import {briefFor} from './turn';
+import {record as remember} from './memory';
 import {upcoming} from './google/calendar';
 import {recentMail} from './google/gmail';
 import {
@@ -328,6 +330,46 @@ export function createApi(): Express {
        * would surface as her denying she had done something she had just
        * done, and it would be nearly impossible to reproduce.
        */
+      /*
+       * The outpost asking who she is.
+       *
+       * The spoken conversation runs on another machine, in a model session
+       * that machine holds. It is briefed from here — the same prompt, the
+       * same tool list, the same memory — so that the voice is her and not a
+       * nameless model with no hands wearing her voice. Asked for at the
+       * start of every session, because what she knows changes between them.
+       */
+      if (req.body?.brief) {
+        const brief = await briefFor('voice');
+        res.json({system: brief.system, tools: brief.tools});
+        return;
+      }
+
+      /*
+       * The outpost handing back what was said.
+       *
+       * Both halves of a spoken exchange land in the same log as a typed one,
+       * so the next thing anyone types knows what was just said aloud. And
+       * the exchange is learned from, the way a typed one is — otherwise she
+       * would remember nothing you ever told her by voice, which is most of
+       * what you tell her.
+       */
+      const heard = String(req.body?.heard ?? '').trim().slice(0, 4000);
+      const said = String(req.body?.said ?? '').trim().slice(0, 8000);
+      if (req.body?.record) {
+        if (heard) await remember('user', heard, 'voice');
+        if (said) await remember('grace', said, 'voice');
+        if (heard && said && worthLearningFrom(heard)) {
+          // Fire and forget: learning is worth doing and never worth making
+          // the voice wait for.
+          void learnFrom(heard, said).catch(() => {});
+        }
+        await noteRelayUse();
+        contextCache = null;
+        res.json({ok: true});
+        return;
+      }
+
       const calling = String(req.body?.tool ?? '').trim();
       if (calling) {
         const args = (req.body?.args ?? {}) as Record<string, unknown>;

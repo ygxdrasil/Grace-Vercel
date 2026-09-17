@@ -47,12 +47,22 @@ export interface LiveVoiceControls {
 
 interface LiveOptions {
   deviceId?: string;
+  /**
+   * Whether the user is signed in yet.
+   *
+   * This hook mounts before the session is known, so asking for the voice
+   * key on mount asked while still signed out, got a 401, and concluded
+   * there was no live voice — permanently, until a reload. She fell back to
+   * recording and replying, which works, which is why nobody noticed for a
+   * day. The key is fetched when this flips true, and again on every open.
+   */
+  ready?: boolean;
   /** What you said, as she heard it — so the transcript shows both halves. */
   onHeard?: (text: string) => void;
   onSaid?: (text: string) => void;
 }
 
-export function useLive({deviceId, onHeard, onSaid}: LiveOptions = {}): LiveVoiceControls {
+export function useLive({deviceId, onHeard, onSaid, ready = true}: LiveOptions = {}): LiveVoiceControls {
   const [key, setKey] = useState<VoiceKey | null>(null);
   const [state, setState] = useState<LiveState>('closed');
   const [doing, setDoing] = useState<string | null>(null);
@@ -71,14 +81,19 @@ export function useLive({deviceId, onHeard, onSaid}: LiveOptions = {}): LiveVoic
   });
 
   useEffect(() => {
+    if (!ready) return;
     void voiceKey().then(setKey);
-  }, []);
+  }, [ready]);
 
   const end = useCallback(() => {
     window.clearTimeout(idleRef.current);
     idleRef.current = undefined;
-    voiceRef.current?.close();
+    // Taken out of the ref before it is closed, because closing reports
+    // 'closed' back through onState, and onState calls this. The ref being
+    // empty is what stops that being a loop.
+    const voice = voiceRef.current;
     voiceRef.current = null;
+    voice?.close();
     // Released rather than stopped: the wake word is holding the same device
     // and must keep hearing. Stopping the track would leave her deaf until
     // the page was reloaded, with nothing on screen to explain why.
@@ -95,7 +110,6 @@ export function useLive({deviceId, onHeard, onSaid}: LiveOptions = {}): LiveVoic
   }, [end]);
 
   const begin = useCallback(async () => {
-    if (!key?.live || !key.token) return;
     // Already talking, or halfway through starting. Saying her name twice in
     // quick succession must not open two sessions and bill for both.
     if (voiceRef.current || openingRef.current) {
@@ -107,12 +121,31 @@ export function useLive({deviceId, onHeard, onSaid}: LiveOptions = {}): LiveVoic
     setTrouble(null);
 
     try {
+      // Fresh each time rather than the copy from mount. If the token has
+      // been replaced in her side panel since, this is what makes the next
+      // conversation work instead of failing until the page is reloaded.
+      const fresh = await voiceKey();
+      setKey(fresh);
+      if (!fresh.live || !fresh.token) return;
+
       const lease = await acquire(deviceId);
       leaseRef.current = lease;
 
       const voice = new LiveVoice({
         onState: (next) => {
           setState(next);
+          /*
+           * The other end hung up — Google's session limit, a network blip,
+           * the outpost restarting. Without this the closed session sat in
+           * the ref for up to forty-five seconds, `begin` saw it and did
+           * nothing, and she ignored her own name for that long after every
+           * upstream drop. Now a close is a close: hang up fully, so the next
+           * "Grace" opens a new line straight away.
+           */
+          if (next === 'closed' && voiceRef.current) {
+            end();
+            return;
+          }
           stayAwhile();
         },
         onHeard: (text) => {
@@ -135,7 +168,7 @@ export function useLive({deviceId, onHeard, onSaid}: LiveOptions = {}): LiveVoic
         },
       });
 
-      await voice.open(key.url, key.token, lease.stream);
+      await voice.open(fresh.url, fresh.token, lease.stream);
       voiceRef.current = voice;
       stayAwhile();
     } catch (error) {
@@ -145,7 +178,7 @@ export function useLive({deviceId, onHeard, onSaid}: LiveOptions = {}): LiveVoic
     } finally {
       openingRef.current = false;
     }
-  }, [deviceId, end, key, stayAwhile]);
+  }, [deviceId, end, stayAwhile]);
 
   /*
    * Closing the tab, navigating away, or the laptop going to sleep must all

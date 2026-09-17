@@ -11,7 +11,7 @@
  *
  * So this runs on a small machine that is always on, and its whole job is to
  * hold that connection. Your browser opens a socket to here; this opens a
- * socket to Google; audio flows through. Nothing is stored.
+ * socket to Google; audio flows through. Nothing is stored here.
  *
  * Why not talk to Google directly from the browser and skip the hop? Because
  * doing that needs a short-lived token, and short-lived tokens are an AI
@@ -20,9 +20,12 @@
  * adding thirty milliseconds, thirty milliseconds is the easy trade.
  *
  * The important thing this is NOT: a second Grace. It holds no memory, makes
- * no decisions, and owns none of her tools. When the model asks to do
- * something, that request is forwarded to the real Grace and her answer comes
- * back. There is one Grace, and she is on Vercel. This is a wire.
+ * no decisions, and owns none of her tools. At the start of every session it
+ * asks the real Grace who she is — her prompt, her tool list — and when the
+ * model wants to do something, that request is forwarded to her and her
+ * answer comes back. What was said is handed back to her afterwards, so the
+ * typed Grace remembers the spoken conversation. There is one Grace, and she
+ * is on Vercel. This is a wire.
  */
 
 import {createServer} from 'node:http';
@@ -33,9 +36,8 @@ const settings = {
   port: Number(process.env.PORT ?? 8787),
   project: process.env.GCP_PROJECT_ID ?? '',
   location: process.env.GCP_LOCATION ?? 'global',
-  /** Where the real Grace lives, and how this proves it is hers. */
+  /** Where the real Grace lives. */
   grace: (process.env.GRACE_URL ?? '').replace(/\/+$/, ''),
-  token: process.env.GRACE_OUTPOST_TOKEN ?? '',
   model: process.env.GRACE_LIVE_MODEL ?? 'gemini-3.8-live',
   voice: process.env.GRACE_VOICE ?? 'Kore',
 };
@@ -88,13 +90,31 @@ console.log(
 );
 
 /**
+ * One call to the real Grace, with the token this conversation arrived with.
+ *
+ * The token is the browser's, not a copy kept here. This machine used to hold
+ * its own, which meant replacing the token in her side panel — the thing that
+ * is supposed to lock every door at once — left this door open until someone
+ * remembered to redeploy. Now there is nothing here to go stale: whatever
+ * proved you were you at the start of the conversation is what she is asked
+ * with for the rest of it.
+ */
+async function askGrace(token, body) {
+  const response = await fetch(`${settings.grace}/api/relay`, {
+    method: 'POST',
+    headers: {'content-type': 'application/json'},
+    body: JSON.stringify({token, ...body}),
+  });
+  if (!response.ok) throw new Error(`Grace answered ${response.status}`);
+  return response.json();
+}
+
+/**
  * Whether this socket is really from you.
  *
- * The token is minted by Grace for a signed-in browser and handed over at the
- * start of the connection. It is checked against her rather than against a
- * copy kept here, so that replacing it in her side panel kills every existing
- * connection immediately — which is what the button says it does, and would
- * quietly not be true if this held its own copy.
+ * Checked against her rather than against a copy kept here, so that replacing
+ * the token kills every existing connection immediately — which is what the
+ * button says it does, and would quietly not be true if this held its own.
  */
 async function vouchedFor(token) {
   if (!token) return false;
@@ -102,7 +122,7 @@ async function vouchedFor(token) {
     const response = await fetch(`${settings.grace}/api/relay`, {
       method: 'POST',
       headers: {'content-type': 'application/json'},
-      body: JSON.stringify({token, text: '', probe: true}),
+      body: JSON.stringify({token, probe: true}),
     });
     // 401 is the only answer that means "not yours". Anything else — including
     // her being briefly down — must not lock you out of your own voice.
@@ -111,29 +131,6 @@ async function vouchedFor(token) {
     console.error('[outpost] could not reach Grace to check the token:', error.message);
     return false;
   }
-}
-
-/**
- * Hands a tool call to the real Grace and brings back what she says.
- *
- * This is the seam that keeps there being one Grace. The model running the
- * conversation has her tools in its list, but not her hands: when it decides
- * to turn a light off, that decision travels to Vercel, is carried out by the
- * same code that would have carried it out in a typed conversation, and is
- * recorded in the same memory. A voice that had its own copy of the tools
- * would drift from the typed one within a week, and the drift would show up
- * as her denying she had done something she had just done.
- */
-async function askGrace(name, args) {
-  const response = await fetch(`${settings.grace}/api/relay`, {
-    method: 'POST',
-    headers: {'content-type': 'application/json'},
-    body: JSON.stringify({token: settings.token, tool: name, args}),
-  });
-  if (!response.ok) {
-    return {error: `Grace could not do that (${response.status})`};
-  }
-  return await response.json();
 }
 
 const server = createServer((req, res) => {
@@ -162,17 +159,61 @@ sockets.on('connection', async (browser, request) => {
   /*
    * Audio that arrived before Google was ready.
    *
-   * Opening the upstream connection takes a moment, and a person who has
-   * pressed the button and started talking does not know that. Without this,
-   * the first half-second of every conversation is silently dropped — which
-   * reads as her mishearing you rather than as a race, and is maddening
-   * precisely because it only affects the first word.
+   * Opening the upstream connection takes a moment — longer now, because she
+   * is briefed first — and a person who has said her name and started talking
+   * does not know that. Without this, the first second of every conversation
+   * is silently dropped, which reads as her mishearing you rather than as a
+   * race, and is maddening precisely because it only affects the first word.
    */
   const waiting = [];
 
   const toBrowser = (message) => {
     if (browser.readyState === browser.OPEN) browser.send(JSON.stringify(message));
   };
+
+  /*
+   * What has been said this turn, on each side, so it can be handed back.
+   *
+   * Transcription arrives in fragments. The user's side is flushed the moment
+   * the model begins to respond — and always before a tool call is forwarded,
+   * because a tool that was refused for approval checks what the user last
+   * said, and "yes" has to be on the record before the model asks whether it
+   * was said. Her side is flushed when her turn completes.
+   */
+  let heard = '';
+  let said = '';
+  let heardFlushed = false;
+
+  const flushHeard = async () => {
+    if (heardFlushed || !heard.trim()) return;
+    heardFlushed = true;
+    const text = heard.trim();
+    await askGrace(token, {record: true, heard: text}).catch((error) =>
+      console.error('[outpost] could not record what was heard:', error.message),
+    );
+  };
+  const flushSaid = async () => {
+    const text = said.trim();
+    if (!text) return;
+    said = '';
+    await askGrace(token, {record: true, said: text}).catch((error) =>
+      console.error('[outpost] could not record what was said:', error.message),
+    );
+    // The turn is over; what she hears next is a new one.
+    heard = '';
+    heardFlushed = false;
+  };
+
+  // Who she is, this time. Every session, because what she knows changes.
+  let brief;
+  try {
+    brief = await askGrace(token, {brief: true});
+  } catch (error) {
+    console.error('[outpost] could not get her briefing:', error.message);
+    toBrowser({type: 'trouble', detail: 'could not reach Grace for her briefing'});
+    browser.close(1011, 'no briefing');
+    return;
+  }
 
   try {
     session = await google.live.connect({
@@ -182,6 +223,10 @@ sockets.on('connection', async (browser, request) => {
         speechConfig: {
           voiceConfig: {prebuiltVoiceConfig: {voiceName: settings.voice}},
         },
+        // Her, and her hands. Without these two lines this was a nameless
+        // model that could do nothing, wearing her voice.
+        systemInstruction: brief.system,
+        ...(brief.tools?.length ? {tools: [{functionDeclarations: brief.tools}]} : {}),
         /*
          * The same character, with a real range.
          *
@@ -193,18 +238,13 @@ sockets.on('connection', async (browser, request) => {
         enableAffectiveDialog: true,
         /*
          * Both halves of the conversation come back as text as well as
-         * sound, so the typed Grace and the spoken one share one memory. A
-         * voice that remembered nothing would be a second assistant wearing
-         * her name, and you would find out the first time you referred back
-         * to something you had said out loud.
+         * sound, so the typed Grace and the spoken one share one memory.
          */
         inputAudioTranscription: {},
         outputAudioTranscription: {},
         /*
          * Long conversations outlive the context window. Compression keeps
-         * the session alive across that boundary instead of ending it, which
-         * is the difference between her trailing off mid-conversation and
-         * her simply continuing.
+         * the session alive across that boundary instead of ending it.
          */
         contextWindowCompression: {slidingWindow: {}},
         sessionResumption: {},
@@ -217,11 +257,14 @@ sockets.on('connection', async (browser, request) => {
         onmessage: async (message) => {
           const content = message.serverContent;
 
-          // What she said and what you said, as text, for her memory.
           if (content?.inputTranscription?.text) {
+            heard += content.inputTranscription.text;
             toBrowser({type: 'heard', text: content.inputTranscription.text});
           }
           if (content?.outputTranscription?.text) {
+            // She has started answering, so what you said is complete.
+            void flushHeard();
+            said += content.outputTranscription.text;
             toBrowser({type: 'said', text: content.outputTranscription.text});
           }
 
@@ -241,14 +284,27 @@ sockets.on('connection', async (browser, request) => {
            * her and talking at the same time as her.
            */
           if (content?.interrupted) toBrowser({type: 'interrupted'});
-          if (content?.turnComplete) toBrowser({type: 'done'});
+          if (content?.turnComplete) {
+            toBrowser({type: 'done'});
+            void flushSaid();
+          }
 
           // The model wants to do something. It travels to the real Grace.
           if (message.toolCall?.functionCalls?.length) {
+            // On the record first: an action she was told to ask about is
+            // approved by what the user last said, and that has to be written
+            // down before the model asks whether it was.
+            await flushHeard();
+
             const answers = [];
             for (const call of message.toolCall.functionCalls) {
               toBrowser({type: 'doing', name: call.name});
-              const result = await askGrace(call.name, call.args ?? {});
+              let result;
+              try {
+                ({result} = await askGrace(token, {tool: call.name, args: call.args ?? {}}));
+              } catch (error) {
+                result = `Grace could not do that: ${error.message}`;
+              }
               answers.push({id: call.id, name: call.name, response: {result}});
             }
             session?.sendToolResponse({functionResponses: answers});
@@ -290,6 +346,7 @@ sockets.on('connection', async (browser, request) => {
     // Said rather than spoken — the fallback when the microphone is refused
     // or you would rather type in company.
     if (note.type === 'text' && note.text) {
+      heard += note.text;
       session?.sendClientContent({
         turns: [{role: 'user', parts: [{text: note.text}]}],
         turnComplete: true,
@@ -298,6 +355,8 @@ sockets.on('connection', async (browser, request) => {
   });
 
   browser.on('close', () => {
+    // Whatever was said last is not lost with the connection.
+    void flushHeard().then(flushSaid);
     // Every open session is billed by the minute for as long as it is open,
     // whether or not anyone is talking. A leaked session is a meter running
     // in an empty room, and nothing would ever close it.

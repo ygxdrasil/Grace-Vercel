@@ -28,7 +28,6 @@ your own computer.
 
 ```bash
 export GRACE_URL=https://your-grace-address
-export GRACE_OUTPOST_TOKEN=the-token-from-her-side-panel
 bash setup.sh
 ```
 

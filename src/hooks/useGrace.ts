@@ -496,6 +496,7 @@ export function useGrace() {
 
   const live = useLive({
     deviceId,
+    ready: session === 'ok' || session === 'open',
     onHeard: (text) => appendSpoken('user', text),
     onSaid: (text) => appendSpoken('grace', text),
   });

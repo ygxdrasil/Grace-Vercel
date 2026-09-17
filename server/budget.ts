@@ -109,6 +109,16 @@ export interface Spend {
   requests: number;
   /** Total drawn from the promotional pool. Never resets. */
   pool: number;
+  /**
+   * Charged to the card this month. Separate from `dollars` on purpose.
+   *
+   * `dollars` is everything spent this calendar month, whoever paid. The
+   * credit expires on the 16th, so on that morning December's `dollars`
+   * already holds two weeks of credit-funded spend — comfortably over the
+   * $10 card limit — and she would refuse to work before a cent had touched
+   * the card. This counts only what the card has actually been asked for.
+   */
+  card: number;
   /** Where the money actually went, by model. Guessing at this cost a week. */
   byModel?: Record<string, number>;
   /** Set when a cap has been hit, so the reason survives a restart. */
@@ -120,6 +130,7 @@ const store = new Document<Spend>('spend', () => ({
   dollars: 0,
   requests: 0,
   pool: 0,
+  card: 0,
   stoppedAt: null,
 }));
 
@@ -141,6 +152,7 @@ export async function spend(): Promise<Spend> {
       dollars: 0,
       requests: 0,
       pool: cached.pool ?? 0,
+      card: 0,
       stoppedAt: null,
     };
     await store.write(cached);
@@ -170,11 +182,12 @@ export async function standing(now = new Date()): Promise<Standing> {
 
   if (creditsExpired(now)) {
     const limit = afterwardsCap();
+    const charged = current.card ?? 0;
     return {
       against: 'card',
-      spent: current.dollars,
+      spent: charged,
       limit,
-      remaining: Math.max(0, limit - current.dollars),
+      remaining: Math.max(0, limit - charged),
       elapsed: null,
     };
   }
@@ -244,6 +257,7 @@ export async function record(
     // The pool only draws down while it is actually paying. After expiry the
     // spending is real money and belongs to the month, not to the credit.
     pool: (current.pool ?? 0) + (onPool ? cost : 0),
+    card: (current.card ?? 0) + (onPool ? 0 : cost),
     requests: current.requests + 1,
     byModel: {
       ...current.byModel,
@@ -252,7 +266,7 @@ export async function record(
     stoppedAt: current.stoppedAt,
   };
 
-  const spentNow = onPool ? next.pool : next.dollars;
+  const spentNow = onPool ? next.pool : next.card;
   const limitNow = onPool ? poolSize() : afterwardsCap();
   if (spentNow >= limitNow) next.stoppedAt = current.stoppedAt ?? new Date().toISOString();
 

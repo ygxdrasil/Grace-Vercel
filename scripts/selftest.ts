@@ -777,6 +777,60 @@ try {
   ok('the tool count is counted rather than claimed');
 
   /*
+   * An action she was told to ask about can actually be agreed to.
+   *
+   * It could not, before. The gate refused; the model asked; the user said
+   * yes; the model called the tool again; the gate refused again. Sending and
+   * spending were not gated, they were impossible — unnoticed only because no
+   * tool in those categories existed yet.
+   *
+   * Whether a yes was said is read from the user's recorded turns, which the
+   * model cannot write. That is what makes this a gate rather than a
+   * suggestion.
+   */
+  const {setPolicy: setRule} = await import('../server/actions');
+  const {record: putOnRecord} = await import('../server/memory');
+
+  assert.equal((await setRule('research', 'always')).ok, true);
+  try {
+    const refused = await runTool({name: 'list_reminders', args: {}});
+    assert.equal(refused.ok, false, 'an always-ask action is refused at first');
+    const heldId = /confirm_action with the id "([^"]+)"/.exec(refused.result)?.[1];
+    assert.ok(heldId, 'and the refusal names the receipt to confirm with');
+
+    // Nobody has said yes. The model asking anyway gets nowhere — and keeps
+    // the same receipt, so a real yes a moment later still works.
+    const early = await runTool({name: 'confirm_action', args: {id: heldId}});
+    assert.match(early.result, /not clearly said yes/i, 'no yes on record, no action');
+
+    // Her own words do not count as consent, whatever they say.
+    await putOnRecord('grace', 'Yes, go ahead and do it.', 'text');
+    const selfServed = await runTool({name: 'confirm_action', args: {id: heldId}});
+    assert.match(selfServed.result, /not clearly said yes/i, 'she cannot approve herself');
+
+    // A hedge is not a yes.
+    await putOnRecord('user', 'what would that actually do?', 'text');
+    const hedged = await runTool({name: 'confirm_action', args: {id: heldId}});
+    assert.match(hedged.result, /not clearly said yes/i, 'a question is not consent');
+
+    // A plain yes, from the user, after the hold: it runs — once.
+    await putOnRecord('user', 'yes please', 'text');
+    const agreed = await runTool({name: 'confirm_action', args: {id: heldId}});
+    assert.doesNotMatch(agreed.result, /not clearly said yes/i, 'a real yes runs it');
+    assert.doesNotMatch(agreed.result, /Nothing is held/i);
+
+    const again = await runTool({name: 'confirm_action', args: {id: heldId}});
+    assert.match(again.result, /Nothing is held/i, 'and the same yes cannot run it twice');
+
+    // A receipt the model invented is not a receipt.
+    const invented = await runTool({name: 'confirm_action', args: {id: 'deadbeef'}});
+    assert.match(invented.result, /Nothing is held/i);
+  } finally {
+    await setRule('research', 'never');
+  }
+  ok('an action she must ask about runs on your yes, and only on your yes');
+
+  /*
    * Which till she is billed at.
    *
    * This is not a preference. Google's free-trial terms say the $300 credit
@@ -1143,6 +1197,15 @@ try {
   const afterExpiry = new Date(poolExpiry().getTime() + 24 * 60 * 60 * 1000);
   assert.ok(creditsExpired(afterExpiry), 'the credit expires on its published date');
   const onCard = await standing(afterExpiry);
+  // The month's `dollars` already holds credit-funded spend. On the morning
+  // the credit expires that must not count against the card — or she refuses
+  // to work before a cent has touched it.
+  assert.ok(drawn.pool > 0, 'there is credit-funded spend this month');
+  assert.equal(
+    onCard.spent,
+    0,
+    'credit-funded spend must not be counted as money charged to the card',
+  );
   assert.equal(onCard.against, 'card', 'past expiry, spending is the user\'s own money');
   assert.equal(onCard.limit, afterwardsCap(), 'and the small monthly cap takes over');
   assert.ok(
@@ -3108,6 +3171,54 @@ try {
     'and is refused by name rather than run',
   );
   ok('the voice borrows her hands rather than growing its own');
+
+  /*
+   * The voice is briefed from the same place as the typed conversation.
+   *
+   * Without this the outpost opened its model session with no system prompt
+   * and no tools: a nameless model that could do nothing, wearing her voice.
+   * The briefing has to be hers — her name in it, her tool list — and come
+   * from the one function the typed path also uses, so the two cannot drift.
+   */
+  const briefed = await call('/relay', {
+    method: 'POST',
+    body: JSON.stringify({token: relayKey.token, brief: true}),
+  });
+  assert.equal(briefed.status, 200);
+  const herBrief = (await briefed.json()) as {system: string; tools: {name: string}[]};
+  assert.match(herBrief.system, /Grace/, 'the briefing must be hers, by name');
+  assert.ok(herBrief.tools.length > 0, 'and must carry her tools');
+  assert.ok(
+    herBrief.tools.some((tool) => tool.name === 'confirm_action'),
+    'including the one that lets a held action be approved',
+  );
+  ok('the spoken Grace is briefed from the same place as the typed one');
+
+  /*
+   * What is said aloud lands in the same memory as what is typed.
+   *
+   * Otherwise she remembers nothing you ever told her by voice — which is
+   * most of what you tell her — and the next typed message has no idea what
+   * was just said out loud.
+   */
+  const {getMessages: readLog} = await import('../server/memory');
+  const logBefore = (await readLog()).length;
+  const recorded = await call('/relay', {
+    method: 'POST',
+    body: JSON.stringify({
+      token: relayKey.token,
+      record: true,
+      heard: 'remind me the bins go out on Thursday',
+      said: 'Thursday it is. I will remind you the night before.',
+    }),
+  });
+  assert.equal(recorded.status, 200);
+  const logNow = await readLog();
+  assert.equal(logNow.length, logBefore + 2, 'both halves of the exchange are recorded');
+  assert.equal(logNow[logNow.length - 2]?.speaker, 'user');
+  assert.equal(logNow[logNow.length - 1]?.speaker, 'grace');
+  assert.equal(logNow[logNow.length - 1]?.via, 'voice', 'and marked as spoken');
+  ok('what is said aloud is remembered like what is typed');
 
   // The whole point of one pipeline: what arrives by phone is in the same
   // conversation as what was typed, or walking in the door and carrying on
