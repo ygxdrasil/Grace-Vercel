@@ -920,9 +920,9 @@ var LEVELS_ALLOWED = [
    *
    * Raise this the day she runs somewhere without a sixty-second guillotine.
    */
-  { match: /pro/i, levels: ["low"] },
-  { match: /lite/i, levels: ["minimal", "low", "medium", "high"] }
+  { match: /pro/i, levels: ["low"] }
 ];
+var USUAL = ["low", "medium", "high"];
 var ORDER = ["minimal", "low", "medium", "high"];
 function nameFor(tokens) {
   if (tokens <= 0) return "minimal";
@@ -937,7 +937,7 @@ function nearest(level, allowed) {
   return below ?? allowed.find((l) => ORDER.indexOf(l) > wanted) ?? allowed[0];
 }
 function levelsFor(model) {
-  return LEVELS_ALLOWED.find((entry) => entry.match.test(model))?.levels ?? ORDER;
+  return LEVELS_ALLOWED.find((entry) => entry.match.test(model))?.levels ?? USUAL;
 }
 function levelFor(model, tokens) {
   return nearest(nameFor(tokens), levelsFor(model));

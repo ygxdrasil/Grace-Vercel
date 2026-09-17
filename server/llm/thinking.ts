@@ -36,6 +36,21 @@ function speaksLevels(model: string): boolean {
  * fail while the same question on Flash succeeded: a bug that would look like
  * Pro being broken rather than like a two-value enum.
  */
+/*
+ * `minimal` is never sent. To anything.
+ *
+ * It exists in the API and it was in the table below for the Flash-Lite line,
+ * and 3.8 Flash rejected it outright — "Thinking level is unsupported:
+ * THINKING_LEVEL_MINIMAL" — twenty-three times before anyone read the logs.
+ * Every request marked `fast` had been failing: her greeting on every open,
+ * memory compaction, learning from conversation. Silently, because those are
+ * background jobs and their failures are caught and logged rather than shown.
+ *
+ * Which models accept it is not documented per model and has already changed
+ * once. `low` is accepted everywhere on the 3.x line, and the difference in
+ * cost between low and minimal on a background job is a few hundred tokens a
+ * day. Robust beats thrifty here by a very wide margin.
+ */
 const LEVELS_ALLOWED: {match: RegExp; levels: Level[]}[] = [
   /*
    * Pro is capped at `low` on purpose, and this is a latency decision rather
@@ -56,8 +71,10 @@ const LEVELS_ALLOWED: {match: RegExp; levels: Level[]}[] = [
    * Raise this the day she runs somewhere without a sixty-second guillotine.
    */
   {match: /pro/i, levels: ['low']},
-  {match: /lite/i, levels: ['minimal', 'low', 'medium', 'high']},
 ];
+
+/** What a model gets when nothing above names it: everything but `minimal`. */
+const USUAL: Level[] = ['low', 'medium', 'high'];
 
 export type Level = 'minimal' | 'low' | 'medium' | 'high';
 
@@ -97,7 +114,7 @@ function nearest(level: Level, allowed: Level[]): Level {
 }
 
 export function levelsFor(model: string): Level[] {
-  return LEVELS_ALLOWED.find((entry) => entry.match.test(model))?.levels ?? ORDER;
+  return LEVELS_ALLOWED.find((entry) => entry.match.test(model))?.levels ?? USUAL;
 }
 
 /**

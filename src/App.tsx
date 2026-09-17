@@ -594,6 +594,30 @@ export default function App() {
               value={bearing.toUpperCase()}
               tone={warnBearing ? 'warn' : 'ice'}
             />
+            {/* The listener, made legible. Before any audio is sent it passes
+                a pitch check and, when the voice lock is on, a speaker check —
+                and a rejected clip is silently dropped. Silently is the
+                problem: a lock that no longer recognises you looks exactly
+                like a wake word that has stopped working. These rows are the
+                difference. */}
+            <Row
+              label="EAR"
+              value={
+                !grace.micOn ? 'OFF' : grace.ambient.ear === 'none' ? 'NONE' : grace.ambient.ear.toUpperCase()
+              }
+              tone={!grace.micOn ? 'ice' : grace.ambient.ear === 'none' ? 'warn' : 'live'}
+            />
+            <Row
+              label="VOICE LOCK"
+              value={grace.guard?.on ? grace.guard.strictness.toUpperCase() : 'OFF'}
+            />
+            {grace.guard?.on && (
+              <Row
+                label="REJECTED"
+                value={String(grace.ambient.strangers)}
+                tone={grace.ambient.strangers >= 3 ? 'warn' : 'ice'}
+              />
+            )}
             <Row label="TOOLS" value={String(state.tools)} />
             <Row label="CONFIRMS" value={String(state.policies.length)} />
             <Row
@@ -623,6 +647,36 @@ export default function App() {
           </div>
         </aside>
       </div>
+
+      {grace.ambient.strangers >= 3 && grace.guard?.on && !voiceLockOpen && (
+        <div className="relative z-20 flex shrink-0 flex-wrap items-center gap-3 border-t border-ember/25 bg-ember/10 px-4 py-2">
+          <span className="readout shrink-0 text-ember/80">VOICE LOCK</span>
+          <span className="readout normal-case tracking-normal text-ember/90">
+            I’ve ignored {grace.ambient.strangers} things I didn’t recognise as your voice.
+            If one of those was you, I’m being too fussy.
+          </span>
+          <span className="ml-auto flex gap-2">
+            <button
+              type="button"
+              onClick={() => void api.saveVoice({strictness: 'lenient'}).then(grace.setGuard)}
+              className="readout border border-ember/40 px-2 py-1 text-ember hover:bg-ember/15">
+              Be less fussy
+            </button>
+            <button
+              type="button"
+              onClick={() => setVoiceLockOpen(true)}
+              className="readout border border-ice/20 px-2 py-1 text-mist/70 hover:text-ice">
+              Record me again
+            </button>
+            <button
+              type="button"
+              onClick={() => void api.saveVoice({on: false}).then(grace.setGuard)}
+              className="readout border border-ice/20 px-2 py-1 text-mist/70 hover:text-ice">
+              Turn it off
+            </button>
+          </span>
+        </div>
+      )}
 
       {notice && (
         <p className="relative z-20 flex shrink-0 items-center gap-2 border-t border-ember/25 bg-ember/10 px-4 py-1.5">

@@ -72,7 +72,23 @@ export function useGrace() {
   const micChosenRef = useRef(false);
 
   useEffect(() => {
-    if (localStorage.getItem('grace-mic') === 'off') {
+    const saved = localStorage.getItem('grace-mic');
+    if (saved === 'off') {
+      micChosenRef.current = true;
+      return;
+    }
+    /*
+     * A saved "on" is honoured outright.
+     *
+     * The permission query below only decides the first-ever default. It
+     * used to gate the saved choice too, and on any browser without that
+     * query — every iPhone — it rejected, she stayed off, and turning the
+     * microphone on lasted exactly one page load. The browser already knows
+     * whether it has permission; if it does not, starting the listener will
+     * ask, which is what the person chose.
+     */
+    if (saved === 'on') {
+      setMicOn(true);
       micChosenRef.current = true;
       return;
     }

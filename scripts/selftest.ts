@@ -508,9 +508,13 @@ try {
   });
   const idle = plain.config.thinkingConfig;
   assert.ok(
-    idle?.thinkingBudget === 0 ||
-      String(idle?.thinkingLevel).toLowerCase() === 'minimal',
-    'without a tool, deliberation should still be off for speed',
+    idle?.thinkingBudget === 0 || String(idle?.thinkingLevel).toLowerCase() === 'low',
+    'without a tool, deliberation should be as low as the model accepts',
+  );
+  assert.notEqual(
+    String(idle?.thinkingLevel).toLowerCase(),
+    'minimal',
+    'and never minimal, which 3.8 Flash rejects with a 400',
   );
   ok('deliberation stays on whenever a tool is attached');
 
@@ -696,11 +700,17 @@ try {
     'medium',
     'a level the model does offer is used as asked',
   );
-  assert.equal(
-    levelFor(config.model, 0),
-    'minimal',
-    'nothing to think about still means nothing to think about',
-  );
+  // `minimal` is real in the API and 3.8 Flash refuses it. Every background
+  // job — greeting, compaction, learning — 400'd on it for a day. Zero
+  // thought now lands on the lowest level a model actually accepts.
+  assert.equal(levelFor(config.model, 0), 'low', 'nothing to think about is sent as low');
+  for (const model of [config.model, config.hardModel, config.transcribeModel]) {
+    assert.notEqual(
+      levelFor(model, 0),
+      'minimal',
+      `${model}: minimal must never go out — it is rejected and the failure is silent`,
+    );
+  }
   assert.equal(
     levelFor(config.model, THINKING.reflex),
     'low',
