@@ -3352,6 +3352,77 @@ var init_self = __esm({
   }
 });
 
+// server/coding/screen.ts
+var screen_exports = {};
+__export(screen_exports, {
+  captureScreen: () => captureScreen,
+  screensFolder: () => screensFolder,
+  sweep: () => sweep
+});
+import { mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
+import { join as join2 } from "node:path";
+function captureCommand(to) {
+  if (process.platform === "win32") {
+    return [
+      'powershell -NoProfile -Command "',
+      "Add-Type -AssemblyName System.Windows.Forms,System.Drawing;",
+      "$b=[System.Windows.Forms.SystemInformation]::VirtualScreen;",
+      "$i=New-Object System.Drawing.Bitmap $b.Width,$b.Height;",
+      "$g=[System.Drawing.Graphics]::FromImage($i);",
+      "$g.CopyFromScreen($b.Location,[System.Drawing.Point]::Empty,$b.Size);",
+      `$i.Save('${to}',[System.Drawing.Imaging.ImageFormat]::Png)`,
+      '"'
+    ].join("");
+  }
+  if (process.platform === "darwin") return `screencapture -x "${to}"`;
+  return `(command -v gnome-screenshot >/dev/null && gnome-screenshot -f "${to}") || (command -v import >/dev/null && import -window root "${to}")`;
+}
+function screensFolder() {
+  const folder = join2(config.dataDir, "screens");
+  mkdirSync(folder, { recursive: true });
+  return folder;
+}
+function sweep() {
+  const folder = screensFolder();
+  const now = Date.now();
+  for (const name of readdirSync(folder)) {
+    if (!name.endsWith(".png")) continue;
+    const path3 = join2(folder, name);
+    try {
+      if (now - statSync(path3).mtimeMs > KEEP_FOR_MS) rmSync(path3, { force: true });
+    } catch {
+    }
+  }
+}
+async function captureScreen(run) {
+  sweep();
+  const folder = screensFolder();
+  const path3 = join2(folder, `screen-${Date.now()}.png`);
+  const command = captureCommand(path3);
+  if (!command) {
+    return { ok: false, why: `I do not know how to photograph the screen on ${process.platform}.` };
+  }
+  const done = await run(command, folder);
+  if (!done.ok) {
+    return {
+      ok: false,
+      why: `the screen could not be captured: ${done.detail.trim() || "no reason given"}` + (process.platform === "linux" ? ". On Linux this needs gnome-screenshot or ImageMagick installed." : "")
+    };
+  }
+  try {
+    if (statSync(path3).size > 0) return { ok: true, path: path3 };
+  } catch {
+  }
+  return { ok: false, why: "the capture command succeeded but produced no image." };
+}
+var KEEP_FOR_MS;
+var init_screen = __esm({
+  "server/coding/screen.ts"() {
+    init_config();
+    KEEP_FOR_MS = 30 * 60 * 1e3;
+  }
+});
+
 // server/tools/coding.ts
 function howLong(startedAt) {
   const seconds = Math.round((Date.now() - startedAt) / 1e3);
@@ -3499,6 +3570,53 @@ Nothing was changed \u2014 this was a question, not a job. Tell the user what it
           });
           job.branch = ready.repo.branch;
           return `Started, on a new branch: ${ready.repo.branch}. I am working on my own source, so nothing changes about the me they are talking to now \u2014 a restart is what would pick it up. Tell them the branch name and that it will take minutes, then carry on. Check with check_code.`;
+        }
+      },
+      {
+        name: "look_at_screen",
+        description: 'Take one picture of the user\u2019s screen and answer a question about it. For "what does this error say", "why does this look wrong", or reading something they are pointing at. One frame, not a stream. Say you are looking before you do it \u2014 nobody likes finding out afterwards.',
+        parameters: {
+          question: {
+            type: "string",
+            description: "What to look for, or what the user wants to know about it."
+          }
+        },
+        required: ["question"],
+        category: "machine",
+        run: async (args) => {
+          if (config.deployed) return NOT_LOCAL;
+          if (!opusAvailable()) {
+            return "I can photograph the screen but nothing here can read the picture \u2014 Claude Code is not installed. Tell the user to install it: `npm install -g @anthropic-ai/claude-code`, then `claude` to sign in.";
+          }
+          try {
+            await requireBudget();
+          } catch (stopped) {
+            return `${stopped.message} Say so plainly.`;
+          }
+          const { carryOut } = await import("../../bridge/bridge.mjs");
+          const run = async (command, folder) => {
+            const done = await carryOut("shell", command, { body: folder });
+            return { ok: done.ok, detail: done.detail };
+          };
+          const { captureScreen: captureScreen2, screensFolder: screensFolder2 } = await Promise.resolve().then(() => (init_screen(), screen_exports));
+          const shot = await captureScreen2(run);
+          if (!shot.ok || !shot.path) return `I could not look: ${shot.why}`;
+          const { askOpus: askOpus2 } = await Promise.resolve().then(() => (init_consult(), consult_exports));
+          const answer = await askOpus2(
+            `Look at the screenshot at ${shot.path} \u2014 it is a picture of the user's screen, taken just now. Answer this about it, plainly and without preamble:
+
+${String(args.question)}`,
+            screensFolder2()
+          );
+          if (answer.cost) {
+            const { recordOutside: recordOutside2 } = await Promise.resolve().then(() => (init_budget(), budget_exports));
+            void recordOutside2("claude-opus-5 (looking)", answer.cost).catch(() => {
+            });
+          }
+          if (!answer.ok) return `I took the picture but could not read it: ${answer.text}`;
+          return `${answer.text}
+
+That was one frame of their whole screen, and it left this machine to be read. If they did not expect that, say so. The picture is deleted within the half hour.`;
         }
       },
       {
@@ -6266,6 +6384,7 @@ var init_tools = __esm({
       run_tests: "coding",
       ask_opus: "coding",
       improve_yourself: "coding",
+      look_at_screen: "coding",
       lock_laptop: "room",
       notify_phone: "phone",
       set_lights: "lights",
@@ -6352,8 +6471,8 @@ Also return two other things when they apply, and empty lists when they do not.
 "style": how to deal with this person, learned from how they actually behave rather than what they claim. Not facts about their life \u2014 habits of dealing with them. "Cuts you off when you give more than two sentences." "Asks follow-up questions rather than accepting the first answer." "Says thanks and moves on; does not want elaboration." "Prefers being given the answer before the reasoning." Only add one when the exchange genuinely showed it. Most exchanges show nothing, and an empty list is the right answer.`;
 var PERSONAL = /\b(i|i'm|im|my|me|we|our|mine|myself)\b/i;
 var NOISE = /^(ok(ay)?|yes|no|yeah|yep|nah|sure|thanks?|thank you|cheers|nice|cool|good|great|fine|stop|cancel|open .{0,40}|go to .{0,40}|switch to .{0,40})[.!?]?$/i;
-function worthLearningFrom(userText, sweep = false) {
-  if (sweep) return true;
+function worthLearningFrom(userText, sweep2 = false) {
+  if (sweep2) return true;
   const text = userText.trim();
   if (text.length < 12) return false;
   if (NOISE.test(text)) return false;
@@ -7868,8 +7987,8 @@ function createApi() {
       const log = await getMessages();
       const graceAt = log.findLastIndex((message) => message.speaker === "grace");
       const userAt = log.slice(0, Math.max(graceAt, 0)).findLastIndex((message) => message.speaker === "user");
-      const sweep = log.length % 12 < 2;
-      const learned = graceAt >= 0 && userAt >= 0 && worthLearningFrom(log[userAt].text, sweep) ? await learnFrom(log[userAt].text, log[graceAt].text) : [];
+      const sweep2 = log.length % 12 < 2;
+      const learned = graceAt >= 0 && userAt >= 0 && worthLearningFrom(log[userAt].text, sweep2) ? await learnFrom(log[userAt].text, log[graceAt].text) : [];
       const compacted = await compactIfNeeded();
       learnWritingStyle().catch(() => {
       });

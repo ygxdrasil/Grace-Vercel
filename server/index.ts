@@ -3,6 +3,7 @@ import {existsSync} from 'node:fs';
 import path from 'node:path';
 import {createApi} from './api';
 import {config, isConfigured} from './config';
+import {startHeartbeat} from './heartbeat';
 import {localPolicy, SECURITY_HEADERS} from '../shared/headers';
 
 /**
@@ -47,6 +48,16 @@ app.listen(config.port, () => {
   if (!isConfigured()) {
     console.warn('[grace] GEMINI_API_KEY is not set — she cannot think yet.');
   }
+  /*
+   * Her heartbeat, which only exists where there is a process to hold it.
+   *
+   * The loop used to live in the browser, so she noticed things only while a
+   * tab was open. Here it runs for as long as she does.
+   */
+  if (startHeartbeat()) {
+    console.log('[grace] looking around on her own, hourly');
+  }
+
   if (!process.env.GRACE_SECRET) {
     console.warn(
       '[grace] GRACE_SECRET is not set — memory is stored unencrypted.',

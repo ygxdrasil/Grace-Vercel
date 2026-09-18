@@ -280,6 +280,78 @@ export const codingTools: Tool[] = [
     },
   },
   {
+    name: 'look_at_screen',
+    description:
+      'Take one picture of the user’s screen and answer a question about it. ' +
+      'For "what does this error say", "why does this look wrong", or reading ' +
+      'something they are pointing at. One frame, not a stream. Say you are ' +
+      'looking before you do it — nobody likes finding out afterwards.',
+    parameters: {
+      question: {
+        type: 'string',
+        description: 'What to look for, or what the user wants to know about it.',
+      },
+    },
+    required: ['question'],
+    category: 'machine',
+    run: async (args) => {
+      if (config.deployed) return NOT_LOCAL;
+      if (!opusAvailable()) {
+        return (
+          'I can photograph the screen but nothing here can read the picture — ' +
+          'Claude Code is not installed. Tell the user to install it: ' +
+          '`npm install -g @anthropic-ai/claude-code`, then `claude` to sign in.'
+        );
+      }
+
+      try {
+        await requireBudget();
+      } catch (stopped) {
+        return `${(stopped as Error).message} Say so plainly.`;
+      }
+
+      const {carryOut} = await import('../../bridge/bridge.mjs');
+      const run = async (command: string, folder: string) => {
+        const done = await carryOut('shell', command, {body: folder});
+        return {ok: done.ok, detail: done.detail};
+      };
+
+      const {captureScreen, screensFolder} = await import('../coding/screen');
+      const shot = await captureScreen(run);
+      if (!shot.ok || !shot.path) return `I could not look: ${shot.why}`;
+
+      /*
+       * The picture is read where it lies, by the model that can see.
+       *
+       * Handed the path rather than the pixels: Claude Code reads image files
+       * itself, so nothing has to be encoded, carried through a conversation,
+       * or held in memory here. It is given only the tools that look, so it
+       * cannot act on what it sees — this answers a question and nothing more.
+       */
+      const {askOpus} = await import('../coding/consult');
+      const answer = await askOpus(
+        `Look at the screenshot at ${shot.path} — it is a picture of the ` +
+          `user's screen, taken just now. Answer this about it, plainly and ` +
+          `without preamble:\n\n${String(args.question)}`,
+        screensFolder(),
+      );
+
+      if (answer.cost) {
+        const {recordOutside} = await import('../budget');
+        void recordOutside('claude-opus-5 (looking)', answer.cost).catch(() => {});
+      }
+
+      if (!answer.ok) return `I took the picture but could not read it: ${answer.text}`;
+
+      return (
+        `${answer.text}\n\n` +
+        `That was one frame of their whole screen, and it left this machine to ` +
+        `be read. If they did not expect that, say so. The picture is deleted ` +
+        `within the half hour.`
+      );
+    },
+  },
+  {
     name: 'run_tests',
     description:
       'Run a project’s own test suite and report what it said. Works out ' +
