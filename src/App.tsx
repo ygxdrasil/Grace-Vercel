@@ -684,6 +684,15 @@ export default function App() {
               label="VOICE LOCK"
               value={grace.guard?.on ? grace.guard.strictness.toUpperCase() : 'OFF'}
             />
+            {/* Why the last thing she heard came to nothing. Six different
+                reasons used to look identical from here: she did not answer. */}
+            {grace.micOn && grace.ambient.dropped && (
+              <Row
+                label="LAST DROP"
+                value={grace.ambient.dropped.toUpperCase()}
+                tone="warn"
+              />
+            )}
             {grace.guard?.on && (
               <Row
                 label="REJECTED"

@@ -48,7 +48,7 @@ function ToggleButton({
       title={label}
       aria-label={label}
       aria-pressed={active}
-      className={`grid h-9 w-9 place-items-center border transition disabled:cursor-not-allowed disabled:opacity-30 ${
+      className={`grid h-9 min-w-9 place-items-center border px-1.5 transition disabled:cursor-not-allowed disabled:opacity-30 ${
         active
           ? 'border-ice/40 bg-ice/15 text-ice'
           : 'border-ice/15 bg-void/40 text-mist/60 hover:border-ice/35 hover:text-ice'
@@ -97,18 +97,33 @@ export function Composer({
 
   return (
     <div className="flex items-center gap-2 bg-void/60 px-3 py-2">
+      {/*
+        Whether she is listening, in a word.
+
+        It was a 17px icon and a tooltip — on a panel where everything else is
+        a labelled readout, the one control whose state decides whether she can
+        hear you at all was the one you had to hover to read. Two icons that
+        differ by a small diagonal stroke are not a state; pressing it to
+        "open the microphone" when it was already open closes it, and the
+        result is indistinguishable from her having gone deaf.
+      */}
       <ToggleButton
         active={micOn}
         disabled={!micSupported}
         label={
           micSupported
             ? micOn
-              ? 'Always listening — say “Grace”'
-              : 'Not listening. Turn on to say “Grace” from across the room'
+              ? 'Always listening — say “Grace”. Press to stop.'
+              : 'Not listening. Press so she hears “Grace” from across the room.'
             : 'This browser cannot listen'
         }
         onClick={onToggleMic}>
-        {micOn ? <Mic size={17} /> : <MicOff size={17} />}
+        <span className="flex items-center gap-1.5">
+          {micOn ? <Mic size={17} /> : <MicOff size={17} />}
+          <span className="readout hidden text-[0.55rem] sm:inline">
+            {micOn ? 'EAR ON' : 'EAR OFF'}
+          </span>
+        </span>
       </ToggleButton>
 
       <ToggleButton

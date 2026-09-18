@@ -174,6 +174,16 @@ export function useAmbient({
   const [lastScore, setLastScore] = useState<number | null>(null);
   /** Told to leave it. Shown, because a silent assistant needs a reason. */
   const [dormant, setDormant] = useState(false);
+  /*
+   * Why the last thing she heard came to nothing.
+   *
+   * There are six separate ways a sentence can be picked up and then quietly
+   * dropped, and from outside they are one symptom: she did not answer. Each
+   * of them was a bare `return`. This is the difference between "she cannot
+   * hear me" and "the voice lock does not recognise me" — two faults with
+   * nothing in common and, until now, the same appearance.
+   */
+  const [dropped, setDropped] = useState<string | null>(null);
 
   const leaseRef = useRef<MicLease | null>(null);
   const contextRef = useRef<AudioContext | null>(null);
@@ -277,6 +287,7 @@ export function useAmbient({
        */
       const shape = printOf(samples, rate);
       if (shape.pitch === 0 && shape.seconds < 1.2) {
+        setDropped('not a voice');
         setState('listening');
         return;
       }
@@ -304,20 +315,27 @@ export function useAmbient({
         // interface has to be able to say so — the first version failed
         // silently, which left no way to tell the two apart.
         setStrangers((count) => count + 1);
+        setDropped('another voice');
         return;
       }
       setStrangers(0);
       void keepUpWithSamples(guarding, samples, rate);
 
       const text = (await api.transcribe(wav.base64, wav.mimeType)).trim();
-      if (!text) return;
+      if (!text) {
+        setDropped('no words in it');
+        return;
+      }
 
       // The last line of defence, for when something did get through that
       // sounded periodic enough. Whole-utterance only, so "thank you" said to
       // her still reaches her while a lone "Thank you." from an empty room
       // does not — and it is not even shown, because a phantom appearing in
       // "last words she made out" is how this got noticed as a fault at all.
-      if (isPhantom(text)) return;
+      if (isPhantom(text)) {
+        setDropped('nothing was said');
+        return;
+      }
 
       setHeard(text);
 
@@ -352,12 +370,19 @@ export function useAmbient({
        * transcribing. Asleep is quiet, not free.
        */
       if (dormantRef.current) {
-        if (!called) return;
+        if (!called) {
+          setDropped('asleep — say her name');
+          return;
+        }
         dormantRef.current = false;
         setDormant(false);
       }
 
-      if (!called && !stillAwake) return;
+      if (!called && !stillAwake) {
+        setDropped('her name was not in it');
+        return;
+      }
+      setDropped(null);
 
       // Told to leave it. Answered here rather than by the model: "go to
       // sleep" followed by a thoughtful paragraph about going to sleep is a
@@ -747,6 +772,7 @@ export function useAmbient({
     ear,
     lastScore,
     dormant,
+    dropped,
     // Waking her from the interface, for when saying her name is not
     // convenient — or when she went to sleep and you changed your mind.
     // Sent to sleep from the interface or a typed command, not only by voice.
