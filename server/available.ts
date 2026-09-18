@@ -1,4 +1,5 @@
 import {bridgeStatus} from './bridge';
+import {config} from './config';
 import {githubConfigured} from './github';
 import {lightsConfigured} from './lights';
 import {connection} from './google/oauth';
@@ -47,7 +48,9 @@ export async function available(): Promise<Available> {
     // a bridge the user has set up, and she should still be able to try and
     // report honestly that the laptop is not there — whereas a tool list that
     // changes every time a laptop sleeps would cost the cache discount daily.
-    room: Boolean(bridge.seenAt),
+    // And when she is running on the machine herself there is no bridge to
+    // wait for — she is already there, so her own hands are always present.
+    room: !config.deployed || Boolean(bridge.seenAt),
     phone: phones > 0,
     lights: lightsConfigured(),
   };

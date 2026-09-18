@@ -12,3 +12,10 @@ coverage/
 
 # Scratch data from npm run selftest.
 .selftest-data/
+.stress-data/
+.localcheck-data/
+
+# The Google key for a local install. `.env*` above already covers the settings
+# file; this is the key itself, which is a separate file on purpose so that
+# nothing ever has to read it in order to ask you for it.
+local/service-account.json

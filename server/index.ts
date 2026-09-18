@@ -3,7 +3,7 @@ import {existsSync} from 'node:fs';
 import path from 'node:path';
 import {createApi} from './api';
 import {config, isConfigured} from './config';
-import {SECURITY_HEADERS} from '../shared/headers';
+import {localPolicy, SECURITY_HEADERS} from '../shared/headers';
 
 /**
  * Production entry point. In development the same router is mounted straight
@@ -25,6 +25,9 @@ app.use((_req, res, next) => {
   for (const [header, value] of Object.entries(SECURITY_HEADERS)) {
     res.setHeader(header, value);
   }
+  // Her voice, when she is running here, is a socket to this machine — which
+  // the deployed policy has no reason to allow and every reason not to.
+  if (!config.deployed) res.setHeader('Content-Security-Policy', localPolicy());
   next();
 });
 

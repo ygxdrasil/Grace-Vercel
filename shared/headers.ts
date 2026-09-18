@@ -74,6 +74,26 @@ const POLICY = [
   "frame-ancestors 'none'",
 ].join('; ');
 
+/**
+ * The same policy, for a Grace running on the machine in front of you.
+ *
+ * Her voice is held open by a socket, and when she is local that socket is to
+ * her own machine rather than to a reserved address in Sweden. The deployed
+ * policy is left untouched — it has to stay literally identical to the copy in
+ * vercel.json, which a test proves — so this widens `connect-src` only, and
+ * only to this machine.
+ *
+ * `ws://localhost` looks like a weakening and is not much of one. Anything
+ * that could open that socket is already running on the computer, which is a
+ * position from which the browser's rules are the least of the problem.
+ */
+export function localPolicy(): string {
+  return POLICY.replace(
+    `connect-src 'self' ${OUTPOST}`,
+    `connect-src 'self' ${OUTPOST} ws://localhost:* ws://127.0.0.1:*`,
+  );
+}
+
 export const SECURITY_HEADERS: Record<string, string> = {
   'Content-Security-Policy': POLICY,
 

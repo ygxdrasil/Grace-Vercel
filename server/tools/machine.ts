@@ -1,5 +1,6 @@
 import {awaitResult, bridgeStatus, enqueue} from '../bridge';
 import type {BridgeAction} from '../bridge';
+import {config} from '../config';
 import type {Tool} from './types';
 
 /**
@@ -45,11 +46,48 @@ const PATIENCE: Partial<Record<BridgeAction, number>> = {
   remove: 25_000,
 };
 
+/**
+ * Her hands, when she is running on the machine she is being asked about.
+ *
+ * Loaded from the bridge rather than written again here, and that is the whole
+ * point: the boundary — which paths are allowed, resolved through symlinks and
+ * `..` — exists in exactly one file. Two copies of that rule would drift, and
+ * the day they drifted is the day somebody loses a folder. It is also the copy
+ * the sixteen boundary checks are run against.
+ *
+ * Held after the first load, because this is on the path of every file she
+ * touches and reading a module from disk each time would be silly.
+ */
+let handsPromise: Promise<typeof import('../../bridge/bridge.mjs')> | null = null;
+
+function hands() {
+  if (!handsPromise) {
+    process.env.GRACE_BRIDGE_EMBEDDED = '1';
+    handsPromise = import('../../bridge/bridge.mjs');
+  }
+  return handsPromise;
+}
+
 async function ask(
   action: BridgeAction,
   arg: string,
   extra: {body?: string; replace?: boolean} = {},
 ): Promise<string> {
+  /*
+   * Running here, so there is nothing to ask and nothing to wait for.
+   *
+   * The queue exists because Grace is usually in a data centre and the files
+   * are not: she leaves an instruction and the machine picks it up on its next
+   * look. When she is the program running on that machine, all of that is a
+   * round trip to herself — several seconds of latency, a poll interval, and a
+   * token, in exchange for nothing at all.
+   */
+  if (!config.deployed) {
+    const {carryOut} = await hands();
+    const done = await carryOut(action, arg, extra);
+    return done.ok ? done.detail : `That did not work: ${done.detail}`;
+  }
+
   const {online} = await bridgeStatus();
   if (!online) return NO_BRIDGE;
 

@@ -2404,7 +2404,9 @@ async function available() {
     // a bridge the user has set up, and she should still be able to try and
     // report honestly that the laptop is not there — whereas a tool list that
     // changes every time a laptop sleeps would cost the cache discount daily.
-    room: Boolean(bridge.seenAt),
+    // And when she is running on the machine herself there is no bridge to
+    // wait for — she is already there, so her own hands are always present.
+    room: !config.deployed || Boolean(bridge.seenAt),
     phone: phones > 0,
     lights: lightsConfigured()
   };
@@ -3344,7 +3346,20 @@ var PATIENCE = {
   write: 25e3,
   remove: 25e3
 };
+var handsPromise = null;
+function hands() {
+  if (!handsPromise) {
+    process.env.GRACE_BRIDGE_EMBEDDED = "1";
+    handsPromise = import("../../bridge/bridge.mjs");
+  }
+  return handsPromise;
+}
 async function ask(action, arg, extra = {}) {
+  if (!config.deployed) {
+    const { carryOut } = await hands();
+    const done = await carryOut(action, arg, extra);
+    return done.ok ? done.detail : `That did not work: ${done.detail}`;
+  }
   const { online } = await bridgeStatus();
   if (!online) return NO_BRIDGE;
   const id = await enqueue(action, arg, extra);
@@ -5471,8 +5486,14 @@ var NEEDS = {
   check_playstation: "playstation",
   recent_games: "playstation",
   open_on_laptop: "room",
-  // All of these are the bridge, so they are worth nothing without it — and
-  // worse than nothing, since she would offer them and then explain herself.
+  /*
+   * The machine tools need the bridge only when she is somewhere else.
+   *
+   * Running on the machine itself, they need nothing — so gating them on the
+   * bridge would hide her own hands from her, which is a very strange way for
+   * a local install to behave. `available.ts` reports the room as present when
+   * she is not deployed for exactly this reason.
+   */
   list_folder: "room",
   read_file: "room",
   write_file: "room",

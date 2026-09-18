@@ -363,8 +363,14 @@ const NEEDS: Record<string, keyof Available> = {
   check_playstation: 'playstation',
   recent_games: 'playstation',
   open_on_laptop: 'room',
-  // All of these are the bridge, so they are worth nothing without it — and
-  // worse than nothing, since she would offer them and then explain herself.
+  /*
+   * The machine tools need the bridge only when she is somewhere else.
+   *
+   * Running on the machine itself, they need nothing — so gating them on the
+   * bridge would hide her own hands from her, which is a very strange way for
+   * a local install to behave. `available.ts` reports the room as present when
+   * she is not deployed for exactly this reason.
+   */
   list_folder: 'room',
   read_file: 'room',
   write_file: 'room',

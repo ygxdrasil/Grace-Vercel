@@ -41,7 +41,19 @@ function settings() {
   const grace = argUrl ?? process.env.GRACE_URL ?? file.grace ?? '';
   const token = argToken ?? process.env.GRACE_BRIDGE_TOKEN ?? file.token ?? '';
 
-  if (!grace || !token) {
+  /*
+   * Imported rather than run.
+   *
+   * When Grace is running on this same machine there is no queue to poll and
+   * no token to prove anything with — she calls the work below directly. The
+   * boundary is the part worth keeping in one place: two copies of "is this
+   * path allowed" would drift, and the day they drifted would be the day
+   * somebody lost a folder. So this file is the only implementation, and it
+   * can be loaded without its loop.
+   */
+  const embedded = process.env.GRACE_BRIDGE_EMBEDDED || process.env.GRACE_BRIDGE_CHECK;
+
+  if (!embedded && (!grace || !token)) {
     console.error(
       '\nI need to know where Grace is and how to prove I am yours.\n\n' +
         '  node bridge.mjs https://your-grace-address YOUR-TOKEN\n\n' +
@@ -725,8 +737,9 @@ async function cycle() {
  */
 export {carryOut, allowed, runCommand};
 
-if (process.env.GRACE_BRIDGE_CHECK) {
-  // Imported to be examined rather than run.
+if (process.env.GRACE_BRIDGE_CHECK || process.env.GRACE_BRIDGE_EMBEDDED) {
+  // Loaded for its hands rather than its loop: by the boundary checks, and by
+  // Grace herself when she is running on this machine.
 } else {
 
 console.log(`Grace bridge — talking to ${config.grace}`);
