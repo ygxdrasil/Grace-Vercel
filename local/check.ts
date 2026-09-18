@@ -11,7 +11,7 @@
  */
 
 import assert from 'node:assert/strict';
-import {existsSync, mkdtempSync, readFileSync, writeFileSync, mkdirSync} from 'node:fs';
+import {existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync, mkdirSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
@@ -131,6 +131,9 @@ writeFileSync(
     // The two shapes the caller actually depends on: --version, and a headless
     // run that ends with one JSON object.
     'if (process.argv.includes("--version")) { console.log("2.0.0 (stand-in)"); process.exit(0); }',
+    // Every invocation records how it was called, so a restriction can be
+    // asserted against what was actually passed rather than what was intended.
+    'require("fs").appendFileSync(process.env.GRACE_ARGV_LOG, JSON.stringify(process.argv.slice(2)) + "\\n");',
     // The task arrives on stdin, exactly as the real one takes it.
     'let task = "";',
     'process.stdin.on("data", (c) => (task += c));',
@@ -143,6 +146,8 @@ writeFileSync(
   {mode: 0o755},
 );
 process.env.PATH = `${bin}:${process.env.PATH}`;
+process.env.GRACE_ARGV_LOG = join(bin, 'argv.log');
+writeFileSync(process.env.GRACE_ARGV_LOG, '');
 
 const {recentJobs} = await import('../server/coding/index');
 const {spend} = await import('../server/budget');
@@ -445,6 +450,48 @@ await check('she can run the tests on their own, and report honestly', async () 
   const none = await runTool({name: 'run_tests', args: {folder: join(root, 'notes')}});
   assert.match(none.result, /no test suite/);
   assert.doesNotMatch(none.result, /passed/, 'absence of tests is never a pass');
+});
+
+/*
+ * Asking Opus, as opposed to setting it to work.
+ *
+ * The distinction is the whole feature: one ends with a paragraph and the
+ * other ends with the folder changed. What has to be true is that asking
+ * cannot become editing — enforced by the tools the process is given rather
+ * than by anything it is told, since a model can be talked out of an
+ * instruction and cannot be talked into a tool it does not hold.
+ */
+console.log('\nasking rather than doing');
+
+await check('an answer comes back, and nothing is changed', async () => {
+  const before = readdirSync(project).sort();
+  const out = await runTool({
+    name: 'ask_opus',
+    args: {question: 'how should I approach this', folder: project},
+  });
+
+  assert.equal(out.ok, true, out.result);
+  assert.match(out.result, /Opus says/);
+  assert.match(out.result, /Nothing was changed/);
+  assert.deepEqual(readdirSync(project).sort(), before, 'the folder is untouched');
+});
+
+await check('it is given only the tools that read', async () => {
+  const calls = readFileSync(process.env.GRACE_ARGV_LOG, 'utf8')
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line) as string[]);
+  const asking = calls[calls.length - 1];
+
+  const allowed = asking[asking.indexOf('--allowedTools') + 1];
+  assert.equal(allowed, 'Read,Glob,Grep', 'it may look and nothing else');
+  assert.ok(!asking.includes('--permission-mode'), 'and is never given edit permission');
+  assert.ok(asking.includes('opus'), 'and it really is the strong model');
+});
+
+await check('a folder outside the allowed ones is refused', async () => {
+  const out = await runTool({name: 'ask_opus', args: {question: 'anything', folder: '/etc'}});
+  assert.match(out.result, /outside the folders/);
 });
 
 console.log(`\n${passed} checks passed.\n`);

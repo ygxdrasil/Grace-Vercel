@@ -383,6 +383,8 @@ const NEEDS: Record<string, keyof Available> = {
   write_code: 'coding',
   check_code: 'coding',
   run_tests: 'coding',
+  ask_opus: 'coding',
+  improve_yourself: 'coding',
   lock_laptop: 'room',
   notify_phone: 'phone',
   set_lights: 'lights',

@@ -702,6 +702,28 @@ var init_bridge = __esm({
 });
 
 // server/budget.ts
+var budget_exports = {};
+__export(budget_exports, {
+  OverBudget: () => OverBudget,
+  afterwardsCap: () => afterwardsCap,
+  audioPriceOf: () => audioPriceOf,
+  creditsExpired: () => creditsExpired,
+  poolExpiry: () => poolExpiry,
+  poolSize: () => poolSize,
+  priceOf: () => priceOf,
+  record: () => record,
+  recordAudio: () => recordAudio,
+  recordOutside: () => recordOutside,
+  requireBudget: () => requireBudget,
+  spend: () => spend,
+  standing: () => standing
+});
+function priceOf(model) {
+  return RATES[model] ?? null;
+}
+function audioPriceOf(model) {
+  return AUDIO_RATES[model] ?? null;
+}
 function poolExpiry() {
   const set = process.env.GRACE_CREDITS_EXPIRE;
   const parsed = set ? new Date(set) : /* @__PURE__ */ new Date("2026-12-16T00:00:00Z");
@@ -3197,6 +3219,139 @@ var init_coding = __esm({
   }
 });
 
+// server/coding/consult.ts
+var consult_exports = {};
+__export(consult_exports, {
+  askOpus: () => askOpus
+});
+import { spawn as spawn2 } from "node:child_process";
+function askOpus(question, folder) {
+  const began = Date.now();
+  return new Promise((done) => {
+    const child = spawn2(
+      "claude",
+      [
+        "-p",
+        "--output-format",
+        "json",
+        "--model",
+        "opus",
+        /*
+         * Reading only, enforced by what it holds rather than what it is told.
+         *
+         * If this flag is ever wrong — renamed, resyntaxed — the failure is
+         * loud: Claude Code rejects the argument and the tool reports it,
+         * rather than quietly running with everything available. That is the
+         * right way round for a restriction to break.
+         */
+        "--allowedTools",
+        "Read,Glob,Grep"
+      ],
+      { cwd: folder, shell: true, env: process.env }
+    );
+    child.stdin.on("error", () => {
+    });
+    child.stdin.end(question);
+    let out = "";
+    let err = "";
+    child.stdout.on("data", (chunk) => out += chunk);
+    child.stderr.on("data", (chunk) => err += chunk);
+    const timer = setTimeout(() => child.kill("SIGKILL"), LONGEST_MS2);
+    const seconds = () => Math.round((Date.now() - began) / 1e3);
+    child.on("error", (error) => {
+      clearTimeout(timer);
+      done({ ok: false, text: `could not start Claude Code: ${error.message}`, seconds: seconds() });
+    });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      let parsed = null;
+      try {
+        parsed = JSON.parse(out.trim());
+      } catch {
+      }
+      done({
+        ok: code === 0 && Boolean(parsed?.result),
+        text: parsed?.result ?? err.trim() ?? out.trim() ?? `Claude Code stopped with code ${code}.`,
+        seconds: seconds(),
+        ...parsed?.total_cost_usd ? { cost: parsed.total_cost_usd } : {}
+      });
+    });
+  });
+}
+var LONGEST_MS2;
+var init_consult = __esm({
+  "server/coding/consult.ts"() {
+    LONGEST_MS2 = 5 * 60 * 1e3;
+  }
+});
+
+// server/coding/self.ts
+var self_exports = {};
+__export(self_exports, {
+  branchFor: () => branchFor,
+  herOwnRepo: () => herOwnRepo,
+  prepare: () => prepare,
+  summarise: () => summarise
+});
+import { existsSync as existsSync2, readFileSync } from "node:fs";
+import { join } from "node:path";
+function herOwnRepo() {
+  const here = process.cwd();
+  const manifest = join(here, "package.json");
+  if (!existsSync2(manifest)) return null;
+  try {
+    const named = JSON.parse(readFileSync(manifest, "utf8"));
+    if (named.name !== "grace") return null;
+  } catch {
+    return null;
+  }
+  return existsSync2(join(here, ".git")) ? here : null;
+}
+function branchFor(task, now = /* @__PURE__ */ new Date()) {
+  const words3 = task.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").split("-").filter(Boolean).slice(0, 5).join("-");
+  const stamp2 = now.toISOString().slice(5, 16).replace(/[-:T]/g, "");
+  return `grace/${words3 || "work"}-${stamp2}`;
+}
+async function prepare(task, run) {
+  const root = herOwnRepo();
+  if (!root) {
+    return {
+      ok: false,
+      why: "I cannot find my own source from here \u2014 this is not a git checkout of Grace. Say that plainly rather than working somewhere else."
+    };
+  }
+  const dirty = await run("git status --porcelain", root);
+  if (!dirty.ok) return { ok: false, why: `I could not read git here: ${dirty.detail}` };
+  if (dirty.detail.trim()) {
+    return {
+      ok: false,
+      why: `There are uncommitted changes in my own folder. I will not work on top of them \u2014 they belong to whoever left them there, and a coding agent would bury them. Ask the user to commit or stash first. What is outstanding:
+
+${dirty.detail.trim()}`
+    };
+  }
+  const branch = branchFor(task);
+  const made = await run(`git checkout -b ${branch}`, root);
+  if (!made.ok) return { ok: false, why: `I could not make a branch: ${made.detail}` };
+  return { ok: true, repo: { root, branch } };
+}
+async function summarise(repo, run) {
+  const changed = await run("git status --porcelain", repo.root);
+  const counted = await run("git diff --stat", repo.root);
+  if (!changed.detail.trim()) {
+    return `Nothing was changed on ${repo.branch}. The branch is empty.`;
+  }
+  return `On branch ${repo.branch}:
+
+${counted.detail.trim() || changed.detail.trim()}
+
+Nothing is committed and nothing is merged. To look at it: \`git diff\`. To keep it: \`git add -A && git commit\`. To throw it away: \`git checkout main && git branch -D ${repo.branch}\`.`;
+}
+var init_self = __esm({
+  "server/coding/self.ts"() {
+  }
+});
+
 // server/tools/coding.ts
 function howLong(startedAt) {
   const seconds = Math.round((Date.now() - startedAt) / 1e3);
@@ -3256,6 +3411,94 @@ var init_coding2 = __esm({
           const straightToOpus = args.hard === true && Boolean(opusAvailable());
           const job = startJob(String(args.task), folder, hands2, { straightToOpus });
           return `Started. Job ${job.id}, working in ${folder}, ${straightToOpus ? "straight to the strongest model" : "beginning with the cheaper model and stepping up if it needs to"}. It takes minutes, not seconds \u2014 tell the user it is running and what it is doing, then get on with the conversation. Check on it with check_code when they ask, or when enough time has passed that they would expect news.`;
+        }
+      },
+      {
+        name: "ask_opus",
+        description: 'Ask the strongest model a question about code, and get an answer back rather than a change. For "how should I approach this", "why is this behaving like that", or a second opinion before something is built. It can read the folder but cannot change anything. Use write_code when the answer is meant to end up in the files.',
+        parameters: {
+          question: {
+            type: "string",
+            description: "The whole question, with the context it needs. It cannot see this conversation \u2014 only the question and the folder."
+          },
+          folder: {
+            type: "string",
+            description: "The project it should read while thinking about it."
+          }
+        },
+        required: ["question", "folder"],
+        category: "machine",
+        run: async (args) => {
+          if (config.deployed) return NOT_LOCAL;
+          if (!opusAvailable()) {
+            return "Claude Code is not installed on this machine, so there is nothing to ask. Tell the user to install it \u2014 `npm install -g @anthropic-ai/claude-code`, then `claude` once to sign in \u2014 and do not answer as though you had asked.";
+          }
+          try {
+            await requireBudget();
+          } catch (stopped) {
+            return `${stopped.message} Asking costs money too. Say so plainly.`;
+          }
+          const folder = String(args.folder);
+          const { runTool: runTool2 } = await Promise.resolve().then(() => (init_tools(), tools_exports));
+          const looked2 = await runTool2({ name: "list_folder", args: { path: folder } });
+          if (!looked2.ok || /outside the folders/.test(looked2.result)) {
+            return `I cannot look there. ${looked2.result}`;
+          }
+          const { askOpus: askOpus2 } = await Promise.resolve().then(() => (init_consult(), consult_exports));
+          const answer = await askOpus2(String(args.question), folder);
+          if (answer.cost) {
+            const { recordOutside: recordOutside2 } = await Promise.resolve().then(() => (init_budget(), budget_exports));
+            void recordOutside2("claude-opus-5 (asking)", answer.cost).catch(() => {
+            });
+          }
+          if (!answer.ok) return `That did not work: ${answer.text}`;
+          return `Opus says, after ${answer.seconds} seconds${answer.cost ? ` and $${answer.cost.toFixed(2)}` : ""}:
+
+${answer.text}
+
+Nothing was changed \u2014 this was a question, not a job. Tell the user what it said in your own words, and offer to act on it if that is what they want.`;
+        }
+      },
+      {
+        name: "improve_yourself",
+        description: "Work on your own source code. Use this when the user asks you to fix, change or add something to yourself. It makes a git branch first, does the work there, and runs your own test suite \u2014 nothing touches the branch they are on and nothing is committed. Describe the change as fully as you would to somebody who cannot see this conversation.",
+        parameters: {
+          task: {
+            type: "string",
+            description: "The change, in plain words: what is wrong or missing, what it should do instead, and how anyone would know it worked."
+          },
+          hard: {
+            type: "boolean",
+            description: "True for a large or subtle change, to skip the cheaper first attempt."
+          }
+        },
+        required: ["task"],
+        category: "machine",
+        run: async (args) => {
+          if (config.deployed) return NOT_LOCAL;
+          try {
+            await requireBudget();
+          } catch (stopped) {
+            return `${stopped.message} Say so plainly.`;
+          }
+          const { carryOut } = await import("../../bridge/bridge.mjs");
+          const run = async (command, folder) => {
+            const done = await carryOut("shell", command, { body: folder });
+            return { ok: done.ok, detail: done.detail };
+          };
+          const { prepare: prepare2 } = await Promise.resolve().then(() => (init_self(), self_exports));
+          const ready = await prepare2(String(args.task), run);
+          if (!ready.ok || !ready.repo) return ready.why ?? "I could not get ready to do that.";
+          const hands2 = async (action, path3, body) => {
+            const done = await carryOut(action, path3, { body, replace: true });
+            return done.detail;
+          };
+          useShell(async (where, command) => run(command, where));
+          const job = startJob(String(args.task), ready.repo.root, hands2, {
+            straightToOpus: args.hard === true && Boolean(opusAvailable())
+          });
+          job.branch = ready.repo.branch;
+          return `Started, on a new branch: ${ready.repo.branch}. I am working on my own source, so nothing changes about the me they are talking to now \u2014 a restart is what would pick it up. Tell them the branch name and that it will take minutes, then carry on. Check with check_code.`;
         }
       },
       {
@@ -3319,11 +3562,27 @@ ${run.output}`;
           const verdict = wanted.noSuite ? "There are no tests in that folder, so nothing has checked this. Say that plainly \u2014 it is written but unproven, and the user should know before they rely on it." : last?.passed ? `Then \`${last.command}\` passed.` : last ? `\`${last.command}\` is still failing:
 
 ${last.output}` : "The tests were never reached.";
+          let onHer = "";
+          if (wanted.branch) {
+            const { carryOut } = await import("../../bridge/bridge.mjs");
+            const { summarise: summarise2 } = await Promise.resolve().then(() => (init_self(), self_exports));
+            onHer = `
+
+${await summarise2(
+              { root: wanted.folder, branch: wanted.branch },
+              async (command, folder) => {
+                const done = await carryOut("shell", command, { body: folder });
+                return { ok: done.ok, detail: done.detail };
+              }
+            )}
+
+This is my own source, so the me they are speaking to has not changed. A restart is what would pick it up.`;
+          }
           return `Job ${wanted.id} ${wanted.ok ? "is done" : "did not work out"}, in ${wanted.folder}${spent > 0 ? ` \u2014 $${spent.toFixed(2)} on the card` : ""}.
 
 ${story}
 
-${verdict}
+${verdict}${onHer}
 
 ${wanted.ok ? "The files are changed on disk." : "Some files may have been changed before it stopped, so do not tell them the folder is untouched."}`;
         }
@@ -5209,7 +5468,7 @@ ${open.map((item) => `- ${describe(item)}`).join("\n")}`;
 
 // server/tools/self.ts
 var selfTools;
-var init_self = __esm({
+var init_self2 = __esm({
   "server/tools/self.ts"() {
     init_modes();
     init_memory();
@@ -5868,7 +6127,7 @@ var init_tools = __esm({
     init_playstation();
     init_recall();
     init_reminders();
-    init_self();
+    init_self2();
     init_timers();
     init_web();
     init_work();
@@ -6005,6 +6264,8 @@ var init_tools = __esm({
       write_code: "coding",
       check_code: "coding",
       run_tests: "coding",
+      ask_opus: "coding",
+      improve_yourself: "coding",
       lock_laptop: "room",
       notify_phone: "phone",
       set_lights: "lights",

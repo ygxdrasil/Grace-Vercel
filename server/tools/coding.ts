@@ -147,6 +147,139 @@ export const codingTools: Tool[] = [
     },
   },
   {
+    name: 'ask_opus',
+    description:
+      'Ask the strongest model a question about code, and get an answer back ' +
+      'rather than a change. For "how should I approach this", "why is this ' +
+      'behaving like that", or a second opinion before something is built. It ' +
+      'can read the folder but cannot change anything. Use write_code when ' +
+      'the answer is meant to end up in the files.',
+    parameters: {
+      question: {
+        type: 'string',
+        description:
+          'The whole question, with the context it needs. It cannot see this ' +
+          'conversation — only the question and the folder.',
+      },
+      folder: {
+        type: 'string',
+        description: 'The project it should read while thinking about it.',
+      },
+    },
+    required: ['question', 'folder'],
+    category: 'machine',
+    run: async (args) => {
+      if (config.deployed) return NOT_LOCAL;
+      if (!opusAvailable()) {
+        return (
+          'Claude Code is not installed on this machine, so there is nothing ' +
+          'to ask. Tell the user to install it — `npm install -g ' +
+          '@anthropic-ai/claude-code`, then `claude` once to sign in — and do ' +
+          'not answer as though you had asked.'
+        );
+      }
+
+      try {
+        await requireBudget();
+      } catch (stopped) {
+        return `${(stopped as Error).message} Asking costs money too. Say so plainly.`;
+      }
+
+      const folder = String(args.folder);
+      const {runTool} = await import('./index');
+      const looked = await runTool({name: 'list_folder', args: {path: folder}});
+      if (!looked.ok || /outside the folders/.test(looked.result)) {
+        return `I cannot look there. ${looked.result}`;
+      }
+
+      const {askOpus} = await import('../coding/consult');
+      const answer = await askOpus(String(args.question), folder);
+
+      if (answer.cost) {
+        // Anthropic's bill, like the coding rung above it.
+        const {recordOutside} = await import('../budget');
+        void recordOutside('claude-opus-5 (asking)', answer.cost).catch(() => {});
+      }
+
+      if (!answer.ok) return `That did not work: ${answer.text}`;
+
+      return (
+        `Opus says, after ${answer.seconds} seconds` +
+        `${answer.cost ? ` and $${answer.cost.toFixed(2)}` : ''}:\n\n${answer.text}\n\n` +
+        `Nothing was changed — this was a question, not a job. Tell the user ` +
+        `what it said in your own words, and offer to act on it if that is ` +
+        `what they want.`
+      );
+    },
+  },
+  {
+    name: 'improve_yourself',
+    description:
+      'Work on your own source code. Use this when the user asks you to fix, ' +
+      'change or add something to yourself. It makes a git branch first, does ' +
+      'the work there, and runs your own test suite — nothing touches the ' +
+      'branch they are on and nothing is committed. Describe the change as ' +
+      'fully as you would to somebody who cannot see this conversation.',
+    parameters: {
+      task: {
+        type: 'string',
+        description:
+          'The change, in plain words: what is wrong or missing, what it ' +
+          'should do instead, and how anyone would know it worked.',
+      },
+      hard: {
+        type: 'boolean',
+        description: 'True for a large or subtle change, to skip the cheaper first attempt.',
+      },
+    },
+    required: ['task'],
+    category: 'machine',
+    run: async (args) => {
+      if (config.deployed) return NOT_LOCAL;
+
+      try {
+        await requireBudget();
+      } catch (stopped) {
+        return `${(stopped as Error).message} Say so plainly.`;
+      }
+
+      const {carryOut} = await import('../../bridge/bridge.mjs');
+      const run = async (command: string, folder: string) => {
+        const done = await carryOut('shell', command, {body: folder});
+        return {ok: done.ok, detail: done.detail};
+      };
+
+      /*
+       * The rails, before anything exists to undo.
+       *
+       * A dirty working tree stops this outright: uncommitted work belongs to
+       * whoever left it there, and a coding agent let loose on top of it would
+       * bury changes nobody has a copy of.
+       */
+      const {prepare} = await import('../coding/self');
+      const ready = await prepare(String(args.task), run);
+      if (!ready.ok || !ready.repo) return ready.why ?? 'I could not get ready to do that.';
+
+      const hands = async (action: string, path: string, body?: string) => {
+        const done = await carryOut(action, path, {body, replace: true});
+        return done.detail;
+      };
+      useShell(async (where, command) => run(command, where));
+
+      const job = startJob(String(args.task), ready.repo.root, hands, {
+        straightToOpus: args.hard === true && Boolean(opusAvailable()),
+      });
+      job.branch = ready.repo.branch;
+
+      return (
+        `Started, on a new branch: ${ready.repo.branch}. I am working on my ` +
+        `own source, so nothing changes about the me they are talking to now — ` +
+        `a restart is what would pick it up. Tell them the branch name and that ` +
+        `it will take minutes, then carry on. Check with check_code.`
+      );
+    },
+  },
+  {
     name: 'run_tests',
     description:
       'Run a project’s own test suite and report what it said. Works out ' +
@@ -260,10 +393,32 @@ export const codingTools: Tool[] = [
             ? `\`${last.command}\` is still failing:\n\n${last.output}`
             : 'The tests were never reached.';
 
+      /*
+       * Where the work is, when the work is on her.
+       *
+       * A change to her own source that is reported without naming the branch
+       * is a change nobody can find, review or throw away — and since she does
+       * not commit or merge, the branch name is the only handle on it that
+       * exists.
+       */
+      let onHer = '';
+      if (wanted.branch) {
+        const {carryOut} = await import('../../bridge/bridge.mjs');
+        const {summarise} = await import('../coding/self');
+        onHer = `\n\n${await summarise(
+          {root: wanted.folder, branch: wanted.branch},
+          async (command, folder) => {
+            const done = await carryOut('shell', command, {body: folder});
+            return {ok: done.ok, detail: done.detail};
+          },
+        )}\n\nThis is my own source, so the me they are speaking to has not ` +
+          `changed. A restart is what would pick it up.`;
+      }
+
       return (
         `Job ${wanted.id} ${wanted.ok ? 'is done' : 'did not work out'}, in ` +
         `${wanted.folder}${spent > 0 ? ` — $${spent.toFixed(2)} on the card` : ''}.\n\n` +
-        `${story}\n\n${verdict}\n\n` +
+        `${story}\n\n${verdict}${onHer}\n\n` +
         `${
           wanted.ok
             ? 'The files are changed on disk.'

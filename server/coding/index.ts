@@ -47,6 +47,8 @@ export interface Job {
   attempts: Attempt[];
   /** Every run of the project's own tests, in order. */
   tested: TestRun[];
+  /** Set when this job is her working on her own source, on a branch. */
+  branch?: string;
   /**
    * Set when the folder has no suite to run.
    *
