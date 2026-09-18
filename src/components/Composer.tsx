@@ -8,6 +8,8 @@ interface ComposerProps {
   /** There is something to interrupt — a request, or Grace mid-sentence. */
   canStop: boolean;
   micOn: boolean;
+  /** True while the microphone is held open across turns. */
+  lineOpen: boolean;
   voiceOn: boolean;
   micSupported: boolean;
   voiceSupported: boolean;
@@ -62,6 +64,7 @@ export function Composer({
   busy,
   canStop,
   micOn,
+  lineOpen,
   voiceOn,
   micSupported,
   voiceSupported,
@@ -147,15 +150,20 @@ export function Composer({
           room from a dead microphone. */}
       <button
         type="button"
-        onClick={recording ? onRecordStop : onRecordStart}
-        disabled={recorderBusy}
+        onClick={lineOpen ? onRecordStop : onRecordStart}
         aria-label={
-          recording ? 'Listening — stops on its own when you finish' : 'Speak to Grace'
+          lineOpen
+            ? 'The line is open — speak whenever you like. Press to close it.'
+            : 'Open the line and leave it open'
         }
-        className={`readout relative flex shrink-0 items-center gap-1.5 overflow-hidden border px-3 py-2.5 transition disabled:opacity-40 ${
+        aria-pressed={lineOpen}
+        className={`readout relative flex shrink-0 items-center gap-1.5 overflow-hidden border px-3 py-2.5 transition ${
           recording
             ? 'border-ice/60 bg-ice/20 text-ice'
-            : 'border-ice/15 bg-void/40 text-mist/60 hover:border-ice/35 hover:text-ice'
+            : lineOpen
+              // Open but not this second: she has the microphone, briefly.
+              ? 'border-ice/40 bg-ice/10 text-ice/80'
+              : 'border-ice/15 bg-void/40 text-mist/60 hover:border-ice/35 hover:text-ice'
         }`}>
         {recording && (
           <span
@@ -165,7 +173,13 @@ export function Composer({
         )}
         <AudioLines size={15} className="relative" />
         <span className="relative hidden sm:inline">
-          {recorderBusy ? 'One moment' : recording ? 'Listening' : 'Speak'}
+          {recording
+            ? 'Listening'
+            : recorderBusy
+              ? 'One moment'
+              : lineOpen
+                ? 'Open'
+                : 'Speak'}
         </span>
       </button>
 

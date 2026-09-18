@@ -68,6 +68,15 @@ export function useRecorder({onCaptured, deviceId}: RecorderOptions) {
   const [state, setState] = useState<RecorderState>('idle');
   const [level, setLevel] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * Why the device itself could not be opened, when that is what failed.
+   *
+   * Told apart from `error` because the two are acted on differently. A clip
+   * that was too short, or a room that stayed quiet, is worth saying and worth
+   * trying again. A microphone that is blocked, absent, or unsupported will
+   * not become any of those things by being asked a second time.
+   */
+  const [fault, setFault] = useState<MicError['kind'] | null>(null);
   const [heardSomething, setHeardSomething] = useState(false);
 
   const leaseRef = useRef<MicLease | null>(null);
@@ -158,6 +167,7 @@ export function useRecorder({onCaptured, deviceId}: RecorderOptions) {
     busySinceRef.current = performance.now();
 
     setError(null);
+    setFault(null);
     setHeardSomething(false);
     spokeRef.current = false;
     setState('starting');
@@ -167,6 +177,7 @@ export function useRecorder({onCaptured, deviceId}: RecorderOptions) {
       lease = await acquire(deviceId);
     } catch (cause) {
       becomeIdle();
+      setFault(cause instanceof MicError ? cause.kind : 'unknown');
       setError(
         cause instanceof MicError
           ? cause.message
@@ -391,5 +402,5 @@ export function useRecorder({onCaptured, deviceId}: RecorderOptions) {
 
   useEffect(() => teardown, [teardown]);
 
-  return {supported, state, level, error, heardSomething, start, stop};
+  return {supported, state, level, error, fault, heardSomething, start, stop};
 }

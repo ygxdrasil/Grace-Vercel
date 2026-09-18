@@ -260,7 +260,8 @@ export default function App() {
   const notice =
     mode === 'offline'
       ? 'No Gemini API key found. Set GEMINI_API_KEY where Grace is running, then restart or redeploy her.'
-      : (grace.recorder.error ??
+      : (grace.lineTrouble ??
+        grace.recorder.error ??
         grace.misheard ??
         grace.error ??
         grace.live.trouble ??
@@ -295,10 +296,20 @@ export default function App() {
       ? used / state.spend.cap / state.spend.elapsed > 1.35
       : false;
 
-  /** One press: she opens the microphone and closes it when you stop talking. */
+  /**
+   * One press opens the line and leaves it open.
+   *
+   * Not one press per sentence. She takes the microphone back between turns
+   * by herself and hands it straight back; the only thing that closes it is
+   * pressing this again.
+   */
   const talk = () => {
-    if (grace.recorder.state === 'recording') grace.recorder.stop();
-    else void grace.recorder.start();
+    if (grace.openLine) {
+      grace.setOpenLine(false);
+      if (grace.recorder.state === 'recording') grace.recorder.stop();
+      return;
+    }
+    grace.setOpenLine(true);
   };
 
 
@@ -663,6 +674,11 @@ export default function App() {
                 when someone says she cannot hear them: is anything at all
                 arriving from this microphone? */}
             <Row
+              label="LINE"
+              value={grace.openLine ? 'OPEN' : 'CLOSED'}
+              tone={grace.openLine ? 'live' : 'ice'}
+            />
+            <Row
               label="MIC"
               value={grace.recorder.state.toUpperCase()}
               tone={
@@ -790,8 +806,9 @@ export default function App() {
             grace.transcribing
           }
           level={grace.recorder.level}
+          lineOpen={grace.openLine}
           onRecordStart={talk}
-          onRecordStop={grace.recorder.stop}
+          onRecordStop={talk}
           onSend={(text) => {
             setShowTalk(true);
             void grace.send(text, 'text');

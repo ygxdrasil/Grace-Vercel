@@ -71,6 +71,33 @@ export function useGrace() {
   const [micOn, setMicOn] = useState(false);
   const micChosenRef = useRef(false);
 
+  /**
+   * The line, held open.
+   *
+   * Pressing Speak used to buy exactly one sentence: she answered, the
+   * microphone closed, and saying anything back meant reaching for the mouse
+   * first. That is not a conversation, it is a series of forms. Open once and
+   * it stays open — through her turn, through the next one — until it is
+   * closed on purpose.
+   *
+   * Read straight out of storage rather than in an effect, so the initial
+   * `false` is never written over a saved `on` on the way past.
+   */
+  const [openLine, setOpenLine] = useState(() => {
+    try {
+      return localStorage.getItem('grace-open-line') === 'on';
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem('grace-open-line', openLine ? 'on' : 'off');
+    } catch {
+      /* A browser refusing storage is not a reason to refuse the feature. */
+    }
+  }, [openLine]);
+
   useEffect(() => {
     const saved = localStorage.getItem('grace-mic');
     if (saved === 'off') {
@@ -697,6 +724,88 @@ export function useGrace() {
     setStreaming('');
   }, []);
 
+  /*
+   * Holding it open.
+   *
+   * She takes the microphone back the moment it is hers to take: not while
+   * she is thinking, not while she is talking — echo cancellation is good,
+   * but nothing is as good as not listening to yourself — and not while the
+   * last thing said is still being transcribed. The instant all three are
+   * done, it reopens.
+   *
+   * The pause between turns is deliberate and short. Reopening in the same
+   * breath as her last word catches the tail of it; a quarter of a second is
+   * below what anyone notices and comfortably past the speaker.
+   *
+   * A fault does not close the line, and three in a row does. Without the
+   * first, one "that was too short to make out" would end the conversation;
+   * without the second, a microphone that cannot open at all would be asked
+   * again several times a second, for ever.
+   */
+  /**
+   * A fault that no amount of asking again will fix.
+   *
+   * Blocked, absent, or a browser that cannot record: the line closes and
+   * says why, rather than sitting there reading OPEN beside a microphone that
+   * is never going to open. Anything else — a clip too short, a quiet room —
+   * is simply tried again.
+   */
+  const FINAL: ReadonlyArray<string> = ['blocked', 'missing', 'unsupported'];
+
+  const [lineBeat, setLineBeat] = useState(0);
+  const [lineTrouble, setLineTrouble] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!openLine) return;
+
+    if (recorder.fault && FINAL.includes(recorder.fault)) {
+      setOpenLine(false);
+      setLineTrouble(recorder.error);
+      return;
+    }
+
+    if (session !== 'ok' && session !== 'open') return;
+    if (recorder.state !== 'idle') return;
+    if (busy || transcribing || speech.speaking) return;
+    if (live.state !== 'closed') return;
+
+    /*
+     * The beat exists because a failed start may never be seen.
+     *
+     * Reopening was driven by the recorder's own state changing, and a start
+     * that fails immediately can go from idle to idle without React ever
+     * committing anything in between. The effect then never ran again: the
+     * line read OPEN, the microphone was shut, and nothing was going to
+     * change either. Bumping a counter alongside every attempt guarantees
+     * another pass whatever the recorder did or did not manage to report.
+     */
+    const timer = window.setTimeout(
+      () => {
+        void recorder.start();
+        setLineBeat((beat) => beat + 1);
+      },
+      recorder.error ? 1500 : 250,
+    );
+    return () => window.clearTimeout(timer);
+  }, [
+    openLine,
+    lineBeat,
+    session,
+    recorder.state,
+    recorder.error,
+    recorder.fault,
+    recorder.start,
+    busy,
+    transcribing,
+    speech.speaking,
+    live.state,
+  ]);
+
+  /** Opening the line clears the last complaint about it. */
+  useEffect(() => {
+    if (openLine) setLineTrouble(null);
+  }, [openLine]);
+
   const mode: Mode = useMemo(() => {
     if (state && !state.ready) return 'offline';
     // Recording wins over everything: it is the one state where what the
@@ -742,6 +851,9 @@ export function useGrace() {
     error,
     mode,
     micOn,
+    openLine,
+    setOpenLine,
+    lineTrouble,
     voiceOn,
     voiceMode,
     setVoiceMode,
