@@ -1718,95 +1718,6 @@ var init_memory = __esm({
   }
 });
 
-// server/coding.ts
-import { spawn, spawnSync } from "node:child_process";
-import { randomUUID as randomUUID4 } from "node:crypto";
-function recentJobs() {
-  return [...jobs.values()].sort((a, b) => b.startedAt - a.startedAt);
-}
-function jobById(id) {
-  return jobs.get(id);
-}
-function codingAvailable() {
-  if (looked && Date.now() - looked.at < 6e4) return looked.version;
-  let version = null;
-  try {
-    const asked = spawnSync("claude", ["--version"], { encoding: "utf8", shell: true });
-    if (asked.status === 0) version = asked.stdout.trim() || "installed";
-  } catch {
-  }
-  looked = { at: Date.now(), version };
-  return version;
-}
-function startJob(task, folder) {
-  const job = { id: randomUUID4().slice(0, 8), task, folder, startedAt: Date.now() };
-  jobs.set(job.id, job);
-  const child = spawn(
-    "claude",
-    [
-      "-p",
-      "--output-format",
-      "json",
-      // The whole point of the request: Opus, not whatever the default is.
-      "--model",
-      "opus",
-      // Edits yes, arbitrary commands no. See the note at the top.
-      "--permission-mode",
-      "acceptEdits"
-    ],
-    { cwd: folder, shell: true, env: process.env }
-  );
-  child.stdin.on("error", () => {
-  });
-  child.stdin.end(task);
-  let out = "";
-  let err = "";
-  child.stdout.on("data", (chunk) => out += chunk);
-  child.stderr.on("data", (chunk) => err += chunk);
-  const timer = setTimeout(() => child.kill("SIGKILL"), LONGEST_MS);
-  child.on("error", (error) => {
-    clearTimeout(timer);
-    finish(job, false, `could not start Claude Code: ${error.message}`);
-  });
-  child.on("close", (code) => {
-    clearTimeout(timer);
-    let parsed = null;
-    try {
-      parsed = JSON.parse(out.trim());
-    } catch {
-    }
-    if (parsed?.total_cost_usd) {
-      job.cost = parsed.total_cost_usd;
-      void recordOutside("claude-opus-5 (coding)", parsed.total_cost_usd).catch(() => {
-      });
-    }
-    job.turns = parsed?.num_turns;
-    if (parsed?.result) return finish(job, code === 0, parsed.result);
-    if (code === 0) return finish(job, true, out.trim() || "It finished without saying much.");
-    finish(
-      job,
-      false,
-      err.trim() || out.trim() || `Claude Code stopped with code ${code}.`
-    );
-  });
-  return job;
-}
-function finish(job, ok, summary) {
-  job.finishedAt = Date.now();
-  job.ok = ok;
-  job.summary = summary.length > 4e3 ? `${summary.slice(0, 4e3)}
-[...]` : summary;
-}
-var jobs, LONGEST_MS, looked;
-var init_coding = __esm({
-  "server/coding.ts"() {
-    init_budget();
-    jobs = /* @__PURE__ */ new Map();
-    LONGEST_MS = 20 * 60 * 1e3;
-    looked = null;
-  }
-});
-
 // server/github.ts
 async function call(path3, method = "GET") {
   const token2 = githubToken();
@@ -1916,7 +1827,7 @@ var init_github = __esm({
 });
 
 // server/lights.ts
-import { randomUUID as randomUUID5 } from "node:crypto";
+import { randomUUID as randomUUID4 } from "node:crypto";
 async function call2(path3, body) {
   const key = goveeKey();
   if (!key) {
@@ -1977,7 +1888,7 @@ async function pick(said2) {
 }
 async function stateOf(light) {
   const reported = await call2("/device/state", {
-    requestId: randomUUID5(),
+    requestId: randomUUID4(),
     payload: { sku: light.sku, device: light.device }
   });
   const found = /* @__PURE__ */ new Map();
@@ -2032,7 +1943,7 @@ async function apply(light, capabilities) {
   const send2 = async (capability) => {
     await pace(light.device);
     await call2("/device/control", {
-      requestId: randomUUID5(),
+      requestId: randomUUID4(),
       payload: { sku: light.sku, device: light.device, capability }
     });
   };
@@ -2822,12 +2733,12 @@ var init_ask = __esm({
 });
 
 // server/approvals.ts
-import { randomUUID as randomUUID6 } from "node:crypto";
+import { randomUUID as randomUUID5 } from "node:crypto";
 function live(all, now = Date.now()) {
   return all.filter((entry) => now - new Date(entry.at).getTime() < HOLD_FOR_MS);
 }
 async function hold(name, args) {
-  const entry = { id: randomUUID6().slice(0, 8), name, args, at: (/* @__PURE__ */ new Date()).toISOString() };
+  const entry = { id: randomUUID5().slice(0, 8), name, args, at: (/* @__PURE__ */ new Date()).toISOString() };
   await store9.update((all) => [...live(all), entry]);
   return entry;
 }
@@ -2853,7 +2764,7 @@ var init_approvals = __esm({
 });
 
 // server/journal.ts
-import { randomUUID as randomUUID7 } from "node:crypto";
+import { randomUUID as randomUUID6 } from "node:crypto";
 async function recentDeeds(limit = 25) {
   const all = await store10.read();
   return all.slice(-limit).reverse();
@@ -2862,7 +2773,7 @@ async function noteDeed(kind, text, unprompted = false) {
   const clean = text.trim().slice(0, 300);
   if (!clean) return;
   const entry = {
-    id: randomUUID7(),
+    id: randomUUID6(),
     at: (/* @__PURE__ */ new Date()).toISOString(),
     kind,
     text: clean,
@@ -2879,24 +2790,332 @@ var init_journal = __esm({
   }
 });
 
+// server/coding/gemini.ts
+async function runWithGemini(task, folder, hands2) {
+  const began = Date.now();
+  let handedOver = null;
+  let edited = 0;
+  let rounds = 0;
+  try {
+    const said2 = await getProvider().complete({
+      system: HOW_TO_WORK,
+      turns: [{ role: "user", text: `The folder is ${folder}.
+
+The job:
+
+${task}` }],
+      // Her hard model: the good one she already has credit for.
+      model: config.hardModel,
+      temperature: 0.2,
+      maxOutputTokens: 4096,
+      tools: TOOLS,
+      onToolCall: async (name, args) => {
+        rounds += 1;
+        if (rounds > MOST_ROUNDS) {
+          handedOver ??= `ran out of room after ${MOST_ROUNDS} steps`;
+          return "Stop now and say where you got to.";
+        }
+        if (name === "hand_over") {
+          handedOver = String(args.why ?? "no reason given");
+          return "Understood. Stop there.";
+        }
+        const path3 = String(args.path ?? "");
+        if (name === "look") return hands2("ls", path3);
+        if (name === "read") return hands2("read", path3);
+        if (name === "write") {
+          edited += 1;
+          return hands2("write", path3, String(args.text ?? ""));
+        }
+        return `There is no tool called ${name}.`;
+      }
+    });
+    if (handedOver) {
+      return {
+        by: "gemini-3.1-pro",
+        ok: false,
+        handedOver: true,
+        summary: handedOver,
+        seconds: Math.round((Date.now() - began) / 1e3),
+        edited
+      };
+    }
+    if (edited === 0) {
+      return {
+        by: "gemini-3.1-pro",
+        ok: false,
+        handedOver: true,
+        summary: `finished without changing any files. It said: ${said2.trim()}`,
+        seconds: Math.round((Date.now() - began) / 1e3),
+        edited
+      };
+    }
+    return {
+      by: "gemini-3.1-pro",
+      ok: true,
+      handedOver: false,
+      summary: said2.trim() || `Changed ${edited} file${edited === 1 ? "" : "s"}.`,
+      seconds: Math.round((Date.now() - began) / 1e3),
+      edited
+    };
+  } catch (error) {
+    return {
+      by: "gemini-3.1-pro",
+      ok: false,
+      handedOver: true,
+      summary: `it fell over: ${error.message}`,
+      seconds: Math.round((Date.now() - began) / 1e3),
+      edited
+    };
+  }
+}
+var MOST_ROUNDS, TOOLS, HOW_TO_WORK;
+var init_gemini2 = __esm({
+  "server/coding/gemini.ts"() {
+    init_llm();
+    init_config();
+    MOST_ROUNDS = 28;
+    TOOLS = [
+      {
+        name: "look",
+        description: "List what is in a folder.",
+        parameters: {
+          type: "OBJECT",
+          properties: { path: { type: "STRING", description: "The folder" } },
+          required: ["path"]
+        }
+      },
+      {
+        name: "read",
+        description: "Read a text file. Read before you change anything.",
+        parameters: {
+          type: "OBJECT",
+          properties: { path: { type: "STRING", description: "The file" } },
+          required: ["path"]
+        }
+      },
+      {
+        name: "write",
+        description: "Write a file, whole. There is no patching \u2014 give the entire contents every time, including the parts you are not changing.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            path: { type: "STRING", description: "The file" },
+            text: { type: "STRING", description: "The complete contents" }
+          },
+          required: ["path", "text"]
+        }
+      },
+      {
+        /*
+         * An honest way out, which is the whole reason the ladder works.
+         *
+         * Without this the only signal that it is out of its depth is the shape of
+         * its final paragraph, and a model asked whether it succeeded will usually
+         * say yes. A tool call is a fact. Described so that using it is the
+         * obviously correct move rather than an admission — a model that thinks
+         * giving up is failure will keep going and produce something worse.
+         */
+        name: "hand_over",
+        description: "Stop, and hand the job to a stronger model. The right move the moment this is bigger or subtler than you can do well \u2014 it costs nothing but a moment, and a half-finished change is far worse than an untouched folder. Say plainly what you learned and where you got stuck.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            why: { type: "STRING", description: "What defeated it, and what you found out" }
+          },
+          required: ["why"]
+        }
+      }
+    ];
+    HOW_TO_WORK = `You are editing code in a folder on someone's computer.
+
+Work like this: look at the folder, read the files you are about to change
+before you change them, then write them. You get the whole file back and you
+give the whole file back \u2014 there is no patching, so never write a fragment or
+a file with "... rest unchanged ..." in it. That has destroyed real work.
+
+You cannot run anything. No builds, no tests, no shell. Write code you are
+confident in by reading enough first, because you will not get to see it run.
+
+If the job turns out to be bigger or subtler than you can do well, call
+hand_over immediately and say what you found. A stronger model takes over from
+there and your notes are the most useful thing you can give it. Handing over
+early is the right call and costs almost nothing. Half-finishing something is
+the one genuinely bad outcome here.
+
+When you are done, say in two or three sentences what you changed and why.`;
+  }
+});
+
+// server/coding/opus.ts
+import { spawn, spawnSync } from "node:child_process";
+function opusAvailable() {
+  if (looked && Date.now() - looked.at < 6e4) return looked.version;
+  let version = null;
+  try {
+    const asked = spawnSync("claude", ["--version"], { encoding: "utf8", shell: true });
+    if (asked.status === 0) version = asked.stdout.trim() || "installed";
+  } catch {
+  }
+  looked = { at: Date.now(), version };
+  return version;
+}
+function runWithOpus(task, folder) {
+  const began = Date.now();
+  return new Promise((done) => {
+    const child = spawn(
+      "claude",
+      [
+        "-p",
+        "--output-format",
+        "json",
+        // The whole point of this rung: Opus, not whatever the default is.
+        "--model",
+        "opus",
+        "--permission-mode",
+        "acceptEdits"
+      ],
+      { cwd: folder, shell: true, env: process.env }
+    );
+    child.stdin.on("error", () => {
+    });
+    child.stdin.end(task);
+    let out = "";
+    let err = "";
+    child.stdout.on("data", (chunk) => out += chunk);
+    child.stderr.on("data", (chunk) => err += chunk);
+    const timer = setTimeout(() => child.kill("SIGKILL"), LONGEST_MS);
+    const seconds = () => Math.round((Date.now() - began) / 1e3);
+    child.on("error", (error) => {
+      clearTimeout(timer);
+      done({
+        by: "claude-opus-5",
+        ok: false,
+        handedOver: false,
+        summary: `could not start Claude Code: ${error.message}`,
+        seconds: seconds(),
+        edited: 0
+      });
+    });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      let parsed = null;
+      try {
+        parsed = JSON.parse(out.trim());
+      } catch {
+      }
+      done({
+        by: "claude-opus-5",
+        ok: code === 0,
+        handedOver: false,
+        summary: parsed?.result ?? (code === 0 ? out.trim() || "It finished without saying much." : err.trim() || out.trim() || `Claude Code stopped with code ${code}.`),
+        seconds: seconds(),
+        // Claude Code does not report a file count, and inferring one from its
+        // prose would be worse than admitting the number is not known.
+        edited: code === 0 ? 1 : 0,
+        ...parsed?.total_cost_usd ? { cost: parsed.total_cost_usd } : {},
+        ...parsed?.num_turns ? { turns: parsed.num_turns } : {}
+      });
+    });
+  });
+}
+var LONGEST_MS, looked;
+var init_opus = __esm({
+  "server/coding/opus.ts"() {
+    LONGEST_MS = 20 * 60 * 1e3;
+    looked = null;
+  }
+});
+
+// server/coding/index.ts
+import { randomUUID as randomUUID7 } from "node:crypto";
+function recentJobs() {
+  return [...jobs.values()].sort((a, b) => b.startedAt - a.startedAt);
+}
+function jobById(id) {
+  return jobs.get(id);
+}
+function startJob(task, folder, hands2, { straightToOpus = false } = {}) {
+  const job = {
+    id: randomUUID7().slice(0, 8),
+    task,
+    folder,
+    startedAt: Date.now(),
+    attempts: []
+  };
+  jobs.set(job.id, job);
+  void climb(job, hands2, straightToOpus);
+  return job;
+}
+async function climb(job, hands2, straightToOpus) {
+  try {
+    if (!straightToOpus) {
+      const first = await runWithGemini(job.task, job.folder, hands2);
+      job.attempts.push(first);
+      if (first.ok) return settle(job, true);
+      if (!opusAvailable()) return settle(job, false);
+    }
+    const second = await runWithOpus(escalated(job), job.folder);
+    job.attempts.push(second);
+    if (second.cost) {
+      void recordOutside("claude-opus-5 (coding)", second.cost).catch(() => {
+      });
+    }
+    settle(job, second.ok);
+  } catch (error) {
+    job.attempts.push({
+      by: "the ladder itself",
+      ok: false,
+      handedOver: false,
+      summary: `something went wrong running it: ${error.message}`,
+      seconds: 0,
+      edited: 0
+    });
+    settle(job, false);
+  }
+}
+function escalated(job) {
+  const before = job.attempts[job.attempts.length - 1];
+  if (!before) return job.task;
+  return `${job.task}
+
+---
+
+A smaller model tried this first and did not finish. ${before.handedOver ? "It handed over, saying" : "It failed:"} "${before.summary}"
+
+It wrote ${before.edited} file${before.edited === 1 ? "" : "s"} before stopping, so do not assume the folder is untouched \u2014 check the current state of anything you are about to change rather than trusting either its account or the task description.`;
+}
+function settle(job, ok) {
+  job.finishedAt = Date.now();
+  job.ok = ok;
+}
+var jobs;
+var init_coding = __esm({
+  "server/coding/index.ts"() {
+    init_budget();
+    init_gemini2();
+    init_opus();
+    init_opus();
+    jobs = /* @__PURE__ */ new Map();
+  }
+});
+
 // server/tools/coding.ts
 function howLong(startedAt) {
   const seconds = Math.round((Date.now() - startedAt) / 1e3);
   if (seconds < 90) return `${seconds} seconds`;
   return `${Math.round(seconds / 60)} minutes`;
 }
-var NOT_HERE, NOT_LOCAL, codingTools;
+var NOT_LOCAL, codingTools;
 var init_coding2 = __esm({
   "server/tools/coding.ts"() {
     init_coding();
     init_budget();
     init_config();
-    NOT_HERE = "Claude Code is not on this machine, so there is nothing to hand the work to. Tell the user to install it \u2014 `npm install -g @anthropic-ai/claude-code` and then `claude` once to sign in \u2014 and do not imply you tried to code.";
     NOT_LOCAL = "Coding runs on the machine she is installed on, and this one is in a data centre with none of the user\u2019s code on it. Say so plainly: the local install is the one that can do this.";
     codingTools = [
       {
         name: "write_code",
-        description: "Put a programming task to Opus, which will read and edit files in a folder on the user\u2019s machine. Use this for anything that means writing or changing code \u2014 do not try to write it yourself and paste it. It runs in the background and takes minutes, so say you have set it going and carry on; check on it with check_code. Describe the task fully, as you would to a colleague who cannot see this conversation: it gets the task and the folder and nothing else.",
+        description: "Put a programming task to a coding model, which will read and edit files in a folder on the user\u2019s machine. Use this for anything that means writing or changing code \u2014 do not write it yourself and paste it. It runs in the background and takes minutes, so say you have set it going and carry on; check on it with check_code. Describe the task fully, as you would to a colleague who cannot see this conversation: it gets the task and the folder and nothing else.",
         parameters: {
           task: {
             type: "string",
@@ -2905,13 +3124,16 @@ var init_coding2 = __esm({
           folder: {
             type: "string",
             description: "Which folder to work in, e.g. ~/projects/thing"
+          },
+          hard: {
+            type: "boolean",
+            description: "True to go straight to the strongest model, skipping the cheaper first attempt. Only for jobs that are plainly large or subtle \u2014 a whole feature, a tricky refactor, something already attempted and got wrong. Ordinary work should be left to find its own level: it escalates by itself when it needs to, and that costs almost nothing."
           }
         },
         required: ["task", "folder"],
         category: "machine",
         run: async (args) => {
           if (config.deployed) return NOT_LOCAL;
-          if (!codingAvailable()) return NOT_HERE;
           try {
             await requireBudget();
           } catch (stopped) {
@@ -2923,8 +3145,14 @@ var init_coding2 = __esm({
           if (!looked2.ok || /outside the folders/.test(looked2.result)) {
             return `I cannot work there. ${looked2.result}`;
           }
-          const job = startJob(String(args.task), folder);
-          return `Started. Job ${job.id}, working in ${folder}. It will take minutes, not seconds \u2014 tell the user it is running and what it is doing, then get on with the conversation. Check on it with check_code when they ask, or when enough time has passed that they would expect news.`;
+          const { carryOut } = await import("../../bridge/bridge.mjs");
+          const hands2 = async (action, path3, body) => {
+            const done = await carryOut(action, path3, { body, replace: true });
+            return done.detail;
+          };
+          const straightToOpus = args.hard === true && Boolean(opusAvailable());
+          const job = startJob(String(args.task), folder, hands2, { straightToOpus });
+          return `Started. Job ${job.id}, working in ${folder}, ${straightToOpus ? "straight to the strongest model" : "beginning with the cheaper model and stepping up if it needs to"}. It takes minutes, not seconds \u2014 tell the user it is running and what it is doing, then get on with the conversation. Check on it with check_code when they ask, or when enough time has passed that they would expect news.`;
         }
       },
       {
@@ -2945,16 +3173,20 @@ var init_coding2 = __esm({
             return "There are no coding jobs. Nothing has been set going this session.";
           }
           if (!wanted.finishedAt) {
-            return `Job ${wanted.id} is still going, ${howLong(wanted.startedAt)} in. It is working on: ${wanted.task}`;
+            const now = wanted.attempts.length > 0 ? " It is on its second attempt." : "";
+            return `Job ${wanted.id} is still going, ${howLong(wanted.startedAt)} in.${now} It is working on: ${wanted.task}`;
           }
-          const took2 = Math.round((wanted.finishedAt - wanted.startedAt) / 1e3);
-          const cost = wanted.cost ? `, cost $${wanted.cost.toFixed(2)}` : "";
-          const turns = wanted.turns ? `, ${wanted.turns} steps` : "";
-          return `Job ${wanted.id} ${wanted.ok ? "finished" : "failed"} after ${took2} seconds${turns}${cost}, in ${wanted.folder}.
+          const story = wanted.attempts.map((attempt) => {
+            const cost = attempt.cost ? `, $${attempt.cost.toFixed(2)}` : "";
+            const what = attempt.handedOver ? "handed it on" : attempt.ok ? "finished it" : "failed";
+            return `${attempt.by} ${what} after ${attempt.seconds}s${cost}: ${attempt.summary}`;
+          }).join("\n\n");
+          const spent = wanted.attempts.reduce((sum, one) => sum + (one.cost ?? 0), 0);
+          return `Job ${wanted.id} ${wanted.ok ? "is done" : "did not work out"}, in ${wanted.folder}${spent > 0 ? ` \u2014 $${spent.toFixed(2)} on the card` : ""}.
 
-${wanted.summary}
+${story}
 
-The files are changed on disk. If the user wants it built or tested, that is a separate thing you run yourself.`;
+${wanted.ok ? "The files are changed on disk. If the user wants it built or tested, that is a separate thing you run yourself." : "Some files may have been changed before it stopped, so do not tell them the folder is untouched."}`;
         }
       }
     ];
@@ -5366,14 +5598,14 @@ __export(tools_exports, {
   runTool: () => runTool
 });
 function allTools() {
-  return TOOLS;
+  return TOOLS2;
 }
 function findTool(name) {
-  return TOOLS.find((tool) => tool.name === name);
+  return TOOLS2.find((tool) => tool.name === name);
 }
 function auditTools() {
   const problems = [];
-  for (const tool of TOOLS) {
+  for (const tool of TOOLS2) {
     if (tool.category === "communication") {
       problems.push(`${tool.name} is a communication tool; she has no such power`);
     }
@@ -5450,10 +5682,10 @@ async function runTool(call4) {
   }
 }
 function declarations(have) {
-  const usable = have ? TOOLS.filter((tool) => {
+  const usable = have ? TOOLS2.filter((tool) => {
     const needs = NEEDS[tool.name];
     return !needs || have[needs];
-  }) : TOOLS;
+  }) : TOOLS2;
   return usable.map((tool) => {
     const keys3 = Object.keys(tool.parameters);
     if (keys3.length === 0) {
@@ -5479,7 +5711,7 @@ function declarations(have) {
     };
   });
 }
-var TOOLS, AGREED, AGREEMENT_FRESH_MS, confirmTool, DESTRUCTIVE2, LABELS, NEEDS;
+var TOOLS2, AGREED, AGREEMENT_FRESH_MS, confirmTool, DESTRUCTIVE2, LABELS, NEEDS;
 var init_tools = __esm({
   "server/tools/index.ts"() {
     init_actions();
@@ -5501,7 +5733,7 @@ var init_tools = __esm({
     init_timers();
     init_web();
     init_work();
-    TOOLS = [
+    TOOLS2 = [
       ...webTools,
       ...machineTools,
       ...codingTools,
@@ -5548,7 +5780,7 @@ var init_tools = __esm({
         return result;
       }
     };
-    TOOLS.push(confirmTool);
+    TOOLS2.push(confirmTool);
     DESTRUCTIVE2 = /\b(delete|destroy|erase|purge|wipe|permanently remove)\b/i;
     LABELS = {
       search_web: "Searched the web",
@@ -5778,7 +6010,6 @@ init_actions();
 
 // server/available.ts
 init_bridge();
-init_coding();
 init_config();
 init_github();
 init_lights();
@@ -5811,7 +6042,9 @@ async function available() {
     lights: lightsConfigured(),
     // Both halves: a machine of the user's to code on, and the agent that does
     // the coding actually installed on it.
-    coding: !config.deployed && Boolean(codingAvailable())
+    // The cheap rung needs nothing but her own model, so coding is available
+    // wherever she is local — Opus is an upgrade on it, not a prerequisite.
+    coding: !config.deployed
   };
   cached3 = { at: Date.now(), value };
   return value;
@@ -7305,12 +7538,12 @@ function createApi() {
         "'": "&#39;"
       })[character]
     );
-    const finish2 = (message) => res.status(200).send(
+    const finish = (message) => res.status(200).send(
       `<!doctype html><meta charset="utf-8"><title>Grace</title><body style="background:#07090c;color:#e2e8f0;font-family:system-ui;display:grid;place-items:center;height:100vh;margin:0;text-align:center"><div><p style="max-width:32rem;line-height:1.6">${escape(message)}</p><a href="/" style="color:#7dd3fc">Back to Grace</a></div>`
     );
     if (req.query.error) {
       console.error("[grace] google declined:", String(req.query.error));
-      finish2("Google declined the connection. Nothing has changed.");
+      finish("Google declined the connection. Nothing has changed.");
       return;
     }
     try {
@@ -7319,9 +7552,9 @@ function createApi() {
         String(req.query.state ?? "")
       );
       forgetAvailable();
-      finish2(`Connected as ${email || "your Google account"}. You can close this.`);
+      finish(`Connected as ${email || "your Google account"}. You can close this.`);
     } catch (error) {
-      finish2(`Could not connect: ${error.message}`);
+      finish(`Could not connect: ${error.message}`);
     }
   }));
   api.post("/google-disconnect", guard(async (_req, res) => {

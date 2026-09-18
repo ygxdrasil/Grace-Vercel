@@ -1,5 +1,4 @@
 import {bridgeStatus} from './bridge';
-import {codingAvailable} from './coding';
 import {config} from './config';
 import {githubConfigured} from './github';
 import {lightsConfigured} from './lights';
@@ -56,7 +55,9 @@ export async function available(): Promise<Available> {
     lights: lightsConfigured(),
     // Both halves: a machine of the user's to code on, and the agent that does
     // the coding actually installed on it.
-    coding: !config.deployed && Boolean(codingAvailable()),
+    // The cheap rung needs nothing but her own model, so coding is available
+    // wherever she is local — Opus is an upgrade on it, not a prerequisite.
+    coding: !config.deployed,
   };
 
   cached = {at: Date.now(), value};
