@@ -163,7 +163,7 @@ type Move =
 function gemini(moves: Move[], lastWords = 'I made the change.') {
   setProvider({
     name: 'scripted',
-    model: 'gemini-3.1-pro',
+    model: 'gemini-3.1-pro-preview',
     async complete(request: {
       onToolCall?: (name: string, args: Record<string, unknown>) => Promise<string>;
     }) {
@@ -229,7 +229,7 @@ await check('the cheap rung does the work, and Opus is never woken', async () =>
   const job = recentJobs()[0];
   assert.equal(job.ok, true);
   assert.equal(job.attempts.length, 1, 'one attempt is all it should have taken');
-  assert.equal(job.attempts[0].by, 'gemini-3.1-pro');
+  assert.equal(job.attempts[0].by, 'gemini-3.1-pro-preview');
   // Measured as a change rather than a total: the store outlives a run, and a
   // check that only passes on an empty one is a check that rots quietly.
   assert.equal(await onTheCard(), cardBefore, 'and nothing reached the card');

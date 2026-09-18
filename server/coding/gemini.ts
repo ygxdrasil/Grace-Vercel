@@ -144,7 +144,7 @@ export async function runWithGemini(
 
     if (handedOver) {
       return {
-        by: 'gemini-3.1-pro',
+        by: config.hardModel,
         ok: false,
         handedOver: true,
         summary: handedOver,
@@ -165,7 +165,7 @@ export async function runWithGemini(
      */
     if (edited === 0) {
       return {
-        by: 'gemini-3.1-pro',
+        by: config.hardModel,
         ok: false,
         handedOver: true,
         summary: `finished without changing any files. It said: ${said.trim()}`,
@@ -175,7 +175,7 @@ export async function runWithGemini(
     }
 
     return {
-      by: 'gemini-3.1-pro',
+      by: config.hardModel,
       ok: true,
       handedOver: false,
       summary: said.trim() || `Changed ${edited} file${edited === 1 ? '' : 's'}.`,
@@ -184,7 +184,7 @@ export async function runWithGemini(
     };
   } catch (error) {
     return {
-      by: 'gemini-3.1-pro',
+      by: config.hardModel,
       ok: false,
       handedOver: true,
       summary: `it fell over: ${(error as Error).message}`,

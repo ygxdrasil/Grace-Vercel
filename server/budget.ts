@@ -40,7 +40,7 @@ import {Document} from './store/index';
  */
 const RATES: Record<string, {in: number; out: number}> = {
   'gemini-3.8-flash': {in: 0.75, out: 3.75},
-  'gemini-3.1-pro': {in: 2, out: 12},
+  'gemini-3.1-pro-preview': {in: 2, out: 12},
   'gemini-3.5-flash-lite': {in: 0.1, out: 0.4},
   'gemini-3.1-flash-tts-preview': {in: 0.5, out: 10},
 

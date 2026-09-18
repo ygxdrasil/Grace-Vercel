@@ -46,6 +46,7 @@ import {trimTrailingSilence} from '../shared/trim';
 import {heardName, isPhantom, toldToSleep} from '../shared/wake';
 import {parseCommand, suggest} from '../shared/commands';
 import {looksDestructive} from '../server/tools/machine';
+import {missingModel} from '../server/llm/gemini';
 import {requiresConfirmation, setPolicy} from '../server/actions';
 import {logKey, metaKey} from '../server/chats';
 import {forSpeaking, relayUrl} from '../server/relay';
@@ -667,7 +668,7 @@ try {
     'thinkingLevel' in thinkingFor('gemini-3.8-flash', 1024),
     'the 3.x line takes a named level',
   );
-  for (const model of ['gemini-2.5-flash', 'gemini-3.8-flash', 'gemini-3.1-pro']) {
+  for (const model of ['gemini-2.5-flash', 'gemini-3.8-flash', 'gemini-3.1-pro-preview']) {
     const sent = thinkingFor(model, 1024);
     assert.ok(
       !('thinkingBudget' in sent && 'thinkingLevel' in sent),
@@ -675,6 +676,47 @@ try {
     );
   }
   ok('each model generation is asked for deliberation in its own dialect');
+
+  /*
+   * ---- a model that is not there costs a log line, not the answer --------
+   *
+   * The name of the better model is configuration, and configuration goes
+   * wrong: `gemini-3.1-pro` looked right, does not exist, and killed every
+   * turn she judged worth escalating — which is the worst possible place for
+   * a failure to land. The exact message Vertex sent is the fixture, because
+   * a matcher written against a remembered error is a matcher that has never
+   * been tested against a real one.
+   */
+  const REAL_404 =
+    'got status: 404 Not Found. {"error":{"code":404,"message":"Publisher model ' +
+    '`projects/ai-agents-508818/locations/global/publishers/google/models/' +
+    'gemini-3.1-pro` was not found or your project does not have access to it. ' +
+    'Ensure you are using a valid model name and that the model is available in ' +
+    'the specified region.","status":"NOT_FOUND"}}';
+
+  assert.equal(missingModel(new Error(REAL_404)), true, 'the real message is recognised');
+  for (const other of [
+    'got status: 429. {"error":{"message":"Quota exceeded","status":"RESOURCE_EXHAUSTED"}}',
+    'got status: 403. {"error":{"message":"Permission denied on resource","status":"PERMISSION_DENIED"}}',
+    'got status: 404. {"error":{"message":"Requested entity was not found.","status":"NOT_FOUND"}}',
+    'fetch failed',
+  ]) {
+    assert.equal(
+      missingModel(new Error(other)),
+      false,
+      `must not be mistaken for a missing model: ${other.slice(0, 40)}`,
+    );
+  }
+  ok('a missing model is told apart from a bad key, a quota, and a stray 404');
+
+  // And the name she is actually configured with has a price, or the meter
+  // charges her the dearest rate for the one model she reaches for when it
+  // matters — which is how a cap gets hit that was never really reached.
+  assert.ok(
+    priceOf(config.hardModel),
+    `${config.hardModel} must be priced, or her spending is fiction`,
+  );
+  ok('the better model is named something that exists, and is priced');
 
   /*
    * Pro has no middle setting. Asking for one is rejected, which would make

@@ -123,7 +123,7 @@ var init_config = __esm({
        * else — every command, every ordinary exchange — stays on Flash, which is
        * what keeps the credits lasting ninety days instead of nine.
        */
-      hardModel: process.env.GRACE_HARD_MODEL ?? "gemini-3.1-pro",
+      hardModel: process.env.GRACE_HARD_MODEL ?? "gemini-3.1-pro-preview",
       /**
        * The model that listens.
        *
@@ -818,7 +818,7 @@ var init_budget = __esm({
     init_store();
     RATES = {
       "gemini-3.8-flash": { in: 0.75, out: 3.75 },
-      "gemini-3.1-pro": { in: 2, out: 12 },
+      "gemini-3.1-pro-preview": { in: 2, out: 12 },
       "gemini-3.5-flash-lite": { in: 0.1, out: 0.4 },
       "gemini-3.1-flash-tts-preview": { in: 0.5, out: 10 },
       // The outgoing line. Kept priced until it shuts down on 20 October, because
@@ -1085,6 +1085,10 @@ var init_thinking = __esm({
 
 // server/llm/gemini.ts
 import { GoogleGenAI } from "@google/genai";
+function missingModel(error) {
+  const said2 = error?.message ?? "";
+  return /publisher model/i.test(said2) && /not found|does not have access/i.test(said2);
+}
 function meter(model, usage) {
   if (!usage) return;
   void record(
@@ -1225,6 +1229,13 @@ Return only the words spoken, with ordinary punctuation. No preamble, no quotes,
           meter(request.model ?? this.model, closingUsage);
           return;
         } catch (error) {
+          if (!spoken && request.model && missingModel(error)) {
+            console.error(
+              `[grace] ${request.model} is not available to this project; answering with ${this.model} instead. Check GRACE_HARD_MODEL.`
+            );
+            yield* this.stream({ ...request, model: void 0 });
+            return;
+          }
           if (!request.search || spoken) throw error;
           console.error(
             "[grace] search unavailable, answering without it:",
@@ -2831,7 +2842,7 @@ ${task}` }],
     });
     if (handedOver) {
       return {
-        by: "gemini-3.1-pro",
+        by: config.hardModel,
         ok: false,
         handedOver: true,
         summary: handedOver,
@@ -2841,7 +2852,7 @@ ${task}` }],
     }
     if (edited === 0) {
       return {
-        by: "gemini-3.1-pro",
+        by: config.hardModel,
         ok: false,
         handedOver: true,
         summary: `finished without changing any files. It said: ${said2.trim()}`,
@@ -2850,7 +2861,7 @@ ${task}` }],
       };
     }
     return {
-      by: "gemini-3.1-pro",
+      by: config.hardModel,
       ok: true,
       handedOver: false,
       summary: said2.trim() || `Changed ${edited} file${edited === 1 ? "" : "s"}.`,
@@ -2859,7 +2870,7 @@ ${task}` }],
     };
   } catch (error) {
     return {
-      by: "gemini-3.1-pro",
+      by: config.hardModel,
       ok: false,
       handedOver: true,
       summary: `it fell over: ${error.message}`,

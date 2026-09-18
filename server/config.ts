@@ -40,7 +40,7 @@ export const config = {
    * else — every command, every ordinary exchange — stays on Flash, which is
    * what keeps the credits lasting ninety days instead of nine.
    */
-  hardModel: process.env.GRACE_HARD_MODEL ?? 'gemini-3.1-pro',
+  hardModel: process.env.GRACE_HARD_MODEL ?? 'gemini-3.1-pro-preview',
 
   /**
    * The model that listens.

@@ -17,6 +17,7 @@ import {bearingOf, bearingWarns} from '../shared/bearing';
 import type {DayView} from '../shared/types';
 import {useChats} from './hooks/useChats';
 import {useFreshness} from './hooks/useFreshness';
+import {useFullscreen} from './hooks/useFullscreen';
 import type {Mode} from './hooks/useGrace';
 import {useGrace} from './hooks/useGrace';
 import {useRooms} from './hooks/useRooms';
@@ -68,6 +69,7 @@ function useWide(): boolean {
 export default function App() {
   const grace = useGrace();
   const rooms = useRooms();
+  const screen = useFullscreen();
   const freshness = useFreshness();
   // Reloading rather than clearing: the conversation just switched to is
   // whatever the server has, and an emptied screen would be a guess at it.
@@ -354,6 +356,12 @@ export default function App() {
       run: () => setShowTalk((open) => !open),
     },
     {id: 'sound', label: 'Sound check', hint: 'audio', run: () => setSoundCheckOpen(true)},
+    {
+      id: 'fullscreen',
+      label: screen.full ? 'Leave fullscreen' : 'Fullscreen',
+      hint: 'F',
+      run: screen.toggle,
+    },
     {
       id: 'voicelock',
       label: 'Only answer to me',

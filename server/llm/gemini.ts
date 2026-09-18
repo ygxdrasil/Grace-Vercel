@@ -56,6 +56,20 @@ interface Usage {
   cachedContentTokenCount?: number;
 }
 
+/**
+ * Is this failure "that model does not exist here", rather than anything else?
+ *
+ * Read narrowly on purpose. A 404 alone is not enough — Google returns one for
+ * several unrelated things — and retrying on any error would quietly paper
+ * over a broken key or an exhausted quota, which are problems that need to be
+ * seen rather than worked around. The message Vertex sends for this case names
+ * the publisher model, and that is what is matched.
+ */
+export function missingModel(error: unknown): boolean {
+  const said = (error as Error)?.message ?? '';
+  return /publisher model/i.test(said) && /not found|does not have access/i.test(said);
+}
+
 function meter(model: string, usage: Usage | undefined): void {
   if (!usage) return;
   void budget
@@ -278,6 +292,31 @@ export class GeminiProvider implements LlmProvider {
 
       return;
     } catch (error) {
+      /*
+       * A model that is not there, which must not cost her the sentence.
+       *
+       * She reaches for a better model on the handful of turns a day worth
+       * paying for. If that name is wrong — retired, renamed, or never
+       * available in this project — every one of those turns died with a 404
+       * in front of the user, which is the worst possible distribution of the
+       * failure: she breaks precisely on the questions she escalated because
+       * they mattered. The name being wrong is a configuration mistake, and
+       * answering with the model that does work is strictly better than not
+       * answering at all.
+       *
+       * Only before a word has been said, because a retry cannot unsay one,
+       * and only once — `model` is cleared, so the second attempt is her usual
+       * one and a failure there is a real failure.
+       */
+      if (!spoken && request.model && missingModel(error)) {
+        console.error(
+          `[grace] ${request.model} is not available to this project; ` +
+            `answering with ${this.model} instead. Check GRACE_HARD_MODEL.`,
+        );
+        yield* this.stream({...request, model: undefined});
+        return;
+      }
+
       // The daily allowance for grounded prompts is smaller than the one for
       // ordinary ones, and it runs out mid-day rather than at a boundary. An
       // assistant who goes mute the moment she cannot search is worse than one
