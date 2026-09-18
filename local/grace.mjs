@@ -32,6 +32,7 @@ import {randomBytes} from 'node:crypto';
 import {homedir} from 'node:os';
 import {dirname, join, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {readEnv, writeEnv} from './env.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const envFile = join(root, '.env.local');
@@ -53,32 +54,7 @@ if (major < 20) {
   );
 }
 
-/**
- * Reading and writing .env.local, which is the one place her secrets live.
- *
- * Deliberately never printed, never echoed back, and never sent anywhere. The
- * service-account key in particular is pasted into this file by you, by hand,
- * and nothing here ever reads its contents for any purpose but handing it to
- * Google's own library.
- */
-function readEnv() {
-  if (!existsSync(envFile)) return {};
-  const found = {};
-  for (const line of readFileSync(envFile, 'utf8').split('\n')) {
-    const match = /^([A-Z0-9_]+)=([\s\S]*)$/.exec(line.trim());
-    if (match) found[match[1]] = match[2].replace(/^'([\s\S]*)'$/, '$1');
-  }
-  return found;
-}
-
-function writeEnv(values) {
-  const body = Object.entries(values)
-    .map(([key, value]) => `${key}='${String(value).replace(/'/g, "'\\''")}'`)
-    .join('\n');
-  writeFileSync(envFile, `${body}\n`, {mode: 0o600});
-}
-
-const env = readEnv();
+const env = readEnv(envFile);
 
 /*
  * Anything already in the environment counts as an answer.
@@ -161,10 +137,10 @@ function askHidden(question) {
     const onKey = (chunk) => {
       for (const key of chunk) {
         // Enter, and end-of-input: both mean "that is the whole thing".
-        if (key === '\r' || key === '\n' || key === '') return finish(value);
+        if (key === '\r' || key === '\n' || key === '\u0004') return finish(value);
         // Ctrl+C has to keep working, and raw mode is where it stops doing so
         // by itself — without this the only way out is closing the window.
-        if (key === '') {
+        if (key === '\u0003') {
           finish('');
           process.exit(130);
         }
@@ -318,13 +294,41 @@ if (!env.GCP_SERVICE_ACCOUNT_JSON) {
   say('  Found the Google key.');
 }
 
+/*
+ * The key is checked here, rather than discovered to be broken by Google.
+ *
+ * It arrived as a file and it is about to be handed to a library that will
+ * fail somewhere far from here if it is not what it claims to be — which is
+ * exactly what happened when this was being mangled on its way through the
+ * settings file: an error inside the SDK, three layers down, saying nothing
+ * about where the value came from.
+ */
+try {
+  const parsed = JSON.parse(env.GCP_SERVICE_ACCOUNT_JSON);
+  if (!parsed.client_email || !parsed.private_key) {
+    ask?.close();
+    fail(
+      `${keyFile} is JSON, but not a service-account key — it has no ` +
+        `client_email or private_key. Download a fresh one from Google Cloud.`,
+    );
+  }
+} catch {
+  ask?.close();
+  fail(
+    `${keyFile} is not valid JSON, so Google will refuse it.\n\n` +
+      `Download the key again and save it whole, including the outermost ` +
+      `braces. Do not paste it into a settings file — this reads the file ` +
+      `itself, every time she starts.`,
+  );
+}
+
 env.GRACE_DATA_DIR ??= join(root, '.grace');
 env.PORT ??= '7766';
 // The voice needs a second port, because it is a socket rather than a request.
 env.GRACE_VOICE_PORT ??= '8787';
 env.GRACE_OUTPOST_URL ??= `ws://localhost:${env.GRACE_VOICE_PORT}/voice`;
 
-writeEnv(env);
+writeEnv(envFile, env);
 ask?.close();
 say(`  Settings saved to .env.local — that file holds your secrets, so keep it.`);
 

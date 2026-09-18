@@ -12,13 +12,14 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "selftest": "GRACE_DATA_DIR=.selftest-data GEMINI_API_KEY=stub-key GRACE_SECRET=selftest-secret GRACE_PASSWORD=selftest-password GITHUB_TOKEN= N8N_API_KEY= N8N_URL= PSN_NPSSO= tsx scripts/selftest.ts && npm run check:local && npm run check:self",
+    "selftest": "GRACE_DATA_DIR=.selftest-data GEMINI_API_KEY=stub-key GRACE_SECRET=selftest-secret GRACE_PASSWORD=selftest-password GITHUB_TOKEN= N8N_API_KEY= N8N_URL= PSN_NPSSO= tsx scripts/selftest.ts && npm run check:local && npm run check:self && npm run check:env",
     "build:api": "esbuild server/vercel-entry.ts --bundle --platform=node --format=esm --target=node20 --packages=external --external:../../bridge/bridge.mjs --outfile='api/[...path].js'",
     "sync:bridge": "node -e \"require('fs').copyFileSync('bridge/bridge.mjs','public/bridge.mjs')\"",
     "icons": "node scripts/icons.mjs",
     "stress": "GRACE_DATA_DIR=.stress-data GEMINI_API_KEY=stub-key GRACE_SECRET=stress-secret GRACE_PASSWORD=stress-password tsx scripts/stress.ts",
     "test": "npm run lint && npm run selftest",
-    "check:self": "tsx local/selfcheck.ts"
+    "check:self": "tsx local/selfcheck.ts",
+    "check:env": "node local/envcheck.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
