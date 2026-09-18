@@ -382,6 +382,7 @@ const NEEDS: Record<string, keyof Available> = {
   // Offering it without either means she promises and then explains herself.
   write_code: 'coding',
   check_code: 'coding',
+  run_tests: 'coding',
   lock_laptop: 'room',
   notify_phone: 'phone',
   set_lights: 'lights',

@@ -19,7 +19,20 @@ const root = mkdtempSync(join(tmpdir(), 'grace-local-'));
 mkdirSync(join(root, 'notes'));
 writeFileSync(join(root, 'notes', 'todo.md'), 'milk\nbread\n');
 
-process.env.GRACE_ROOTS = root;
+/*
+ * Every folder the checks will use, made before anything is imported.
+ *
+ * The boundary reads its list of allowed folders once, when the bridge module
+ * loads, which is exactly right for a program somebody starts and leaves
+ * running — and means a folder invented later in this file is outside the
+ * boundary however the environment is changed afterwards. That cost a
+ * confusing "the job never finished", which was the truth: the job was
+ * refused before it existed.
+ */
+const project = mkdtempSync(join(tmpdir(), 'grace-project-'));
+const stubborn = mkdtempSync(join(tmpdir(), 'grace-stubborn-'));
+
+process.env.GRACE_ROOTS = [root, project, stubborn].join(',');
 process.env.GRACE_BRIDGE_EMBEDDED = '1';
 // Explicitly not deployed: that flag is the entire difference between her
 // reaching for a queue and reaching for the disk.
@@ -179,7 +192,8 @@ const poolBefore = (await spend()).pool ?? 0;
 
 /** Coding is asynchronous on purpose, so the checks have to wait for it. */
 async function settled(id: string | undefined) {
-  for (let tries = 0; tries < 200; tries += 1) {
+  // Generous: a job may climb twice and run a suite after each attempt.
+  for (let tries = 0; tries < 600; tries += 1) {
     const job = recentJobs().find((one) => one.id === id);
     if (job?.finishedAt) return job;
     await new Promise((wait) => setTimeout(wait, 50));
@@ -315,6 +329,122 @@ await check('the coding model gets no shell and no way to delete', async () => {
   refused = job.attempts[0].summary;
   assert.ok(refused.length > 0, 'it gets an answer rather than a crash');
   assert.equal(existsSync(join(root, 'notes', 'todo.md')), true, 'and nothing was destroyed');
+});
+
+/*
+ * Running the project's own tests, and the loop that closes.
+ *
+ * Code that has not been run is a draft, so the interesting cases are not
+ * "does it run npm test" but what happens next: a red suite has to send the
+ * job back up the ladder carrying the failure, a suite that stays red has to
+ * end as a failure rather than a success, and a folder with no tests at all
+ * has to say so rather than quietly pass.
+ */
+console.log('\nrunning the tests afterwards');
+
+/** A stand-in for npm, which decides the verdict. */
+writeFileSync(
+  join(bin, 'npm'),
+  [
+    '#!/usr/bin/env node',
+    // Green once Opus has been through, red before. That is the whole shape of
+    // the loop: fail, escalate, fix, pass.
+    'const fs = require("fs");',
+    'if (process.argv[2] !== "test") { console.log("nothing to do"); process.exit(0); }',
+    // A folder marked always-red never goes green, however many attempts are
+    // made at it — the case that proves the loop is bounded.
+    'if (!fs.existsSync("always-red") && fs.existsSync("touched-by-opus.txt")) { console.log("2 passing"); process.exit(0); }',
+    'console.log("1 failing\\n  expected the thing, got the other thing");',
+    'process.exit(1);',
+  ].join('\n'),
+  {mode: 0o755},
+);
+
+/*
+ * A package.json whose own test script is hostile.
+ *
+ * If the command were read out of this file, running it would create `pwned`.
+ * It is here to prove that it is not: what runs is the literal `npm test`,
+ * chosen because this file exists, never because of what is inside it.
+ */
+writeFileSync(
+  join(project, 'package.json'),
+  JSON.stringify({name: 'p', scripts: {test: 'touch pwned-by-package-json'}}),
+);
+
+await check('a red suite sends the job back up the ladder with the failure', async () => {
+  gemini([{call: 'write', path: join(project, 'thing.js'), text: 'half right'}]);
+  const started = await runTool({
+    name: 'write_code',
+    args: {task: 'make the thing', folder: project},
+  });
+  const job = await settled(/Job (\w+)/.exec(started.result)?.[1]);
+
+  assert.equal(job.tested.length, 2, 'run once before escalating and once after');
+  assert.equal(job.tested[0].passed, false);
+  assert.equal(job.tested[1].passed, true);
+  assert.equal(job.attempts.length, 2, 'the failure escalated it');
+  assert.equal(job.ok, true);
+
+  // What the second attempt was actually told.
+  const handed = readFileSync(join(project, 'touched-by-opus.txt'), 'utf8');
+  assert.match(handed, /the tests now fail/);
+  assert.match(handed, /expected the thing, got the other thing/, 'the output went with it');
+  assert.match(handed, /make the thing/, 'and so did the original job');
+});
+
+await check('the test command is never read out of package.json', async () => {
+  assert.equal(
+    existsSync(join(project, 'pwned-by-package-json')),
+    false,
+    'a hostile test script must not be what gets run',
+  );
+  const job = recentJobs()[0];
+  assert.equal(job.tested[0].command, 'npm test', 'the literal command is what ran');
+});
+
+await check('a suite that stays red ends as a failure, not a success', async () => {
+  writeFileSync(join(stubborn, 'package.json'), '{"name":"s"}');
+  writeFileSync(join(stubborn, 'always-red'), 'nothing fixes this');
+
+  gemini([{call: 'write', path: join(stubborn, 'a.js'), text: 'nope'}]);
+  const started = await runTool({
+    name: 'write_code',
+    args: {task: 'fix the unfixable', folder: stubborn},
+  });
+  const job = await settled(/Job (\w+)/.exec(started.result)?.[1]);
+
+  assert.equal(job.ok, false, 'red at the end is a failure however many edits succeeded');
+  assert.ok(job.attempts.length <= 3, 'and it stops rather than looping for ever');
+  assert.ok(job.tested.every((run) => !run.passed));
+
+  const out = await runTool({name: 'check_code', args: {id: job.id}});
+  assert.match(out.result, /did not work out/);
+  assert.match(out.result, /still failing/);
+});
+
+await check('no suite at all is said out loud, not passed off as fine', async () => {
+  gemini([{call: 'write', path: join(root, 'lonely.txt'), text: 'no tests here'}]);
+  const started = await runTool({
+    name: 'write_code',
+    args: {task: 'something in a folder with no tests', folder: root},
+  });
+  const job = await settled(/Job (\w+)/.exec(started.result)?.[1]);
+
+  assert.equal(job.noSuite, true);
+  assert.equal(job.tested.length, 0);
+  const out = await runTool({name: 'check_code', args: {id: job.id}});
+  assert.match(out.result, /no tests in that folder/);
+  assert.match(out.result, /written but unproven/);
+});
+
+await check('she can run the tests on their own, and report honestly', async () => {
+  const green = await runTool({name: 'run_tests', args: {folder: project}});
+  assert.match(green.result, /passed/);
+
+  const none = await runTool({name: 'run_tests', args: {folder: join(root, 'notes')}});
+  assert.match(none.result, /no test suite/);
+  assert.doesNotMatch(none.result, /passed/, 'absence of tests is never a pass');
 });
 
 console.log(`\n${passed} checks passed.\n`);

@@ -3026,6 +3026,67 @@ var init_opus = __esm({
   }
 });
 
+// server/coding/tests.ts
+async function findSuite(folder, hands2) {
+  const listing = await hands2("ls", folder);
+  const names = new Set(
+    listing.split("\n").map((line) => line.split(/\s{2,}/)[0].trim().replace(/\/$/, "")).filter(Boolean)
+  );
+  for (const suite of SUITES) {
+    if (names.has(suite.needs)) return suite.command;
+  }
+  return null;
+}
+function lastOf(text, limit = MOST_OUTPUT) {
+  if (text.length <= limit) return text;
+  return `[...earlier output not shown...]
+${text.slice(-limit)}`;
+}
+async function runSuite(folder, command, shell) {
+  const began = Date.now();
+  const outcome2 = await shell(command, folder);
+  return {
+    command,
+    passed: outcome2.ok,
+    output: lastOf(outcome2.detail.trim()),
+    seconds: Math.round((Date.now() - began) / 1e3)
+  };
+}
+function failureBrief(task, run) {
+  return `The code in this folder was just changed, and the tests now fail.
+
+\`${run.command}\` said:
+
+${run.output}
+
+Fix it. Read the files before changing them \u2014 the folder is not in the state it was when the work started. Do not undo the change that was being made; make it work.
+
+---
+
+The original job was:
+
+${task}`;
+}
+var SUITES, MOST_OUTPUT;
+var init_tests = __esm({
+  "server/coding/tests.ts"() {
+    SUITES = [
+      // Ordered by how specific the evidence is. A lockfile says which package
+      // manager is actually in use; package.json alone only says it is Node.
+      { needs: "pnpm-lock.yaml", command: "pnpm test" },
+      { needs: "yarn.lock", command: "yarn test" },
+      { needs: "package-lock.json", command: "npm test" },
+      { needs: "package.json", command: "npm test" },
+      { needs: "Cargo.toml", command: "cargo test" },
+      { needs: "go.mod", command: "go test ./..." },
+      { needs: "pyproject.toml", command: "pytest" },
+      { needs: "pytest.ini", command: "pytest" },
+      { needs: "Makefile", command: "make test" }
+    ];
+    MOST_OUTPUT = 6e3;
+  }
+});
+
 // server/coding/index.ts
 import { randomUUID as randomUUID7 } from "node:crypto";
 function recentJobs() {
@@ -3040,7 +3101,8 @@ function startJob(task, folder, hands2, { straightToOpus = false } = {}) {
     task,
     folder,
     startedAt: Date.now(),
-    attempts: []
+    attempts: [],
+    tested: []
   };
   jobs.set(job.id, job);
   void climb(job, hands2, straightToOpus);
@@ -3051,16 +3113,20 @@ async function climb(job, hands2, straightToOpus) {
     if (!straightToOpus) {
       const first = await runWithGemini(job.task, job.folder, hands2);
       job.attempts.push(first);
-      if (first.ok) return settle(job, true);
+      if (first.ok && await passes(job, hands2)) return settle(job, true);
       if (!opusAvailable()) return settle(job, false);
     }
-    const second = await runWithOpus(escalated(job), job.folder);
-    job.attempts.push(second);
-    if (second.cost) {
-      void recordOutside("claude-opus-5 (coding)", second.cost).catch(() => {
-      });
+    while (job.attempts.length < MOST_ATTEMPTS) {
+      const next = await runWithOpus(nextBrief(job), job.folder);
+      job.attempts.push(next);
+      if (next.cost) {
+        void recordOutside("claude-opus-5 (coding)", next.cost).catch(() => {
+        });
+      }
+      if (!next.ok) return settle(job, false);
+      if (await passes(job, hands2)) return settle(job, true);
     }
-    settle(job, second.ok);
+    settle(job, false);
   } catch (error) {
     job.attempts.push({
       by: "the ladder itself",
@@ -3072,6 +3138,24 @@ async function climb(job, hands2, straightToOpus) {
     });
     settle(job, false);
   }
+}
+async function passes(job, hands2) {
+  const command = await findSuite(job.folder, hands2).catch(() => null);
+  if (!command) {
+    job.noSuite = true;
+    return true;
+  }
+  const run = await runSuite(job.folder, command, (cmd, folder) => shellFor(folder, cmd));
+  job.tested.push(run);
+  return run.passed;
+}
+function useShell(run) {
+  shellFor = run;
+}
+function nextBrief(job) {
+  const red = job.tested[job.tested.length - 1];
+  if (red && !red.passed) return failureBrief(job.task, red);
+  return escalated(job);
 }
 function escalated(job) {
   const before = job.attempts[job.attempts.length - 1];
@@ -3088,14 +3172,17 @@ function settle(job, ok) {
   job.finishedAt = Date.now();
   job.ok = ok;
 }
-var jobs;
+var jobs, MOST_ATTEMPTS, shellFor;
 var init_coding = __esm({
   "server/coding/index.ts"() {
     init_budget();
     init_gemini2();
     init_opus();
+    init_tests();
     init_opus();
     jobs = /* @__PURE__ */ new Map();
+    MOST_ATTEMPTS = 3;
+    shellFor = async () => ({ ok: false, detail: "no way to run anything was given to the ladder" });
   }
 });
 
@@ -3110,6 +3197,7 @@ var init_coding2 = __esm({
   "server/tools/coding.ts"() {
     init_coding();
     init_budget();
+    init_tests();
     init_config();
     NOT_LOCAL = "Coding runs on the machine she is installed on, and this one is in a data centre with none of the user\u2019s code on it. Say so plainly: the local install is the one that can do this.";
     codingTools = [
@@ -3150,9 +3238,43 @@ var init_coding2 = __esm({
             const done = await carryOut(action, path3, { body, replace: true });
             return done.detail;
           };
+          useShell(async (where, command) => {
+            const done = await carryOut("shell", command, { body: where });
+            return { ok: done.ok, detail: done.detail };
+          });
           const straightToOpus = args.hard === true && Boolean(opusAvailable());
           const job = startJob(String(args.task), folder, hands2, { straightToOpus });
           return `Started. Job ${job.id}, working in ${folder}, ${straightToOpus ? "straight to the strongest model" : "beginning with the cheaper model and stepping up if it needs to"}. It takes minutes, not seconds \u2014 tell the user it is running and what it is doing, then get on with the conversation. Check on it with check_code when they ask, or when enough time has passed that they would expect news.`;
+        }
+      },
+      {
+        name: "run_tests",
+        description: "Run a project\u2019s own test suite and report what it said. Works out which suite it is from what is in the folder. Use it after a coding job when the user asks whether it works, or on its own to find out whether something is currently broken.",
+        parameters: {
+          folder: { type: "string", description: "The project folder" }
+        },
+        required: ["folder"],
+        category: "machine",
+        run: async (args) => {
+          if (config.deployed) return NOT_LOCAL;
+          const folder = String(args.folder);
+          const { carryOut } = await import("../../bridge/bridge.mjs");
+          const hands2 = async (action, path3, body) => (await carryOut(action, path3, { body })).detail;
+          const listing = await hands2("ls", folder);
+          if (/outside the folders/.test(listing)) return `I cannot look there. ${listing}`;
+          const command = await findSuite(folder, hands2);
+          if (!command) {
+            return `There is no test suite in ${folder} that I recognise \u2014 no package.json, Cargo.toml, go.mod, pyproject.toml or Makefile. Say so plainly: nothing has checked this code.`;
+          }
+          const run = await runSuite(folder, command, async (cmd, where) => {
+            const done = await carryOut("shell", cmd, { body: where });
+            return { ok: done.ok, detail: done.detail };
+          });
+          return run.passed ? `\`${run.command}\` passed, in ${run.seconds} seconds.
+
+${run.output}` : `\`${run.command}\` failed after ${run.seconds} seconds:
+
+${run.output}`;
         }
       },
       {
@@ -3182,11 +3304,17 @@ var init_coding2 = __esm({
             return `${attempt.by} ${what} after ${attempt.seconds}s${cost}: ${attempt.summary}`;
           }).join("\n\n");
           const spent = wanted.attempts.reduce((sum, one) => sum + (one.cost ?? 0), 0);
+          const last = wanted.tested[wanted.tested.length - 1];
+          const verdict = wanted.noSuite ? "There are no tests in that folder, so nothing has checked this. Say that plainly \u2014 it is written but unproven, and the user should know before they rely on it." : last?.passed ? `Then \`${last.command}\` passed.` : last ? `\`${last.command}\` is still failing:
+
+${last.output}` : "The tests were never reached.";
           return `Job ${wanted.id} ${wanted.ok ? "is done" : "did not work out"}, in ${wanted.folder}${spent > 0 ? ` \u2014 $${spent.toFixed(2)} on the card` : ""}.
 
 ${story}
 
-${wanted.ok ? "The files are changed on disk. If the user wants it built or tested, that is a separate thing you run yourself." : "Some files may have been changed before it stopped, so do not tell them the folder is untouched."}`;
+${verdict}
+
+${wanted.ok ? "The files are changed on disk." : "Some files may have been changed before it stopped, so do not tell them the folder is untouched."}`;
         }
       }
     ];
@@ -5865,6 +5993,7 @@ var init_tools = __esm({
       // Offering it without either means she promises and then explains herself.
       write_code: "coding",
       check_code: "coding",
+      run_tests: "coding",
       lock_laptop: "room",
       notify_phone: "phone",
       set_lights: "lights",

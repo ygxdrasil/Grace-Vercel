@@ -2,6 +2,7 @@ import {randomUUID} from 'node:crypto';
 import {recordOutside} from '../budget';
 import {runWithGemini} from './gemini';
 import {opusAvailable, runWithOpus} from './opus';
+import {failureBrief, findSuite, runSuite, type TestRun} from './tests';
 import type {Attempt} from './types';
 
 export {opusAvailable} from './opus';
@@ -42,8 +43,18 @@ export interface Job {
   startedAt: number;
   finishedAt?: number;
   ok?: boolean;
-  /** Every go that was had at it, in order. Usually one; sometimes two. */
+  /** Every go that was had at it, in order. Usually one; sometimes three. */
   attempts: Attempt[];
+  /** Every run of the project's own tests, in order. */
+  tested: TestRun[];
+  /**
+   * Set when the folder has no suite to run.
+   *
+   * Told apart from "not tested yet" on purpose. "I could not find any tests"
+   * and "the tests passed" must never look the same to somebody deciding
+   * whether to trust what was written.
+   */
+  noSuite?: boolean;
 }
 
 /*
@@ -81,18 +92,30 @@ export function startJob(
     folder,
     startedAt: Date.now(),
     attempts: [],
+    tested: [],
   };
   jobs.set(job.id, job);
   void climb(job, hands, straightToOpus);
   return job;
 }
 
+/**
+ * Attempts allowed before she stops and says so.
+ *
+ * Three: the cheap one, the strong one, and one more at the strong one for
+ * whatever the tests turned up. A loop that keeps going while a suite stays
+ * red is a loop that spends all night and all the money on a failure it was
+ * never going to fix — and the third attempt is where the useful information
+ * runs out, because by then it has already seen the failure once.
+ */
+const MOST_ATTEMPTS = 3;
+
 async function climb(job: Job, hands: CodingHands, straightToOpus: boolean): Promise<void> {
   try {
     if (!straightToOpus) {
       const first = await runWithGemini(job.task, job.folder, hands);
       job.attempts.push(first);
-      if (first.ok) return settle(job, true);
+      if (first.ok && (await passes(job, hands))) return settle(job, true);
 
       /*
        * Nowhere to escalate to.
@@ -105,13 +128,21 @@ async function climb(job: Job, hands: CodingHands, straightToOpus: boolean): Pro
       if (!opusAvailable()) return settle(job, false);
     }
 
-    const second = await runWithOpus(escalated(job), job.folder);
-    job.attempts.push(second);
-    if (second.cost) {
-      // Anthropic's bill, not Google's credit, so it goes to the card side.
-      void recordOutside('claude-opus-5 (coding)', second.cost).catch(() => {});
+    while (job.attempts.length < MOST_ATTEMPTS) {
+      const next = await runWithOpus(nextBrief(job), job.folder);
+      job.attempts.push(next);
+      if (next.cost) {
+        // Anthropic's bill, not Google's credit, so it goes to the card side.
+        void recordOutside('claude-opus-5 (coding)', next.cost).catch(() => {});
+      }
+
+      if (!next.ok) return settle(job, false);
+      if (await passes(job, hands)) return settle(job, true);
     }
-    settle(job, second.ok);
+
+    // Out of attempts with the suite still red. That is a failure, and saying
+    // otherwise because the last edit "succeeded" is how broken code ships.
+    settle(job, false);
   } catch (error) {
     job.attempts.push({
       by: 'the ladder itself',
@@ -123,6 +154,55 @@ async function climb(job: Job, hands: CodingHands, straightToOpus: boolean): Pro
     });
     settle(job, false);
   }
+}
+
+/**
+ * Runs the project's own tests, and says whether to stop here.
+ *
+ * Code that has not been run is a draft, so an attempt that "succeeded" has
+ * only got as far as changing files. The suite is what turns that into an
+ * answer — and a folder with no suite gets an honest "there was nothing to
+ * run" rather than a green tick it did not earn.
+ */
+async function passes(job: Job, hands: CodingHands): Promise<boolean> {
+  const command = await findSuite(job.folder, hands).catch(() => null);
+  if (!command) {
+    job.noSuite = true;
+    return true;
+  }
+
+  const run = await runSuite(job.folder, command, (cmd, folder) => shellFor(folder, cmd));
+  job.tested.push(run);
+  return run.passed;
+}
+
+/**
+ * The one place a command is actually run, and only ever a literal one.
+ *
+ * Set by the caller, because the ladder has no business holding a shell of its
+ * own: everything else it does goes through the same hands as the rest of her,
+ * and this should too.
+ */
+let shellFor: (folder: string, command: string) => Promise<{ok: boolean; detail: string}> =
+  async () => ({ok: false, detail: 'no way to run anything was given to the ladder'});
+
+export function useShell(
+  run: (folder: string, command: string) => Promise<{ok: boolean; detail: string}>,
+): void {
+  shellFor = run;
+}
+
+/**
+ * What the next attempt is told.
+ *
+ * Failing tests take precedence over everything else, because they are the
+ * most specific thing anyone knows: a suite naming the line it broke on is
+ * worth more than any description of the original job.
+ */
+function nextBrief(job: Job): string {
+  const red = job.tested[job.tested.length - 1];
+  if (red && !red.passed) return failureBrief(job.task, red);
+  return escalated(job);
 }
 
 /**

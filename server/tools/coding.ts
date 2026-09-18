@@ -1,5 +1,6 @@
-import {jobById, opusAvailable, recentJobs, startJob} from '../coding/index';
+import {jobById, opusAvailable, recentJobs, startJob, useShell} from '../coding/index';
 import {requireBudget} from '../budget';
+import {findSuite, runSuite} from '../coding/tests';
 import {config} from '../config';
 import type {Tool} from './types';
 
@@ -118,6 +119,20 @@ export const codingTools: Tool[] = [
         return done.detail;
       };
 
+      /*
+       * Running the tests, which is the ladder's job and not the model's.
+       *
+       * The coding models still get no shell. This is her, between attempts,
+       * running one of a fixed list of literal commands chosen by which files
+       * exist — never a string read out of one. Handed in rather than held by
+       * the ladder, so everything she does on that machine still goes through
+       * the same single implementation of the boundary.
+       */
+      useShell(async (where, command) => {
+        const done = await carryOut('shell', command, {body: where});
+        return {ok: done.ok, detail: done.detail};
+      });
+
       const straightToOpus = args.hard === true && Boolean(opusAvailable());
       const job = startJob(String(args.task), folder, hands, {straightToOpus});
 
@@ -129,6 +144,48 @@ export const codingTools: Tool[] = [
         `check_code when they ask, or when enough time has passed that they ` +
         `would expect news.`
       );
+    },
+  },
+  {
+    name: 'run_tests',
+    description:
+      'Run a project’s own test suite and report what it said. Works out ' +
+      'which suite it is from what is in the folder. Use it after a coding ' +
+      'job when the user asks whether it works, or on its own to find out ' +
+      'whether something is currently broken.',
+    parameters: {
+      folder: {type: 'string', description: 'The project folder'},
+    },
+    required: ['folder'],
+    category: 'machine',
+    run: async (args) => {
+      if (config.deployed) return NOT_LOCAL;
+
+      const folder = String(args.folder);
+      const {carryOut} = await import('../../bridge/bridge.mjs');
+      const hands = async (action: string, path: string, body?: string) =>
+        (await carryOut(action, path, {body})).detail;
+
+      const listing = await hands('ls', folder);
+      if (/outside the folders/.test(listing)) return `I cannot look there. ${listing}`;
+
+      const command = await findSuite(folder, hands);
+      if (!command) {
+        return (
+          `There is no test suite in ${folder} that I recognise — no ` +
+          `package.json, Cargo.toml, go.mod, pyproject.toml or Makefile. Say ` +
+          `so plainly: nothing has checked this code.`
+        );
+      }
+
+      const run = await runSuite(folder, command, async (cmd, where) => {
+        const done = await carryOut('shell', cmd, {body: where});
+        return {ok: done.ok, detail: done.detail};
+      });
+
+      return run.passed
+        ? `\`${run.command}\` passed, in ${run.seconds} seconds.\n\n${run.output}`
+        : `\`${run.command}\` failed after ${run.seconds} seconds:\n\n${run.output}`;
     },
   },
   {
@@ -182,13 +239,34 @@ export const codingTools: Tool[] = [
 
       const spent = wanted.attempts.reduce((sum, one) => sum + (one.cost ?? 0), 0);
 
+      /*
+       * The tests, and the difference between three outcomes that must never
+       * be allowed to look alike.
+       *
+       * Passed is a fact worth stating. Failed is the whole answer. And a
+       * folder with no suite at all has earned no confidence whatsoever — code
+       * that has not been run is a draft, and reporting that as done, with no
+       * mention that nothing checked it, is the single most misleading thing
+       * this tool could say.
+       */
+      const last = wanted.tested[wanted.tested.length - 1];
+      const verdict = wanted.noSuite
+        ? 'There are no tests in that folder, so nothing has checked this. Say that ' +
+          'plainly — it is written but unproven, and the user should know before ' +
+          'they rely on it.'
+        : last?.passed
+          ? `Then \`${last.command}\` passed.`
+          : last
+            ? `\`${last.command}\` is still failing:\n\n${last.output}`
+            : 'The tests were never reached.';
+
       return (
         `Job ${wanted.id} ${wanted.ok ? 'is done' : 'did not work out'}, in ` +
         `${wanted.folder}${spent > 0 ? ` — $${spent.toFixed(2)} on the card` : ''}.\n\n` +
-        `${story}\n\n` +
+        `${story}\n\n${verdict}\n\n` +
         `${
           wanted.ok
-            ? 'The files are changed on disk. If the user wants it built or tested, that is a separate thing you run yourself.'
+            ? 'The files are changed on disk.'
             : 'Some files may have been changed before it stopped, so do not tell them the folder is untouched.'
         }`
       );
