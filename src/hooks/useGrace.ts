@@ -448,11 +448,55 @@ export function useGrace() {
 
   const [transcribing, setTranscribing] = useState(false);
   const [misheard, setMisheard] = useState<string | null>(null);
-  const [deviceId, setDeviceId] = useState<string | undefined>(undefined);
+  /**
+   * Which microphone she listens through, remembered.
+   *
+   * It was not, which made the picker a per-session novelty: choose the good
+   * microphone, reload, and she is back on whichever one the system prefers —
+   * usually a laptop's own, pointing at the keyboard. The same fault micOn had,
+   * and the same cost: a setting that resets is a setting nobody trusts.
+   *
+   * Read straight out of storage rather than in an effect, so the initial
+   * `undefined` is never written over a saved choice on the way past.
+   */
+  const [deviceId, setDeviceId] = useState<string | undefined>(() => {
+    try {
+      return localStorage.getItem('grace-mic-device') || undefined;
+    } catch {
+      return undefined;
+    }
+  });
+  useEffect(() => {
+    try {
+      if (deviceId) localStorage.setItem('grace-mic-device', deviceId);
+      else localStorage.removeItem('grace-mic-device');
+    } catch {
+      /* A browser refusing storage is not a reason to refuse the feature. */
+    }
+  }, [deviceId]);
+
+  /**
+   * And forgotten when it is genuinely gone.
+   *
+   * A remembered device can be unplugged, and one of them unplugs itself for a
+   * living: a game controller's microphone is on this machine only while the
+   * controller is paired to it. The mic layer falls back to the default and
+   * says it did; this is where the stale preference is dropped, so she does not
+   * spend every start reaching for something that is not there.
+   */
+  const forgetDevice = useCallback(() => setDeviceId(undefined), []);
 
   const recorder = useRecorder({
     deviceId,
     onCaptured: (audio) => void handleRecordingRef.current(audio),
+    onDeviceGone: (usedInstead) => {
+      forgetDevice();
+      setMisheard(
+        `The microphone you picked is not on this machine any more, so I am ` +
+          `listening through ${usedInstead}. If that was a controller, it is ` +
+          `probably paired to something else.`,
+      );
+    },
   });
 
   /**

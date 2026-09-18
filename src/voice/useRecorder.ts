@@ -53,6 +53,14 @@ interface RecorderOptions {
   onCaptured: (audio: EncodedAudio) => void;
   /** Which microphone to use. Undefined means whichever the system prefers. */
   deviceId?: string;
+  /**
+   * Called when the chosen microphone was not there and another was used.
+   *
+   * So the stale preference can be dropped rather than retried for ever. The
+   * case this exists for is a game controller, whose microphone leaves the
+   * machine the moment it is picked up and used on a console.
+   */
+  onDeviceGone?: (usedInstead: string) => void;
 }
 
 /**
@@ -64,7 +72,7 @@ interface RecorderOptions {
  * difference between "she can't hear me" and knowing whether the microphone is
  * picking up sound in the first place.
  */
-export function useRecorder({onCaptured, deviceId}: RecorderOptions) {
+export function useRecorder({onCaptured, deviceId, onDeviceGone}: RecorderOptions) {
   const [state, setState] = useState<RecorderState>('idle');
   const [level, setLevel] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -188,6 +196,8 @@ export function useRecorder({onCaptured, deviceId}: RecorderOptions) {
 
     leaseRef.current = lease;
     const {stream} = lease;
+
+    if (lease.substituted) onDeviceGone?.(lease.label);
 
     // A track that arrives already muted or ended is the classic silent
     // failure: permission was granted, but nothing is coming through. Chrome

@@ -12,6 +12,14 @@
 export interface MicLease {
   stream: MediaStream;
   release: () => void;
+  /**
+   * True when the device that was asked for was not there, and another was
+   * opened instead. The caller forgets the saved choice rather than carrying a
+   * preference for a microphone that no longer exists.
+   */
+  substituted: boolean;
+  /** What actually opened, so the panel can say rather than imply. */
+  label: string;
 }
 
 export interface MicDevice {
@@ -19,8 +27,12 @@ export interface MicDevice {
   label: string;
 }
 
-let current: {stream: MediaStream; deviceId: string | undefined; leases: number} | null =
-  null;
+let current: {
+  stream: MediaStream;
+  deviceId: string | undefined;
+  leases: number;
+  substituted: boolean;
+} | null = null;
 
 /**
  * Things that hold the microphone by other means and must let go first.
@@ -148,6 +160,7 @@ export async function acquire(deviceId?: string): Promise<MicLease> {
 
   if (!current) {
     let stream: MediaStream;
+    let substituted = false;
     try {
       // getUserMedia is documented as able to neither resolve nor reject: if
       // the permission prompt is dismissed rather than answered, it hangs for
@@ -171,9 +184,37 @@ export async function acquire(deviceId?: string): Promise<MicLease> {
         ),
       ]);
     } catch (cause) {
-      throw cause instanceof MicError ? cause : explain(cause as Error);
+      /*
+       * The chosen microphone is not here any more.
+       *
+       * A remembered device is a device that can be unplugged, and one of them
+       * unplugs itself for a living: a game controller's microphone is on this
+       * machine only while the controller is paired to it, and is simply gone
+       * the moment it is picked up and used on a console. So a missing device
+       * is not a failure, it is a fact — she falls back to whatever the system
+       * would have used and says which, rather than going deaf until somebody
+       * visits a settings panel to unpick a choice they made last week.
+       *
+       * Only for a *named* device, and only for the errors that mean absence.
+       * A blocked microphone must still be reported as blocked: retrying that
+       * without the device id would fail identically and bury the real reason.
+       */
+      const missing =
+        cause instanceof Error &&
+        ['NotFoundError', 'OverconstrainedError'].includes(cause.name);
+
+      if (!deviceId || !missing) {
+        throw cause instanceof MicError ? cause : explain(cause as Error);
+      }
+
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(constraintsFor(undefined));
+        substituted = true;
+      } catch (second) {
+        throw second instanceof MicError ? second : explain(second as Error);
+      }
     }
-    current = {stream, deviceId, leases: 0};
+    current = {stream, deviceId, leases: 0, substituted};
   }
 
   const open = current;
@@ -182,6 +223,8 @@ export async function acquire(deviceId?: string): Promise<MicLease> {
 
   return {
     stream: open.stream,
+    substituted: open.substituted,
+    label: open.stream.getAudioTracks()[0]?.label ?? 'an unnamed microphone',
     release: () => {
       if (released) return;
       released = true;
