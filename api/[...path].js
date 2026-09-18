@@ -5581,6 +5581,13 @@ async function takeTurn({
   if (!isConfigured()) {
     return { reply: "", message: null, error: NO_KEY_MESSAGE, acted, deliberation };
   }
+  const timings = [];
+  let mark = startedAt;
+  const lap = (what) => {
+    const now = Date.now();
+    timings.push([what, now - mark]);
+    mark = now;
+  };
   const [, , { system, have, turns }] = await Promise.all([
     record2("user", text, via),
     // The conversation is named after the first thing said in it, and moves
@@ -5591,6 +5598,7 @@ async function takeTurn({
     }),
     briefFor(via)
   ]);
+  lap("getting ready");
   turns.push({ role: "user", text });
   let reply = "";
   let grounded = false;
@@ -5649,7 +5657,10 @@ async function takeTurn({
       // entire inbox on screen no matter how carefully the tool layer worded
       // its summary. It is kept here instead.
       onToolCall: async (name, args) => {
+        const began = Date.now();
         const outcome2 = await runTool({ name, args });
+        timings.push([name, Date.now() - began]);
+        mark = Date.now();
         shown.set(name, outcome2.summary);
         return outcome2.result;
       },
@@ -5666,16 +5677,18 @@ async function takeTurn({
         hooks.onActed?.(name, summary);
       }
     })) {
+      if (reply === "") lap("her first word");
       reply += delta;
       hooks.onDelta?.(delta);
     }
+    lap("the rest of the answer");
   } catch (error) {
     const detail = error.message ?? "unknown error";
     console.error("[grace] generation failed:", detail);
-    const message = reply.trim() ? await record2("grace", reply, via) : null;
+    const message2 = reply.trim() ? await record2("grace", reply, via) : null;
     return {
       reply,
-      message,
+      message: message2,
       error: `I couldn't finish that thought \u2014 ${detail}`,
       acted,
       deliberation
@@ -5690,13 +5703,25 @@ async function takeTurn({
       deliberation
     };
   }
+  const message = await record2("grace", reply, via);
+  lap("writing it down");
+  report2(timings, startedAt, deliberation);
   return {
     reply,
-    message: await record2("grace", reply, via),
+    message,
     error: null,
     acted,
     deliberation
   };
+}
+function report2(timings, startedAt, deliberation) {
+  if (config.deployed || timings.length === 0) return;
+  const total = Date.now() - startedAt;
+  const worst = timings.reduce((a, b) => b[1] > a[1] ? b : a);
+  const shown = timings.filter(([, ms]) => ms >= 50).map(([what, ms]) => `${what} ${(ms / 1e3).toFixed(1)}s`).join(", ");
+  console.log(
+    `[grace] ${(total / 1e3).toFixed(1)}s (${deliberation.effort}) \u2014 ${shown || "all of it under a tenth of a second"}${worst[1] > total * 0.4 ? ` \u2014 mostly ${worst[0]}` : ""}`
+  );
 }
 
 // server/greeting.ts
@@ -6047,7 +6072,7 @@ async function research(topic) {
   if (usable.length === 0) {
     throw new Error("the web was unreachable for all of it");
   }
-  const report2 = await getProvider().complete({
+  const report3 = await getProvider().complete({
     system: "You write up research for one person who asked a question and wants an answer, not a literature review. Lead with what they should conclude, then the reasoning, then anything that would change the conclusion. Plain prose in short paragraphs \u2014 no markdown headings, no bullet salad. Say what is uncertain rather than smoothing it over. Where the findings disagree, say so and say which is better supported.",
     turns: [
       {
@@ -6062,11 +6087,11 @@ ${one.found}`).join("\n\n")
     maxOutputTokens: 1800
   });
   const title = `Research \u2014 ${asked.slice(0, 60)}`;
-  await addFile(title, report2).catch(() => {
+  await addFile(title, report3).catch(() => {
   });
   await noteDeed("acted", `Researched ${asked.slice(0, 50)}`).catch(() => {
   });
-  return { title, report: report2, strands: usable.map((one) => one.strand) };
+  return { title, report: report3, strands: usable.map((one) => one.strand) };
 }
 
 // server/relay.ts
@@ -7035,7 +7060,7 @@ function createApi() {
   api.post(
     "/web-check",
     guard(async (_req, res) => {
-      const report2 = { model: config.model };
+      const report3 = { model: config.model };
       try {
         const answer = await getProvider().complete({
           system: "Answer in one short sentence.",
@@ -7043,11 +7068,11 @@ function createApi() {
           search: true,
           temperature: 0
         });
-        report2.grounding = "ok";
-        report2.groundedAnswer = answer.slice(0, 300);
+        report3.grounding = "ok";
+        report3.groundedAnswer = answer.slice(0, 300);
       } catch (error) {
-        report2.grounding = "failed";
-        report2.groundingError = error.message.slice(0, 500);
+        report3.grounding = "failed";
+        report3.groundingError = error.message.slice(0, 500);
       }
       const called = [];
       try {
@@ -7063,15 +7088,15 @@ function createApi() {
         })) {
           reply += delta;
         }
-        report2.toolsOffered = declarations().map((tool) => tool.name);
-        report2.toolsCalled = called;
-        report2.reachedForTheWeb = called.includes("search_web");
-        report2.reply = reply.slice(0, 300);
+        report3.toolsOffered = declarations().map((tool) => tool.name);
+        report3.toolsCalled = called;
+        report3.reachedForTheWeb = called.includes("search_web");
+        report3.reply = reply.slice(0, 300);
       } catch (error) {
-        report2.toolCalling = "failed";
-        report2.toolError = error.message.slice(0, 500);
+        report3.toolCalling = "failed";
+        report3.toolError = error.message.slice(0, 500);
       }
-      res.json(report2);
+      res.json(report3);
     })
   );
   api.post(

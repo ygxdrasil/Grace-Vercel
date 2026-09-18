@@ -144,6 +144,26 @@ export async function takeTurn({
    * any other. Waiting for them in sequence bought nothing at all; the cost was
    * simply the sum rather than the slowest.
    */
+  /*
+   * Where a turn actually goes, when she is running on your own machine.
+   *
+   * "She is slow" is four separate faults wearing one coat: the preparation
+   * before the model is asked anything, the wait for its first word, the tools
+   * she reaches for in the middle, and everything after the last word. They
+   * have nothing in common and no shared fix, and from the outside they look
+   * identical. Deployed, the timings are in the platform's logs; running on a
+   * laptop there is no such place, so she prints them to the terminal she was
+   * started in — and only there, since on the deployed side this would be a
+   * line per turn that nobody ever reads.
+   */
+  const timings: [string, number][] = [];
+  let mark = startedAt;
+  const lap = (what: string) => {
+    const now = Date.now();
+    timings.push([what, now - mark]);
+    mark = now;
+  };
+
   const [, , {system, have, turns}] = await Promise.all([
     record('user', text, via),
     // The conversation is named after the first thing said in it, and moves
@@ -154,6 +174,8 @@ export async function takeTurn({
     }),
     briefFor(via),
   ]);
+
+  lap('getting ready');
 
   // The turn just recorded is not in `turns`, which was read alongside it.
   turns.push({role: 'user', text});
@@ -223,7 +245,13 @@ export async function takeTurn({
       // entire inbox on screen no matter how carefully the tool layer worded
       // its summary. It is kept here instead.
       onToolCall: async (name, args) => {
+        // Timed one at a time. A turn that reaches for the web and then the
+        // diary is slow because of whichever of them was slow, and a single
+        // "tools" figure cannot say which.
+        const began = Date.now();
         const outcome = await runTool({name, args});
+        timings.push([name, Date.now() - began]);
+        mark = Date.now();
         shown.set(name, outcome.summary);
         return outcome.result;
       },
@@ -242,9 +270,13 @@ export async function takeTurn({
         hooks.onActed?.(name, summary);
       },
     })) {
+      // The one number a person actually feels: how long they sat looking at
+      // nothing. Everything after the first word arrives while they read.
+      if (reply === '') lap('her first word');
       reply += delta;
       hooks.onDelta?.(delta);
     }
+    lap('the rest of the answer');
   } catch (error) {
     const detail = (error as Error).message ?? 'unknown error';
     console.error('[grace] generation failed:', detail);
@@ -270,11 +302,48 @@ export async function takeTurn({
     };
   }
 
+  const message = await record('grace', reply, via);
+  lap('writing it down');
+  report(timings, startedAt, deliberation);
+
   return {
     reply,
-    message: await record('grace', reply, via),
+    message,
     error: null,
     acted,
     deliberation,
   };
+}
+
+/**
+ * The turn, as one line, in the terminal she is running in.
+ *
+ * Only when she is running on someone's own machine. Deployed there is a
+ * platform log for this and one more line per turn in it helps nobody; here
+ * the terminal is already open, already being watched, and is the only place
+ * a person can see anything at all.
+ *
+ * The slowest step is named at the end rather than left to be worked out from
+ * the numbers, because the whole point is to answer "slow where?" at a glance
+ * — and because whoever is reading it is, by definition, already impatient.
+ */
+function report(
+  timings: [string, number][],
+  startedAt: number,
+  deliberation: {effort: string; think: number},
+): void {
+  if (config.deployed || timings.length === 0) return;
+
+  const total = Date.now() - startedAt;
+  const worst = timings.reduce((a, b) => (b[1] > a[1] ? b : a));
+  const shown = timings
+    .filter(([, ms]) => ms >= 50)
+    .map(([what, ms]) => `${what} ${(ms / 1000).toFixed(1)}s`)
+    .join(', ');
+
+  console.log(
+    `[grace] ${(total / 1000).toFixed(1)}s (${deliberation.effort}) — ` +
+      `${shown || 'all of it under a tenth of a second'}` +
+      `${worst[1] > total * 0.4 ? ` — mostly ${worst[0]}` : ''}`,
+  );
 }
