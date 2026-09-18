@@ -2572,11 +2572,21 @@ try {
     room: false,
     phone: false,
     lights: false,
+    coding: false,
   };
   const offeredBare = declarations(unplugged).map((tool) => tool.name);
   const offeredAll = declarations().map((tool) => tool.name);
 
-  for (const gated of ['check_mail', 'check_github', 'pause_workflow', 'lock_laptop', 'set_lights']) {
+  for (const gated of [
+    'check_mail',
+    'check_github',
+    'pause_workflow',
+    'lock_laptop',
+    'set_lights',
+    // Offering to write code on a machine with no coding agent on it means
+    // promising and then explaining, on every single request, for ever.
+    'write_code',
+  ]) {
     assert.ok(offeredAll.includes(gated), `${gated} should exist at all`);
     assert.ok(!offeredBare.includes(gated), `${gated} needs a key and must not be offered`);
   }

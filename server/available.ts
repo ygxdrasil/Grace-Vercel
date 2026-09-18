@@ -1,4 +1,5 @@
 import {bridgeStatus} from './bridge';
+import {codingAvailable} from './coding';
 import {config} from './config';
 import {githubConfigured} from './github';
 import {lightsConfigured} from './lights';
@@ -53,6 +54,9 @@ export async function available(): Promise<Available> {
     room: !config.deployed || Boolean(bridge.seenAt),
     phone: phones > 0,
     lights: lightsConfigured(),
+    // Both halves: a machine of the user's to code on, and the agent that does
+    // the coding actually installed on it.
+    coding: !config.deployed && Boolean(codingAvailable()),
   };
 
   cached = {at: Date.now(), value};

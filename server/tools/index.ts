@@ -3,6 +3,7 @@ import {hold, restore, take} from '../approvals';
 import {lastUserSaid} from '../memory';
 import {noteDeed} from '../journal';
 import {askTools} from './ask';
+import {codingTools} from './coding';
 import {consoleTools} from './console';
 import {googleTools} from './google';
 import {machineTools} from './machine';
@@ -36,6 +37,7 @@ import type {Tool, ToolCall, ToolOutcome} from './types';
 const TOOLS: Tool[] = [
   ...webTools,
   ...machineTools,
+  ...codingTools,
   ...reminderTools,
   ...googleTools,
   ...playstationTools,
@@ -376,6 +378,10 @@ const NEEDS: Record<string, keyof Available> = {
   write_file: 'room',
   delete_file: 'room',
   run_command: 'room',
+  // Coding needs both a machine to code on and Claude Code installed on it.
+  // Offering it without either means she promises and then explains herself.
+  write_code: 'coding',
+  check_code: 'coding',
   lock_laptop: 'room',
   notify_phone: 'phone',
   set_lights: 'lights',
@@ -399,6 +405,8 @@ export interface Available {
   room: boolean;
   phone: boolean;
   lights: boolean;
+  /** Claude Code, on the machine she is running on. */
+  coding: boolean;
 }
 
 /**

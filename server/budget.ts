@@ -289,6 +289,28 @@ export async function recordAudio(
   await charge(model, cost);
 }
 
+/**
+ * Money spent somewhere that is not Google.
+ *
+ * The pool is Google's promotional credit and nothing else can draw on it, so
+ * a coding run billed by Anthropic must never come out of it. Doing so would
+ * overstate how much of the credit is gone and understate what has reached the
+ * card, which is precisely the wrong way round for both numbers to be wrong.
+ */
+export async function recordOutside(what: string, dollars: number): Promise<void> {
+  if (!Number.isFinite(dollars) || dollars <= 0) return;
+
+  const current = await spend();
+  cached = {
+    ...current,
+    dollars: current.dollars + dollars,
+    card: (current.card ?? 0) + dollars,
+    requests: current.requests + 1,
+    byModel: {...current.byModel, [what]: (current.byModel?.[what] ?? 0) + dollars},
+  };
+  await store.write(cached);
+}
+
 async function charge(model: string, cost: number): Promise<void> {
   const current = await spend();
   const onPool = !creditsExpired();

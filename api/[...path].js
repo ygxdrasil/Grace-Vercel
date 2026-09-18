@@ -1,16 +1,21 @@
-// server/vercel-entry.ts
-import express2 from "express";
-
-// server/api.ts
-import express from "express";
+var __defProp = Object.defineProperty;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __esm = (fn, res) => function __init() {
+  return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+};
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
 
 // server/env.ts
 import dotenv from "dotenv";
-dotenv.config({ path: ".env.local" });
-dotenv.config();
-
-// server/config.ts
-import path from "node:path";
+var init_env = __esm({
+  "server/env.ts"() {
+    dotenv.config({ path: ".env.local" });
+    dotenv.config();
+  }
+});
 
 // server/llm/vertex.ts
 function repairNewlines(pem) {
@@ -71,117 +76,129 @@ function vertexSettings() {
     credentials
   };
 }
+var init_vertex = __esm({
+  "server/llm/vertex.ts"() {
+  }
+});
 
 // server/config.ts
-var config = {
-  apiKey: process.env.GEMINI_API_KEY ?? "",
-  /**
-   * The model she thinks with.
-   *
-   * She spent her life so far on gemini-2.5-flash, which was the right choice
-   * for a free tier and is now simply a dead end: the whole 2.5 line shuts
-   * down on 20 October 2026. Staying would mean she stopped working one
-   * Tuesday morning with no warning and no error anyone could read.
-   *
-   * 3.8 Flash is the replacement, and it is not a sideways move. It is the
-   * first Flash that reasons in several steps and calls tools iteratively
-   * rather than picking one and answering — which is exactly the thing she
-   * was worst at, and exactly what the deliberation work in shared/effort.ts
-   * was built to compensate for.
-   *
-   * On introductory pricing until 31 December, at half its 2027 rate.
-   */
-  model: process.env.GRACE_MODEL ?? "gemini-3.8-flash",
-  /**
-   * The model she thinks with when the question deserves it.
-   *
-   * New. Until now every sentence went to the same model and the only dial
-   * was how long it was allowed to deliberate — which bought her more
-   * thinking, but never better thinking. A hard question got more tokens of
-   * the same reasoning.
-   *
-   * Pro costs roughly three times Flash per token and is reserved for the
-   * handful of turns a day that shared/effort.ts rates `hard`. Everything
-   * else — every command, every ordinary exchange — stays on Flash, which is
-   * what keeps the credits lasting ninety days instead of nine.
-   */
-  hardModel: process.env.GRACE_HARD_MODEL ?? "gemini-3.1-pro",
-  /**
-   * The model that listens.
-   *
-   * Still the lightest thing that can do the job, for the reason worked out
-   * when this was split off: a single spoken exchange is six or seven
-   * requests, not one, and transcription is the one of them that is
-   * transcription rather than judgement. The context hint — names and topic
-   * in play — does most of the work a heavier model was being paid for.
-   *
-   * Reversible without a deploy: set GRACE_TRANSCRIBE_MODEL to the thinking
-   * model. Do that the moment she starts getting names wrong, because that
-   * is the cost this trade is made against.
-   */
-  transcribeModel: process.env.GRACE_TRANSCRIBE_MODEL ?? "gemini-3.5-flash-lite",
-  /**
-   * The model that gives her a voice. Separate from the one that thinks.
-   *
-   * The `-preview` suffix is load-bearing and is not decoration: there is no
-   * `gemini-3.1-flash-tts`, and asking for one answers 404 — the same shape of
-   * error as a retired model, which is a miserable thing to debug. Google
-   * ships TTS on the preview channel and has done for both generations.
-   */
-  speechModel: process.env.GRACE_SPEECH_MODEL ?? "gemini-3.1-flash-tts-preview",
-  /**
-   * Which of the prebuilt voices she speaks in. Kore is composed and even,
-   * which is the brief: calm, formal, unhurried.
-   */
-  voice: process.env.GRACE_VOICE ?? "Kore",
-  /** Encrypts memory at rest, and signs login cookies. */
-  secret: process.env.GRACE_SECRET,
-  /** When set, Grace asks for this before she'll talk to anyone. */
-  password: process.env.GRACE_PASSWORD ?? "",
-  /** Where memory lives when running on local disk. */
-  dataDir: process.env.GRACE_DATA_DIR ?? path.resolve(process.cwd(), ".grace"),
-  port: Number(process.env.PORT ?? 3001),
-  /**
-   * How many recent turns are replayed to the model verbatim.
-   *
-   * Raised because the commonest complaint about her was forgetting something
-   * said a little while ago. Everything older is still reachable through
-   * search_memory, but a wider window means she does not have to think to
-   * reach for it — which is the difference between remembering and looking up.
-   */
-  verbatimTurns: 96,
-  /**
-   * Once the log passes this many turns, older ones fold into a summary.
-   *
-   * Both figures were tripled together. They were set for a model with a
-   * small window and a free tier; she now thinks on a million-token window
-   * paid for by credit, and the commonest thing still wrong with her is
-   * forgetting something said an hour ago. Ninety-six verbatim turns is most
-   * of a day's conversation held word for word. The cost is real — a few
-   * thousand more input tokens per reply, roughly twenty dollars a month at
-   * heavy use — and it buys the thing an assistant is for.
-   */
-  summarizeAfter: 160,
-  /** Set GRACE_LEARN=false to stop Grace building a profile of you. */
-  learnFromConversation: process.env.GRACE_LEARN !== "false",
-  /**
-   * Where the machine holding her voice can be reached.
-   *
-   * Empty until the outpost exists, and empty is a supported state rather
-   * than a broken one: without it she falls back to the older way of
-   * speaking — record, transcribe, think, reply — which is slower and cannot
-   * be interrupted, but works. A missing voice must degrade to a worse voice,
-   * never to silence.
-   */
-  outpost: process.env.GRACE_OUTPOST_URL ?? "",
-  /** The voice she speaks in during a live conversation. */
-  liveModel: process.env.GRACE_LIVE_MODEL ?? "gemini-3.8-live",
-  /** True on Vercel and friends, where an open instance is a public one. */
-  deployed: Boolean(process.env.VERCEL ?? process.env.GRACE_DEPLOYED)
-};
+import path from "node:path";
 function isConfigured() {
   return config.apiKey.length > 0 || vertexSettings() !== null;
 }
+var config;
+var init_config = __esm({
+  "server/config.ts"() {
+    init_env();
+    init_vertex();
+    config = {
+      apiKey: process.env.GEMINI_API_KEY ?? "",
+      /**
+       * The model she thinks with.
+       *
+       * She spent her life so far on gemini-2.5-flash, which was the right choice
+       * for a free tier and is now simply a dead end: the whole 2.5 line shuts
+       * down on 20 October 2026. Staying would mean she stopped working one
+       * Tuesday morning with no warning and no error anyone could read.
+       *
+       * 3.8 Flash is the replacement, and it is not a sideways move. It is the
+       * first Flash that reasons in several steps and calls tools iteratively
+       * rather than picking one and answering — which is exactly the thing she
+       * was worst at, and exactly what the deliberation work in shared/effort.ts
+       * was built to compensate for.
+       *
+       * On introductory pricing until 31 December, at half its 2027 rate.
+       */
+      model: process.env.GRACE_MODEL ?? "gemini-3.8-flash",
+      /**
+       * The model she thinks with when the question deserves it.
+       *
+       * New. Until now every sentence went to the same model and the only dial
+       * was how long it was allowed to deliberate — which bought her more
+       * thinking, but never better thinking. A hard question got more tokens of
+       * the same reasoning.
+       *
+       * Pro costs roughly three times Flash per token and is reserved for the
+       * handful of turns a day that shared/effort.ts rates `hard`. Everything
+       * else — every command, every ordinary exchange — stays on Flash, which is
+       * what keeps the credits lasting ninety days instead of nine.
+       */
+      hardModel: process.env.GRACE_HARD_MODEL ?? "gemini-3.1-pro",
+      /**
+       * The model that listens.
+       *
+       * Still the lightest thing that can do the job, for the reason worked out
+       * when this was split off: a single spoken exchange is six or seven
+       * requests, not one, and transcription is the one of them that is
+       * transcription rather than judgement. The context hint — names and topic
+       * in play — does most of the work a heavier model was being paid for.
+       *
+       * Reversible without a deploy: set GRACE_TRANSCRIBE_MODEL to the thinking
+       * model. Do that the moment she starts getting names wrong, because that
+       * is the cost this trade is made against.
+       */
+      transcribeModel: process.env.GRACE_TRANSCRIBE_MODEL ?? "gemini-3.5-flash-lite",
+      /**
+       * The model that gives her a voice. Separate from the one that thinks.
+       *
+       * The `-preview` suffix is load-bearing and is not decoration: there is no
+       * `gemini-3.1-flash-tts`, and asking for one answers 404 — the same shape of
+       * error as a retired model, which is a miserable thing to debug. Google
+       * ships TTS on the preview channel and has done for both generations.
+       */
+      speechModel: process.env.GRACE_SPEECH_MODEL ?? "gemini-3.1-flash-tts-preview",
+      /**
+       * Which of the prebuilt voices she speaks in. Kore is composed and even,
+       * which is the brief: calm, formal, unhurried.
+       */
+      voice: process.env.GRACE_VOICE ?? "Kore",
+      /** Encrypts memory at rest, and signs login cookies. */
+      secret: process.env.GRACE_SECRET,
+      /** When set, Grace asks for this before she'll talk to anyone. */
+      password: process.env.GRACE_PASSWORD ?? "",
+      /** Where memory lives when running on local disk. */
+      dataDir: process.env.GRACE_DATA_DIR ?? path.resolve(process.cwd(), ".grace"),
+      port: Number(process.env.PORT ?? 3001),
+      /**
+       * How many recent turns are replayed to the model verbatim.
+       *
+       * Raised because the commonest complaint about her was forgetting something
+       * said a little while ago. Everything older is still reachable through
+       * search_memory, but a wider window means she does not have to think to
+       * reach for it — which is the difference between remembering and looking up.
+       */
+      verbatimTurns: 96,
+      /**
+       * Once the log passes this many turns, older ones fold into a summary.
+       *
+       * Both figures were tripled together. They were set for a model with a
+       * small window and a free tier; she now thinks on a million-token window
+       * paid for by credit, and the commonest thing still wrong with her is
+       * forgetting something said an hour ago. Ninety-six verbatim turns is most
+       * of a day's conversation held word for word. The cost is real — a few
+       * thousand more input tokens per reply, roughly twenty dollars a month at
+       * heavy use — and it buys the thing an assistant is for.
+       */
+      summarizeAfter: 160,
+      /** Set GRACE_LEARN=false to stop Grace building a profile of you. */
+      learnFromConversation: process.env.GRACE_LEARN !== "false",
+      /**
+       * Where the machine holding her voice can be reached.
+       *
+       * Empty until the outpost exists, and empty is a supported state rather
+       * than a broken one: without it she falls back to the older way of
+       * speaking — record, transcribe, think, reply — which is slower and cannot
+       * be interrupted, but works. A missing voice must degrade to a worse voice,
+       * never to silence.
+       */
+      outpost: process.env.GRACE_OUTPOST_URL ?? "",
+      /** The voice she speaks in during a live conversation. */
+      liveModel: process.env.GRACE_LIVE_MODEL ?? "gemini-3.8-live",
+      /** True on Vercel and friends, where an open instance is a public one. */
+      deployed: Boolean(process.env.VERCEL ?? process.env.GRACE_DEPLOYED)
+    };
+  }
+});
 
 // server/crypto.ts
 import {
@@ -192,8 +209,6 @@ import {
   scryptSync,
   timingSafeEqual
 } from "node:crypto";
-var ALGORITHM = "aes-256-gcm";
-var keys = /* @__PURE__ */ new Map();
 function keyFor(secret, salt) {
   const id = `${salt}:${createHash("sha256").update(secret).digest("hex")}`;
   let derived = keys.get(id);
@@ -246,70 +261,86 @@ function matches(a, b) {
   }
   return timingSafeEqual(left, right);
 }
+var ALGORITHM, keys;
+var init_crypto = __esm({
+  "server/crypto.ts"() {
+    ALGORITHM = "aes-256-gcm";
+    keys = /* @__PURE__ */ new Map();
+  }
+});
 
 // server/store/file.ts
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path2 from "node:path";
-var FileBackend = class {
-  constructor(dir) {
-    this.dir = dir;
-    this.name = "local disk";
+var FileBackend;
+var init_file = __esm({
+  "server/store/file.ts"() {
+    FileBackend = class {
+      constructor(dir) {
+        this.dir = dir;
+        this.name = "local disk";
+      }
+      pathFor(key) {
+        return path2.join(this.dir, `${key}.json`);
+      }
+      async read(key) {
+        const file = this.pathFor(key);
+        if (!existsSync(file)) return null;
+        return readFile(file, "utf8");
+      }
+      async write(key, value) {
+        await mkdir(this.dir, { recursive: true });
+        const file = this.pathFor(key);
+        const temp = `${file}.tmp`;
+        await writeFile(temp, value, { mode: 384 });
+        await rename(temp, file);
+      }
+      async quarantine(key) {
+        const file = this.pathFor(key);
+        if (existsSync(file)) {
+          await rename(file, `${file}.unreadable-${Date.now()}`);
+        }
+      }
+    };
   }
-  pathFor(key) {
-    return path2.join(this.dir, `${key}.json`);
-  }
-  async read(key) {
-    const file = this.pathFor(key);
-    if (!existsSync(file)) return null;
-    return readFile(file, "utf8");
-  }
-  async write(key, value) {
-    await mkdir(this.dir, { recursive: true });
-    const file = this.pathFor(key);
-    const temp = `${file}.tmp`;
-    await writeFile(temp, value, { mode: 384 });
-    await rename(temp, file);
-  }
-  async quarantine(key) {
-    const file = this.pathFor(key);
-    if (existsSync(file)) {
-      await rename(file, `${file}.unreadable-${Date.now()}`);
-    }
-  }
-};
+});
 
 // server/store/redis.ts
 import { Redis } from "@upstash/redis";
-var RedisBackend = class {
-  constructor(url, token2) {
-    this.name = "Redis";
-    this.client = new Redis({ url, token: token2 });
-  }
-  keyFor(key) {
-    return `grace:${key}`;
-  }
-  async read(key) {
-    const value = await this.client.get(this.keyFor(key));
-    if (value === null || value === void 0) return null;
-    return typeof value === "string" ? value : JSON.stringify(value);
-  }
-  async write(key, value) {
-    await this.client.set(this.keyFor(key), value);
-  }
-  async quarantine(key, value) {
-    await this.client.set(`${this.keyFor(key)}:unreadable:${Date.now()}`, value);
-    await this.client.del(this.keyFor(key));
-  }
-};
 function redisCredentials() {
   const url = process.env.KV_REST_API_URL ?? process.env.UPSTASH_REDIS_REST_URL;
   const token2 = process.env.KV_REST_API_TOKEN ?? process.env.UPSTASH_REDIS_REST_TOKEN;
   return url && token2 ? { url, token: token2 } : null;
 }
+var RedisBackend;
+var init_redis = __esm({
+  "server/store/redis.ts"() {
+    RedisBackend = class {
+      constructor(url, token2) {
+        this.name = "Redis";
+        this.client = new Redis({ url, token: token2 });
+      }
+      keyFor(key) {
+        return `grace:${key}`;
+      }
+      async read(key) {
+        const value = await this.client.get(this.keyFor(key));
+        if (value === null || value === void 0) return null;
+        return typeof value === "string" ? value : JSON.stringify(value);
+      }
+      async write(key, value) {
+        await this.client.set(this.keyFor(key), value);
+      }
+      async quarantine(key, value) {
+        await this.client.set(`${this.keyFor(key)}:unreadable:${Date.now()}`, value);
+        await this.client.del(this.keyFor(key));
+      }
+    };
+  }
+});
 
 // server/store/index.ts
-var backend = null;
 function getBackend() {
   if (!backend) {
     const credentials = redisCredentials();
@@ -317,110 +348,99 @@ function getBackend() {
   }
   return backend;
 }
-var Document = class {
-  constructor(key, fallback2) {
-    this.key = key;
-    this.fallback = fallback2;
-    /** Reused across writes so the scrypt key stays derived. */
-    this.salt = null;
+var backend, Document, queues;
+var init_store = __esm({
+  "server/store/index.ts"() {
+    init_config();
+    init_crypto();
+    init_file();
+    init_redis();
+    backend = null;
+    Document = class {
+      constructor(key, fallback2) {
+        this.key = key;
+        this.fallback = fallback2;
+        /** Reused across writes so the scrypt key stays derived. */
+        this.salt = null;
+      }
+      async read() {
+        const raw = await getBackend().read(this.key);
+        if (raw === null) return this.fallback();
+        try {
+          const { plaintext, salt } = unseal(raw, config.secret);
+          if (salt) this.salt = salt;
+          return JSON.parse(plaintext);
+        } catch (error) {
+          await getBackend().quarantine(this.key, raw);
+          console.error(
+            `[grace] could not read "${this.key}" (${error.message}). Set it aside and started fresh.`
+          );
+          return this.fallback();
+        }
+      }
+      async write(value) {
+        if (!this.salt) this.salt = newSalt();
+        await getBackend().write(
+          this.key,
+          seal(JSON.stringify(value), config.secret, this.salt)
+        );
+      }
+      /**
+       * Read, change, write — with the three steps never interleaved.
+       *
+       * This was a plain read-modify-write, and twenty updates fired at once kept
+       * one of them. Every other change was read before it existed and overwritten
+       * after it landed. Nothing errored; the writes simply evaporated.
+       *
+       * It is not theoretical. Her voice splits a long reply into pieces and
+       * fetches the next while the current one plays, so two speech requests meter
+       * their cost concurrently and one of them is lost — she under-counts what
+       * she has spent, against a cap that exists to stop her. And the laptop
+       * bridge claims commands on a timer while she is adding them, so an
+       * instruction could be dropped between the two, which looks precisely like
+       * her saying she has done something and nothing happening.
+       *
+       * Serialised per key rather than globally: two unrelated documents have no
+       * reason to wait for each other, and holding one lock across all of them
+       * would put the whole of her behind whichever write is slowest.
+       *
+       * The queue is keyed by document *name* and shared between instances, not
+       * held on the instance. That distinction is the whole fix rather than a
+       * detail: the conversation log builds a fresh Document object on every
+       * single call, so a per-instance queue would have serialised nothing at all
+       * for the one document she writes to most. Compaction rewriting the log
+       * while a new message is being appended is exactly how a turn of a
+       * conversation would vanish.
+       *
+       * The honest limit: this covers one running copy of her. Two serverless
+       * instances updating the same document at the same instant can still
+       * collide, and closing that needs a compare-and-set in the store itself.
+       * That is a much larger change for a much rarer case — her writes are small
+       * and few, and the overwhelming majority of collisions are the ones above,
+       * which happen inside a single instance and are now impossible.
+       */
+      async update(mutate) {
+        const waitingOn = queues.get(this.key) ?? Promise.resolve();
+        const mine = waitingOn.then(async () => {
+          const next = mutate(await this.read());
+          await this.write(next);
+          return next;
+        });
+        queues.set(
+          this.key,
+          mine.then(
+            () => void 0,
+            () => void 0
+          )
+        );
+        return mine;
+      }
+    };
+    queues = /* @__PURE__ */ new Map();
   }
-  async read() {
-    const raw = await getBackend().read(this.key);
-    if (raw === null) return this.fallback();
-    try {
-      const { plaintext, salt } = unseal(raw, config.secret);
-      if (salt) this.salt = salt;
-      return JSON.parse(plaintext);
-    } catch (error) {
-      await getBackend().quarantine(this.key, raw);
-      console.error(
-        `[grace] could not read "${this.key}" (${error.message}). Set it aside and started fresh.`
-      );
-      return this.fallback();
-    }
-  }
-  async write(value) {
-    if (!this.salt) this.salt = newSalt();
-    await getBackend().write(
-      this.key,
-      seal(JSON.stringify(value), config.secret, this.salt)
-    );
-  }
-  /**
-   * Read, change, write — with the three steps never interleaved.
-   *
-   * This was a plain read-modify-write, and twenty updates fired at once kept
-   * one of them. Every other change was read before it existed and overwritten
-   * after it landed. Nothing errored; the writes simply evaporated.
-   *
-   * It is not theoretical. Her voice splits a long reply into pieces and
-   * fetches the next while the current one plays, so two speech requests meter
-   * their cost concurrently and one of them is lost — she under-counts what
-   * she has spent, against a cap that exists to stop her. And the laptop
-   * bridge claims commands on a timer while she is adding them, so an
-   * instruction could be dropped between the two, which looks precisely like
-   * her saying she has done something and nothing happening.
-   *
-   * Serialised per key rather than globally: two unrelated documents have no
-   * reason to wait for each other, and holding one lock across all of them
-   * would put the whole of her behind whichever write is slowest.
-   *
-   * The queue is keyed by document *name* and shared between instances, not
-   * held on the instance. That distinction is the whole fix rather than a
-   * detail: the conversation log builds a fresh Document object on every
-   * single call, so a per-instance queue would have serialised nothing at all
-   * for the one document she writes to most. Compaction rewriting the log
-   * while a new message is being appended is exactly how a turn of a
-   * conversation would vanish.
-   *
-   * The honest limit: this covers one running copy of her. Two serverless
-   * instances updating the same document at the same instant can still
-   * collide, and closing that needs a compare-and-set in the store itself.
-   * That is a much larger change for a much rarer case — her writes are small
-   * and few, and the overwhelming majority of collisions are the ones above,
-   * which happen inside a single instance and are now impossible.
-   */
-  async update(mutate) {
-    const waitingOn = queues.get(this.key) ?? Promise.resolve();
-    const mine = waitingOn.then(async () => {
-      const next = mutate(await this.read());
-      await this.write(next);
-      return next;
-    });
-    queues.set(
-      this.key,
-      mine.then(
-        () => void 0,
-        () => void 0
-      )
-    );
-    return mine;
-  }
-};
-var queues = /* @__PURE__ */ new Map();
+});
 
 // server/actions.ts
-var DEFAULT_POLICIES = [
-  { category: "communication", policy: "always", locked: true },
-  { category: "purchase", policy: "always", locked: true },
-  { category: "security", policy: "always" },
-  // The user's chosen line: she gets on with things she can undo, and only
-  // sending and spending stop her. Nothing here can delete, so "high-risk"
-  // covers cancelling and anything involving other people.
-  { category: "calendar", policy: "never" },
-  { category: "home", policy: "never" },
-  { category: "research", policy: "never" },
-  /*
-   * Her hands on the machine itself.
-   *
-   * "Ask when risky" is the user's own line applied literally. Reading a file,
-   * listing a folder and running something that only looks are hers to get on
-   * with. Deleting, overwriting, and any command that can destroy something
-   * stop and ask — every time, whatever else is going on.
-   */
-  { category: "machine", policy: "high-risk" }
-];
-var store = new Document("policies", () => DEFAULT_POLICIES);
 function getPolicies() {
   return store.read();
 }
@@ -455,11 +475,36 @@ async function requiresConfirmation(category, highRisk = false) {
   if (policy === "never") return false;
   return highRisk;
 }
+var DEFAULT_POLICIES, store;
+var init_actions = __esm({
+  "server/actions.ts"() {
+    init_store();
+    DEFAULT_POLICIES = [
+      { category: "communication", policy: "always", locked: true },
+      { category: "purchase", policy: "always", locked: true },
+      { category: "security", policy: "always" },
+      // The user's chosen line: she gets on with things she can undo, and only
+      // sending and spending stop her. Nothing here can delete, so "high-risk"
+      // covers cancelling and anything involving other people.
+      { category: "calendar", policy: "never" },
+      { category: "home", policy: "never" },
+      { category: "research", policy: "never" },
+      /*
+       * Her hands on the machine itself.
+       *
+       * "Ask when risky" is the user's own line applied literally. Reading a file,
+       * listing a folder and running something that only looks are hers to get on
+       * with. Deleting, overwriting, and any command that can destroy something
+       * stop and ask — every time, whatever else is going on.
+       */
+      { category: "machine", policy: "high-risk" }
+    ];
+    store = new Document("policies", () => DEFAULT_POLICIES);
+  }
+});
 
 // server/auth.ts
 import { createHmac, timingSafeEqual as timingSafeEqual2 } from "node:crypto";
-var COOKIE = "grace_session";
-var SESSION_DAYS = 30;
 function signingKey() {
   return config.secret ?? config.password;
 }
@@ -521,7 +566,6 @@ function authStatus(req) {
   if (!config.password) return "open";
   return valid(readCookie(req)) ? "ok" : "required";
 }
-var MISCONFIGURED_MESSAGE = "Grace is deployed without a password, so she is refusing to answer. Set GRACE_PASSWORD in the hosting environment and redeploy.";
 function requireAuth(req, res, next) {
   const status = authStatus(req);
   if (status === "ok" || status === "open") {
@@ -540,17 +584,19 @@ function pauseAfterFailure() {
 function checkPassword(candidate) {
   return config.password.length > 0 && matches(candidate, config.password);
 }
+var COOKIE, SESSION_DAYS, MISCONFIGURED_MESSAGE;
+var init_auth = __esm({
+  "server/auth.ts"() {
+    init_config();
+    init_crypto();
+    COOKIE = "grace_session";
+    SESSION_DAYS = 30;
+    MISCONFIGURED_MESSAGE = "Grace is deployed without a password, so she is refusing to answer. Set GRACE_PASSWORD in the hosting environment and redeploy.";
+  }
+});
 
 // server/bridge.ts
 import { randomBytes as randomBytes2, randomUUID, timingSafeEqual as timingSafeEqual3 } from "node:crypto";
-var store2 = new Document("bridge", () => ({
-  token: null,
-  queue: [],
-  state: null,
-  seenAt: null
-}));
-var STALE_MS = 2 * 60 * 1e3;
-var ABSENT_MS = 90 * 1e3;
 async function bridgeToken() {
   const current = await store2.read();
   if (current.token) return current.token;
@@ -640,26 +686,22 @@ async function report(token2, results) {
   }));
   return true;
 }
+var store2, STALE_MS, ABSENT_MS;
+var init_bridge = __esm({
+  "server/bridge.ts"() {
+    init_store();
+    store2 = new Document("bridge", () => ({
+      token: null,
+      queue: [],
+      state: null,
+      seenAt: null
+    }));
+    STALE_MS = 2 * 60 * 1e3;
+    ABSENT_MS = 90 * 1e3;
+  }
+});
 
 // server/budget.ts
-var RATES = {
-  "gemini-3.8-flash": { in: 0.75, out: 3.75 },
-  "gemini-3.1-pro": { in: 2, out: 12 },
-  "gemini-3.5-flash-lite": { in: 0.1, out: 0.4 },
-  "gemini-3.1-flash-tts-preview": { in: 0.5, out: 10 },
-  // The outgoing line. Kept priced until it shuts down on 20 October, because
-  // an unpriced model is charged at the fallback below, and being wrong about
-  // her spending in the fortnight before a migration is exactly when it
-  // matters most to be right.
-  "gemini-2.5-flash": { in: 0.3, out: 2.5 },
-  "gemini-2.5-flash-lite": { in: 0.1, out: 0.4 },
-  "gemini-2.5-flash-preview-tts": { in: 0.5, out: 10 }
-};
-var AUDIO_RATES = {
-  "gemini-3.8-live": { inPerMin: 5e-3, outPerMin: 0.018 }
-};
-var FALLBACK = { in: 4, out: 18 };
-var AUDIO_FALLBACK = { inPerMin: 0.02, outPerMin: 0.05 };
 function poolExpiry() {
   const set = process.env.GRACE_CREDITS_EXPIRE;
   const parsed = set ? new Date(set) : /* @__PURE__ */ new Date("2026-12-16T00:00:00Z");
@@ -676,18 +718,9 @@ function afterwardsCap() {
 function creditsExpired(now = /* @__PURE__ */ new Date()) {
   return now >= poolExpiry();
 }
-var store3 = new Document("spend", () => ({
-  month: currentMonth(),
-  dollars: 0,
-  requests: 0,
-  pool: 0,
-  card: 0,
-  stoppedAt: null
-}));
 function currentMonth() {
   return (/* @__PURE__ */ new Date()).toISOString().slice(0, 7);
 }
-var cached = null;
 async function spend() {
   if (!cached) cached = await store3.read();
   if (cached.month !== currentMonth()) {
@@ -728,15 +761,6 @@ async function standing(now = /* @__PURE__ */ new Date()) {
     elapsed: Math.max(0, Math.min(1, through))
   };
 }
-var OverBudget = class extends Error {
-  constructor(standing2) {
-    super(
-      standing2.against === "pool" ? `I have used the whole $${standing2.limit.toFixed(0)} of Google credit \u2014 about $${standing2.spent.toFixed(2)} of it. I have stopped rather than letting it run onto your card. Raise GRACE_CREDIT_POOL if there is more credit than I know about.` : `I have spent about $${standing2.spent.toFixed(2)} this month against a $${standing2.limit.toFixed(0)} limit, and the Google credit is gone, so this would be your own money. I will start again next month, or you can raise the cap.`
-    );
-    this.standing = standing2;
-    this.name = "OverBudget";
-  }
-};
 async function requireBudget() {
   const now = await standing();
   if (now.remaining <= 0) throw new OverBudget(now);
@@ -752,6 +776,18 @@ async function recordAudio(model, inputSeconds, outputSeconds) {
   const safe = (n) => Number.isFinite(n) && n > 0 ? Math.ceil(n) : 0;
   const cost = (safe(inputSeconds) * rate.inPerMin + safe(outputSeconds) * rate.outPerMin) / 60;
   await charge(model, cost);
+}
+async function recordOutside(what, dollars) {
+  if (!Number.isFinite(dollars) || dollars <= 0) return;
+  const current = await spend();
+  cached = {
+    ...current,
+    dollars: current.dollars + dollars,
+    card: (current.card ?? 0) + dollars,
+    requests: current.requests + 1,
+    byModel: { ...current.byModel, [what]: (current.byModel?.[what] ?? 0) + dollars }
+  };
+  await store3.write(cached);
 }
 async function charge(model, cost) {
   const current = await spend();
@@ -776,10 +812,50 @@ async function charge(model, cost) {
   cached = next;
   await store3.write(next);
 }
+var RATES, AUDIO_RATES, FALLBACK, AUDIO_FALLBACK, store3, cached, OverBudget;
+var init_budget = __esm({
+  "server/budget.ts"() {
+    init_store();
+    RATES = {
+      "gemini-3.8-flash": { in: 0.75, out: 3.75 },
+      "gemini-3.1-pro": { in: 2, out: 12 },
+      "gemini-3.5-flash-lite": { in: 0.1, out: 0.4 },
+      "gemini-3.1-flash-tts-preview": { in: 0.5, out: 10 },
+      // The outgoing line. Kept priced until it shuts down on 20 October, because
+      // an unpriced model is charged at the fallback below, and being wrong about
+      // her spending in the fortnight before a migration is exactly when it
+      // matters most to be right.
+      "gemini-2.5-flash": { in: 0.3, out: 2.5 },
+      "gemini-2.5-flash-lite": { in: 0.1, out: 0.4 },
+      "gemini-2.5-flash-preview-tts": { in: 0.5, out: 10 }
+    };
+    AUDIO_RATES = {
+      "gemini-3.8-live": { inPerMin: 5e-3, outPerMin: 0.018 }
+    };
+    FALLBACK = { in: 4, out: 18 };
+    AUDIO_FALLBACK = { inPerMin: 0.02, outPerMin: 0.05 };
+    store3 = new Document("spend", () => ({
+      month: currentMonth(),
+      dollars: 0,
+      requests: 0,
+      pool: 0,
+      card: 0,
+      stoppedAt: null
+    }));
+    cached = null;
+    OverBudget = class extends Error {
+      constructor(standing2) {
+        super(
+          standing2.against === "pool" ? `I have used the whole $${standing2.limit.toFixed(0)} of Google credit \u2014 about $${standing2.spent.toFixed(2)} of it. I have stopped rather than letting it run onto your card. Raise GRACE_CREDIT_POOL if there is more credit than I know about.` : `I have spent about $${standing2.spent.toFixed(2)} this month against a $${standing2.limit.toFixed(0)} limit, and the Google credit is gone, so this would be your own money. I will start again next month, or you can raise the cap.`
+        );
+        this.standing = standing2;
+        this.name = "OverBudget";
+      }
+    };
+  }
+});
 
 // server/keys.ts
-var store4 = new Document("keys", () => ({}));
-var cached2 = null;
 async function loadKeys() {
   if (!cached2) cached2 = await store4.read();
   return cached2;
@@ -877,46 +953,17 @@ async function keyStatus() {
     }
   };
 }
-
-// server/learn.ts
-import { Type } from "@google/genai";
-
-// server/llm/gemini.ts
-import { GoogleGenAI } from "@google/genai";
+var store4, cached2;
+var init_keys = __esm({
+  "server/keys.ts"() {
+    init_config();
+    init_store();
+    store4 = new Document("keys", () => ({}));
+    cached2 = null;
+  }
+});
 
 // shared/effort.ts
-var THINKING = {
-  reflex: 256,
-  ordinary: 1024,
-  hard: 4096
-};
-var WARMTH = {
-  reflex: 0.3,
-  ordinary: 0.7,
-  hard: 0.4
-};
-var DOING = /^(turn|switch|set|dim|brighten|put|play|pause|stop|resume|skip|mute|unmute|open|close|lock|unlock|wake|sleep|start|add|remind|note|jot|cancel|snooze|call it|make (?:the|my|it)|lights?\b|goodnight|good night)\b/i;
-var WEIGHING = [
-  /\bwhy\b/i,
-  /\bhow come\b/i,
-  /\bcompare\b|\bcomparison\b/i,
-  /\bdifference between\b/i,
-  /\b(?:versus|vs\.?)\b/i,
-  /\bpros and cons\b|\btrade[- ]?offs?\b/i,
-  /\bshould i\b|\bshould we\b/i,
-  // "worth it", "worth the trouble", "worth switching the whole thing over" —
-  // the last of which is the shape people actually use, and the one a list of
-  // fixed phrases misses.
-  /\bworth (?:it\b|the\b|\w+ing\b)/i,
-  /\bexplain\b|\bwalk me through\b|\bbreak (?:it|this) down\b/i,
-  /\bfigure out\b|\bwork out\b|\bthink through\b/i,
-  /\bplan\b|\bstrategy\b|\bapproach\b/i,
-  /\bbest way\b|\bwhich is better\b|\bbetter to\b/i,
-  /\bwhat if\b|\bhelp me decide\b|\bmake sense\b/i,
-  /\banaly[sz]e\b|\banalysis\b|\bdiagnose\b|\broot cause\b/i,
-  /\bwhat.s wrong with\b|\bwhy (?:isn.t|doesn.t|won.t|can.t)\b/i
-];
-var LONG_ENOUGH = 28;
 function effortFor(text) {
   const said2 = text.trim();
   const words3 = said2.split(/\s+/).filter(Boolean).length;
@@ -935,6 +982,43 @@ function effortFor(text) {
   }
   return at("ordinary", "ordinary conversation");
 }
+var THINKING, WARMTH, DOING, WEIGHING, LONG_ENOUGH;
+var init_effort = __esm({
+  "shared/effort.ts"() {
+    THINKING = {
+      reflex: 256,
+      ordinary: 1024,
+      hard: 4096
+    };
+    WARMTH = {
+      reflex: 0.3,
+      ordinary: 0.7,
+      hard: 0.4
+    };
+    DOING = /^(turn|switch|set|dim|brighten|put|play|pause|stop|resume|skip|mute|unmute|open|close|lock|unlock|wake|sleep|start|add|remind|note|jot|cancel|snooze|call it|make (?:the|my|it)|lights?\b|goodnight|good night)\b/i;
+    WEIGHING = [
+      /\bwhy\b/i,
+      /\bhow come\b/i,
+      /\bcompare\b|\bcomparison\b/i,
+      /\bdifference between\b/i,
+      /\b(?:versus|vs\.?)\b/i,
+      /\bpros and cons\b|\btrade[- ]?offs?\b/i,
+      /\bshould i\b|\bshould we\b/i,
+      // "worth it", "worth the trouble", "worth switching the whole thing over" —
+      // the last of which is the shape people actually use, and the one a list of
+      // fixed phrases misses.
+      /\bworth (?:it\b|the\b|\w+ing\b)/i,
+      /\bexplain\b|\bwalk me through\b|\bbreak (?:it|this) down\b/i,
+      /\bfigure out\b|\bwork out\b|\bthink through\b/i,
+      /\bplan\b|\bstrategy\b|\bapproach\b/i,
+      /\bbest way\b|\bwhich is better\b|\bbetter to\b/i,
+      /\bwhat if\b|\bhelp me decide\b|\bmake sense\b/i,
+      /\banaly[sz]e\b|\banalysis\b|\bdiagnose\b|\broot cause\b/i,
+      /\bwhat.s wrong with\b|\bwhy (?:isn.t|doesn.t|won.t|can.t)\b/i
+    ];
+    LONG_ENOUGH = 28;
+  }
+});
 
 // server/llm/thinking.ts
 import { ThinkingLevel } from "@google/genai";
@@ -942,29 +1026,6 @@ function speaksLevels(model) {
   const generation = Number(/gemini-(\d+)/.exec(model)?.[1]);
   return Number.isFinite(generation) && generation >= 3;
 }
-var LEVELS_ALLOWED = [
-  /*
-   * Pro is capped at `low` on purpose, and this is a latency decision rather
-   * than a quality one.
-   *
-   * The hosting kills any request at sixty seconds and returns *nothing* —
-   * not a partial answer, not an error anyone can read, just silence. Pro
-   * thinking at `high` on a question that also needs three or four tool calls
-   * does not fit in that window. So the choice is not "well-reasoned answer
-   * versus quick answer". It is "decent answer versus no answer at all", and
-   * an empty reply is the worst outcome available.
-   *
-   * Pro at `low` still reasons considerably better than Flash at `high`,
-   * which is the whole reason the hard turns are routed here. The tier is
-   * doing the work; the level was only ever going to buy the last few
-   * percent, at the price of the entire response.
-   *
-   * Raise this the day she runs somewhere without a sixty-second guillotine.
-   */
-  { match: /pro/i, levels: ["low"] }
-];
-var USUAL = ["low", "medium", "high"];
-var ORDER = ["minimal", "low", "medium", "high"];
 function nameFor(tokens) {
   if (tokens <= 0) return "minimal";
   if (tokens <= THINKING.reflex) return "low";
@@ -983,30 +1044,47 @@ function levelsFor(model) {
 function levelFor(model, tokens) {
   return nearest(nameFor(tokens), levelsFor(model));
 }
-var AS_SDK = {
-  minimal: ThinkingLevel.MINIMAL,
-  low: ThinkingLevel.LOW,
-  medium: ThinkingLevel.MEDIUM,
-  high: ThinkingLevel.HIGH
-};
 function thinkingFor(model, tokens) {
   return speaksLevels(model) ? { thinkingLevel: AS_SDK[levelFor(model, tokens)] } : { thinkingBudget: tokens };
 }
+var LEVELS_ALLOWED, USUAL, ORDER, AS_SDK;
+var init_thinking = __esm({
+  "server/llm/thinking.ts"() {
+    init_effort();
+    LEVELS_ALLOWED = [
+      /*
+       * Pro is capped at `low` on purpose, and this is a latency decision rather
+       * than a quality one.
+       *
+       * The hosting kills any request at sixty seconds and returns *nothing* —
+       * not a partial answer, not an error anyone can read, just silence. Pro
+       * thinking at `high` on a question that also needs three or four tool calls
+       * does not fit in that window. So the choice is not "well-reasoned answer
+       * versus quick answer". It is "decent answer versus no answer at all", and
+       * an empty reply is the worst outcome available.
+       *
+       * Pro at `low` still reasons considerably better than Flash at `high`,
+       * which is the whole reason the hard turns are routed here. The tier is
+       * doing the work; the level was only ever going to buy the last few
+       * percent, at the price of the entire response.
+       *
+       * Raise this the day she runs somewhere without a sixty-second guillotine.
+       */
+      { match: /pro/i, levels: ["low"] }
+    ];
+    USUAL = ["low", "medium", "high"];
+    ORDER = ["minimal", "low", "medium", "high"];
+    AS_SDK = {
+      minimal: ThinkingLevel.MINIMAL,
+      low: ThinkingLevel.LOW,
+      medium: ThinkingLevel.MEDIUM,
+      high: ThinkingLevel.HIGH
+    };
+  }
+});
 
 // server/llm/gemini.ts
-var TRANSCRIBE_PROMPT = `Write out what is said in this recording.
-
-The speaker may have a strong accent, may not be a native English speaker, and may hesitate, restart, or use imperfect grammar. Transcribe them accurately and charitably:
-
-- Write the words they meant, not a phonetic imitation of how they came out. If someone says "I go yesterday to the shop", write that \u2014 do not correct their grammar, but do not mangle it further either.
-- Keep their own words and word order. You are transcribing, not translating and not rewriting.
-- Drop pure disfluencies \u2014 "um", "uh", false starts abandoned mid-word \u2014 since they add nothing when read back.
-- Proper nouns matter most and are the hardest to hear. Use the context below to recognise names of people, places, and things rather than guessing at similar-sounding words.
-- If a stretch is genuinely unintelligible, leave it out rather than inventing something plausible. A short accurate transcript beats a complete invented one.
-- If the speaker uses another language entirely, transcribe it in that language.
-
-Return only the words spoken, with ordinary punctuation. No preamble, no quotes, no speaker labels, no description of the audio, no notes about audio quality. If there is no speech at all, return nothing.`;
-var MAX_TOOL_ROUNDS = 8;
+import { GoogleGenAI } from "@google/genai";
 function meter(model, usage) {
   if (!usage) return;
   void record(
@@ -1020,7 +1098,6 @@ function meter(model, usage) {
 function voiceFor(request) {
   return request.voice || chosenVoice() || config.voice;
 }
-var SPEAK_DIRECTION = "Read the following aloud in a calm, warm, unhurried voice, the way a composed personal assistant would speak to someone they know well. Read only the text itself:";
 function sampleRateOf(mimeType) {
   const rate = Number(/rate=(\d+)/.exec(mimeType ?? "")?.[1]);
   return Number.isFinite(rate) && rate > 0 ? rate : 24e3;
@@ -1043,255 +1120,277 @@ function wrapPcmAsWav(base64Pcm, sampleRate) {
   header.writeUInt32LE(pcm.length, 40);
   return Buffer.concat([header, pcm]).toString("base64");
 }
-var GeminiProvider = class {
-  constructor(apiKey, model) {
-    this.model = model;
-    this.name = "gemini";
-    const vertex = vertexSettings();
-    this.onVertex = vertex !== null;
-    this.client = vertex ? new GoogleGenAI({
-      vertexai: true,
-      project: vertex.project,
-      location: vertex.location,
-      googleAuthOptions: { credentials: vertex.credentials }
-    }) : new GoogleGenAI({ apiKey });
-  }
-  async *stream(request) {
-    await requireBudget();
-    let spoken = false;
-    try {
-      const history = request.turns.map((turn) => ({
-        role: turn.role === "assistant" ? "model" : "user",
-        parts: [{ text: turn.text }]
-      }));
-      for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
-        if (round > 0 && request.deadline && Date.now() > request.deadline) {
-          console.error("[grace] out of time for more tools; answering with what she has");
-          break;
-        }
-        const response2 = await this.client.models.generateContentStream({
-          ...this.params(request),
-          contents: history
-        });
-        const calls = [];
-        const said2 = [];
-        let usage2;
-        for await (const chunk of response2) {
-          if (chunk.candidates?.[0]?.groundingMetadata) request.onGrounded?.();
-          if (chunk.usageMetadata) usage2 = chunk.usageMetadata;
-          for (const part of chunk.candidates?.[0]?.content?.parts ?? []) {
-            if (part.functionCall?.name) {
-              calls.push({
-                name: part.functionCall.name,
-                args: part.functionCall.args ?? {}
+var TRANSCRIBE_PROMPT, MAX_TOOL_ROUNDS, SPEAK_DIRECTION, GeminiProvider;
+var init_gemini = __esm({
+  "server/llm/gemini.ts"() {
+    init_budget();
+    init_effort();
+    init_config();
+    init_keys();
+    init_thinking();
+    init_vertex();
+    TRANSCRIBE_PROMPT = `Write out what is said in this recording.
+
+The speaker may have a strong accent, may not be a native English speaker, and may hesitate, restart, or use imperfect grammar. Transcribe them accurately and charitably:
+
+- Write the words they meant, not a phonetic imitation of how they came out. If someone says "I go yesterday to the shop", write that \u2014 do not correct their grammar, but do not mangle it further either.
+- Keep their own words and word order. You are transcribing, not translating and not rewriting.
+- Drop pure disfluencies \u2014 "um", "uh", false starts abandoned mid-word \u2014 since they add nothing when read back.
+- Proper nouns matter most and are the hardest to hear. Use the context below to recognise names of people, places, and things rather than guessing at similar-sounding words.
+- If a stretch is genuinely unintelligible, leave it out rather than inventing something plausible. A short accurate transcript beats a complete invented one.
+- If the speaker uses another language entirely, transcribe it in that language.
+
+Return only the words spoken, with ordinary punctuation. No preamble, no quotes, no speaker labels, no description of the audio, no notes about audio quality. If there is no speech at all, return nothing.`;
+    MAX_TOOL_ROUNDS = 8;
+    SPEAK_DIRECTION = "Read the following aloud in a calm, warm, unhurried voice, the way a composed personal assistant would speak to someone they know well. Read only the text itself:";
+    GeminiProvider = class {
+      constructor(apiKey, model) {
+        this.model = model;
+        this.name = "gemini";
+        const vertex = vertexSettings();
+        this.onVertex = vertex !== null;
+        this.client = vertex ? new GoogleGenAI({
+          vertexai: true,
+          project: vertex.project,
+          location: vertex.location,
+          googleAuthOptions: { credentials: vertex.credentials }
+        }) : new GoogleGenAI({ apiKey });
+      }
+      async *stream(request) {
+        await requireBudget();
+        let spoken = false;
+        try {
+          const history = request.turns.map((turn) => ({
+            role: turn.role === "assistant" ? "model" : "user",
+            parts: [{ text: turn.text }]
+          }));
+          for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
+            if (round > 0 && request.deadline && Date.now() > request.deadline) {
+              console.error("[grace] out of time for more tools; answering with what she has");
+              break;
+            }
+            const response2 = await this.client.models.generateContentStream({
+              ...this.params(request),
+              contents: history
+            });
+            const calls = [];
+            const said2 = [];
+            let usage2;
+            for await (const chunk of response2) {
+              if (chunk.candidates?.[0]?.groundingMetadata) request.onGrounded?.();
+              if (chunk.usageMetadata) usage2 = chunk.usageMetadata;
+              for (const part of chunk.candidates?.[0]?.content?.parts ?? []) {
+                if (part.functionCall?.name) {
+                  calls.push({
+                    name: part.functionCall.name,
+                    args: part.functionCall.args ?? {}
+                  });
+                  said2.push(part);
+                } else if (part.thoughtSignature || part.thought) {
+                  said2.push(part);
+                }
+              }
+              if (chunk.text) {
+                spoken = true;
+                yield chunk.text;
+              }
+            }
+            meter(request.model ?? this.model, usage2);
+            if (calls.length === 0 || !request.onToolCall) return;
+            history.push({ role: "model", parts: said2 });
+            const results = [];
+            for (const call4 of calls) {
+              const result = await request.onToolCall(call4.name, call4.args);
+              request.onToolUsed?.(call4.name, result);
+              results.push({
+                functionResponse: { name: call4.name, response: { result } }
               });
-              said2.push(part);
-            } else if (part.thoughtSignature || part.thought) {
-              said2.push(part);
+            }
+            history.push({ role: "user", parts: results });
+          }
+          const { config: settings } = this.params({ ...request, tools: [], search: false });
+          const closing = await this.client.models.generateContentStream({
+            model: request.model ?? this.model,
+            contents: history,
+            config: settings
+          });
+          let closingUsage;
+          for await (const chunk of closing) {
+            if (chunk.usageMetadata) closingUsage = chunk.usageMetadata;
+            if (chunk.text) {
+              spoken = true;
+              yield chunk.text;
             }
           }
-          if (chunk.text) {
-            spoken = true;
-            yield chunk.text;
-          }
+          meter(request.model ?? this.model, closingUsage);
+          return;
+        } catch (error) {
+          if (!request.search || spoken) throw error;
+          console.error(
+            "[grace] search unavailable, answering without it:",
+            error.message
+          );
+          request.onSearchFailed?.(error.message);
         }
-        meter(request.model ?? this.model, usage2);
-        if (calls.length === 0 || !request.onToolCall) return;
-        history.push({ role: "model", parts: said2 });
-        const results = [];
-        for (const call4 of calls) {
-          const result = await request.onToolCall(call4.name, call4.args);
-          request.onToolUsed?.(call4.name, result);
-          results.push({
-            functionResponse: { name: call4.name, response: { result } }
-          });
+        const response = await this.client.models.generateContentStream(
+          this.params({ ...request, search: false })
+        );
+        let usage;
+        for await (const chunk of response) {
+          if (chunk.usageMetadata) usage = chunk.usageMetadata;
+          if (chunk.text) yield chunk.text;
         }
-        history.push({ role: "user", parts: results });
+        meter(request.model ?? this.model, usage);
       }
-      const { config: settings } = this.params({ ...request, tools: [], search: false });
-      const closing = await this.client.models.generateContentStream({
-        model: request.model ?? this.model,
-        contents: history,
-        config: settings
-      });
-      let closingUsage;
-      for await (const chunk of closing) {
-        if (chunk.usageMetadata) closingUsage = chunk.usageMetadata;
-        if (chunk.text) {
-          spoken = true;
-          yield chunk.text;
+      async complete(request) {
+        await requireBudget();
+        const response = await this.client.models.generateContent(
+          this.params(request)
+        );
+        meter(request.model ?? this.model, response.usageMetadata);
+        return response.text ?? "";
+      }
+      /**
+       * A model that has been retired must not make her deaf.
+       *
+       * Google retires models on published dates and sometimes ahead of them —
+       * the whole 2.0 line went in June, and the 2.5 line has a shutdown date
+       * pencilled in with reports of it answering 404 early. Hearing runs on a
+       * different, cheaper model than thinking, so it can vanish on its own while
+       * everything else still works, and the symptom is the worst kind: she stops
+       * understanding anything said aloud and there is nothing on screen to say
+       * why.
+       *
+       * So a "no such model" is caught once and the attempt repeated with the
+       * model she thinks with — which is demonstrably alive, because she is
+       * answering. Slower and dearer for that turn, and she keeps her hearing.
+       * Loud in the log, because this should be fixed rather than absorbed.
+       */
+      goneMissing(error) {
+        const detail = error?.message ?? "";
+        return /404|NOT_FOUND|not found|no longer available|is not supported/i.test(detail);
+      }
+      async transcribe(request) {
+        try {
+          return await this.transcribeWith(config.transcribeModel, request);
+        } catch (error) {
+          if (!this.goneMissing(error) || config.transcribeModel === this.model) throw error;
+          console.error(
+            `[grace] the transcription model ${config.transcribeModel} is gone (${error.message}); falling back to ${this.model}. Set GRACE_TRANSCRIBE_MODEL to something current.`
+          );
+          return this.transcribeWith(this.model, request);
         }
       }
-      meter(request.model ?? this.model, closingUsage);
-      return;
-    } catch (error) {
-      if (!request.search || spoken) throw error;
-      console.error(
-        "[grace] search unavailable, answering without it:",
-        error.message
-      );
-      request.onSearchFailed?.(error.message);
-    }
-    const response = await this.client.models.generateContentStream(
-      this.params({ ...request, search: false })
-    );
-    let usage;
-    for await (const chunk of response) {
-      if (chunk.usageMetadata) usage = chunk.usageMetadata;
-      if (chunk.text) yield chunk.text;
-    }
-    meter(request.model ?? this.model, usage);
-  }
-  async complete(request) {
-    await requireBudget();
-    const response = await this.client.models.generateContent(
-      this.params(request)
-    );
-    meter(request.model ?? this.model, response.usageMetadata);
-    return response.text ?? "";
-  }
-  /**
-   * A model that has been retired must not make her deaf.
-   *
-   * Google retires models on published dates and sometimes ahead of them —
-   * the whole 2.0 line went in June, and the 2.5 line has a shutdown date
-   * pencilled in with reports of it answering 404 early. Hearing runs on a
-   * different, cheaper model than thinking, so it can vanish on its own while
-   * everything else still works, and the symptom is the worst kind: she stops
-   * understanding anything said aloud and there is nothing on screen to say
-   * why.
-   *
-   * So a "no such model" is caught once and the attempt repeated with the
-   * model she thinks with — which is demonstrably alive, because she is
-   * answering. Slower and dearer for that turn, and she keeps her hearing.
-   * Loud in the log, because this should be fixed rather than absorbed.
-   */
-  goneMissing(error) {
-    const detail = error?.message ?? "";
-    return /404|NOT_FOUND|not found|no longer available|is not supported/i.test(detail);
-  }
-  async transcribe(request) {
-    try {
-      return await this.transcribeWith(config.transcribeModel, request);
-    } catch (error) {
-      if (!this.goneMissing(error) || config.transcribeModel === this.model) throw error;
-      console.error(
-        `[grace] the transcription model ${config.transcribeModel} is gone (${error.message}); falling back to ${this.model}. Set GRACE_TRANSCRIBE_MODEL to something current.`
-      );
-      return this.transcribeWith(this.model, request);
-    }
-  }
-  async transcribeWith(model, request) {
-    await requireBudget();
-    const response = await this.client.models.generateContent({
-      model,
-      contents: [
-        {
-          role: "user",
-          parts: [
-            { inlineData: { mimeType: request.mimeType, data: request.audio } },
+      async transcribeWith(model, request) {
+        await requireBudget();
+        const response = await this.client.models.generateContent({
+          model,
+          contents: [
             {
-              text: request.context ? `${TRANSCRIBE_PROMPT}
+              role: "user",
+              parts: [
+                { inlineData: { mimeType: request.mimeType, data: request.audio } },
+                {
+                  text: request.context ? `${TRANSCRIBE_PROMPT}
 
 Context for recognising names and topics:
 ${request.context}` : TRANSCRIBE_PROMPT
+                }
+              ]
             }
-          ]
-        }
-      ],
-      config: {
-        // Transcription is not a creative task; drifting off the audio is the
-        // one failure mode that matters.
-        temperature: 0,
-        abortSignal: request.signal,
-        // Transcription has nothing to deliberate about, and this model is
-        // 3.x, where a budget of zero is spelled differently.
-        thinkingConfig: thinkingFor(model, 0)
+          ],
+          config: {
+            // Transcription is not a creative task; drifting off the audio is the
+            // one failure mode that matters.
+            temperature: 0,
+            abortSignal: request.signal,
+            // Transcription has nothing to deliberate about, and this model is
+            // 3.x, where a budget of zero is spelled differently.
+            thinkingConfig: thinkingFor(model, 0)
+          }
+        });
+        meter(model, response.usageMetadata);
+        return (response.text ?? "").trim();
       }
-    });
-    meter(model, response.usageMetadata);
-    return (response.text ?? "").trim();
-  }
-  async speak(request) {
-    await requireBudget();
-    const response = await this.client.models.generateContent({
-      model: config.speechModel,
-      // The instruction rides along with the words. The model reads the
-      // direction and speaks only what follows it.
-      contents: [
-        {
-          role: "user",
-          parts: [{ text: `${SPEAK_DIRECTION}
+      async speak(request) {
+        await requireBudget();
+        const response = await this.client.models.generateContent({
+          model: config.speechModel,
+          // The instruction rides along with the words. The model reads the
+          // direction and speaks only what follows it.
+          contents: [
+            {
+              role: "user",
+              parts: [{ text: `${SPEAK_DIRECTION}
 
 ${request.text}` }]
-        }
-      ],
-      config: {
-        abortSignal: request.signal,
-        responseModalities: ["AUDIO"],
-        speechConfig: {
-          // A pasted choice wins over the deploy-time default, like every key.
-          voiceConfig: { prebuiltVoiceConfig: { voiceName: voiceFor(request) } }
-        }
+            }
+          ],
+          config: {
+            abortSignal: request.signal,
+            responseModalities: ["AUDIO"],
+            speechConfig: {
+              // A pasted choice wins over the deploy-time default, like every key.
+              voiceConfig: { prebuiltVoiceConfig: { voiceName: voiceFor(request) } }
+            }
+          }
+        });
+        meter(config.speechModel, response.usageMetadata);
+        const part = response.candidates?.[0]?.content?.parts?.find(
+          (candidate) => candidate.inlineData?.data
+        );
+        const pcm = part?.inlineData?.data;
+        if (!pcm) throw new Error("the speech model returned no audio");
+        return {
+          audio: wrapPcmAsWav(pcm, sampleRateOf(part.inlineData?.mimeType)),
+          mimeType: "audio/wav"
+        };
       }
-    });
-    meter(config.speechModel, response.usageMetadata);
-    const part = response.candidates?.[0]?.content?.parts?.find(
-      (candidate) => candidate.inlineData?.data
-    );
-    const pcm = part?.inlineData?.data;
-    if (!pcm) throw new Error("the speech model returned no audio");
-    return {
-      audio: wrapPcmAsWav(pcm, sampleRateOf(part.inlineData?.mimeType)),
-      mimeType: "audio/wav"
+      /**
+       * Public so the self-test can assert on the request that goes out, rather
+       * than restating this logic and testing a copy of it.
+       */
+      params(request) {
+        const answering = request.model ?? this.model;
+        const config2 = {
+          systemInstruction: request.system,
+          temperature: request.temperature ?? 0.7,
+          abortSignal: request.signal
+        };
+        const think = request.think;
+        if (request.maxOutputTokens) {
+          config2.maxOutputTokens = request.maxOutputTokens + (think ?? 0);
+        }
+        if (request.json) {
+          config2.responseMimeType = "application/json";
+          config2.responseSchema = request.json;
+        } else if (request.tools?.length) {
+          config2.tools = [{ functionDeclarations: request.tools }];
+        } else if (request.search) {
+          config2.tools = [{ googleSearch: {} }];
+        }
+        if (think !== void 0) {
+          config2.thinkingConfig = thinkingFor(
+            answering,
+            config2.tools ? Math.max(THINKING.reflex, think) : think
+          );
+        } else if (request.fast) {
+          config2.thinkingConfig = thinkingFor(answering, config2.tools ? THINKING.reflex : 0);
+        }
+        return {
+          model: request.model ?? this.model,
+          contents: request.turns.map((turn) => ({
+            role: turn.role === "assistant" ? "model" : "user",
+            parts: [{ text: turn.text }]
+          })),
+          config: config2
+        };
+      }
     };
   }
-  /**
-   * Public so the self-test can assert on the request that goes out, rather
-   * than restating this logic and testing a copy of it.
-   */
-  params(request) {
-    const answering = request.model ?? this.model;
-    const config2 = {
-      systemInstruction: request.system,
-      temperature: request.temperature ?? 0.7,
-      abortSignal: request.signal
-    };
-    const think = request.think;
-    if (request.maxOutputTokens) {
-      config2.maxOutputTokens = request.maxOutputTokens + (think ?? 0);
-    }
-    if (request.json) {
-      config2.responseMimeType = "application/json";
-      config2.responseSchema = request.json;
-    } else if (request.tools?.length) {
-      config2.tools = [{ functionDeclarations: request.tools }];
-    } else if (request.search) {
-      config2.tools = [{ googleSearch: {} }];
-    }
-    if (think !== void 0) {
-      config2.thinkingConfig = thinkingFor(
-        answering,
-        config2.tools ? Math.max(THINKING.reflex, think) : think
-      );
-    } else if (request.fast) {
-      config2.thinkingConfig = thinkingFor(answering, config2.tools ? THINKING.reflex : 0);
-    }
-    return {
-      model: request.model ?? this.model,
-      contents: request.turns.map((turn) => ({
-        role: turn.role === "assistant" ? "model" : "user",
-        parts: [{ text: turn.text }]
-      })),
-      config: config2
-    };
-  }
-};
+});
 
 // server/llm/index.ts
-var provider = null;
-var builtWith = null;
-var overridden = false;
 function getProvider() {
   if (overridden && provider) return provider;
   const key = geminiKey();
@@ -1301,30 +1400,26 @@ function getProvider() {
   }
   return provider;
 }
-
-// server/memory.ts
-import { randomUUID as randomUUID3 } from "node:crypto";
+var provider, builtWith, overridden;
+var init_llm = __esm({
+  "server/llm/index.ts"() {
+    init_config();
+    init_keys();
+    init_gemini();
+    provider = null;
+    builtWith = null;
+    overridden = false;
+  }
+});
 
 // server/chats.ts
 import { randomUUID as randomUUID2 } from "node:crypto";
-var FIRST = "main";
 function logKey(id) {
   return id === FIRST ? "conversation" : `conversation-${id}`;
 }
 function metaKey(id) {
   return id === FIRST ? "meta" : `meta-${id}`;
 }
-var store5 = new Document("chats", () => ({
-  list: [
-    {
-      id: FIRST,
-      title: "First conversation",
-      at: (/* @__PURE__ */ new Date(0)).toISOString(),
-      lastAt: (/* @__PURE__ */ new Date(0)).toISOString()
-    }
-  ],
-  current: FIRST
-}));
 async function allChats() {
   const { list } = await store5.read();
   return list.filter((chat) => !chat.archivedAt).sort((left, right) => right.lastAt.localeCompare(left.lastAt));
@@ -1395,8 +1490,27 @@ async function archiveChat(id) {
   await store5.write({ list, current });
   return allChats();
 }
+var FIRST, store5;
+var init_chats = __esm({
+  "server/chats.ts"() {
+    init_store();
+    FIRST = "main";
+    store5 = new Document("chats", () => ({
+      list: [
+        {
+          id: FIRST,
+          title: "First conversation",
+          at: (/* @__PURE__ */ new Date(0)).toISOString(),
+          lastAt: (/* @__PURE__ */ new Date(0)).toISOString()
+        }
+      ],
+      current: FIRST
+    }));
+  }
+});
 
 // server/memory.ts
+import { randomUUID as randomUUID3 } from "node:crypto";
 async function logOf() {
   return new Document(logKey(await currentChat()), () => []);
 }
@@ -1406,11 +1520,6 @@ async function metaOf() {
     summarizedThrough: 0
   }));
 }
-var profile = new Document("profile", () => ({
-  addressAs: null,
-  entries: [],
-  updatedAt: (/* @__PURE__ */ new Date()).toISOString()
-}));
 async function getMessages() {
   return (await logOf()).read();
 }
@@ -1594,8 +1703,3968 @@ ${transcript}`;
     return false;
   }
 }
+var profile;
+var init_memory = __esm({
+  "server/memory.ts"() {
+    init_config();
+    init_llm();
+    init_store();
+    init_chats();
+    profile = new Document("profile", () => ({
+      addressAs: null,
+      entries: [],
+      updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+    }));
+  }
+});
+
+// server/coding.ts
+import { spawn, spawnSync } from "node:child_process";
+import { randomUUID as randomUUID4 } from "node:crypto";
+function recentJobs() {
+  return [...jobs.values()].sort((a, b) => b.startedAt - a.startedAt);
+}
+function jobById(id) {
+  return jobs.get(id);
+}
+function codingAvailable() {
+  if (looked && Date.now() - looked.at < 6e4) return looked.version;
+  let version = null;
+  try {
+    const asked = spawnSync("claude", ["--version"], { encoding: "utf8", shell: true });
+    if (asked.status === 0) version = asked.stdout.trim() || "installed";
+  } catch {
+  }
+  looked = { at: Date.now(), version };
+  return version;
+}
+function startJob(task, folder) {
+  const job = { id: randomUUID4().slice(0, 8), task, folder, startedAt: Date.now() };
+  jobs.set(job.id, job);
+  const child = spawn(
+    "claude",
+    [
+      "-p",
+      "--output-format",
+      "json",
+      // The whole point of the request: Opus, not whatever the default is.
+      "--model",
+      "opus",
+      // Edits yes, arbitrary commands no. See the note at the top.
+      "--permission-mode",
+      "acceptEdits"
+    ],
+    { cwd: folder, shell: true, env: process.env }
+  );
+  child.stdin.on("error", () => {
+  });
+  child.stdin.end(task);
+  let out = "";
+  let err = "";
+  child.stdout.on("data", (chunk) => out += chunk);
+  child.stderr.on("data", (chunk) => err += chunk);
+  const timer = setTimeout(() => child.kill("SIGKILL"), LONGEST_MS);
+  child.on("error", (error) => {
+    clearTimeout(timer);
+    finish(job, false, `could not start Claude Code: ${error.message}`);
+  });
+  child.on("close", (code) => {
+    clearTimeout(timer);
+    let parsed = null;
+    try {
+      parsed = JSON.parse(out.trim());
+    } catch {
+    }
+    if (parsed?.total_cost_usd) {
+      job.cost = parsed.total_cost_usd;
+      void recordOutside("claude-opus-5 (coding)", parsed.total_cost_usd).catch(() => {
+      });
+    }
+    job.turns = parsed?.num_turns;
+    if (parsed?.result) return finish(job, code === 0, parsed.result);
+    if (code === 0) return finish(job, true, out.trim() || "It finished without saying much.");
+    finish(
+      job,
+      false,
+      err.trim() || out.trim() || `Claude Code stopped with code ${code}.`
+    );
+  });
+  return job;
+}
+function finish(job, ok, summary) {
+  job.finishedAt = Date.now();
+  job.ok = ok;
+  job.summary = summary.length > 4e3 ? `${summary.slice(0, 4e3)}
+[...]` : summary;
+}
+var jobs, LONGEST_MS, looked;
+var init_coding = __esm({
+  "server/coding.ts"() {
+    init_budget();
+    jobs = /* @__PURE__ */ new Map();
+    LONGEST_MS = 20 * 60 * 1e3;
+    looked = null;
+  }
+});
+
+// server/github.ts
+async function call(path3, method = "GET") {
+  const token2 = githubToken();
+  if (!token2) {
+    throw new GithubError(
+      "GitHub is not connected. A personal access token pasted into her keys fixes that.",
+      true
+    );
+  }
+  const response = await fetch(`${API}${path3}`, {
+    method,
+    headers: {
+      Authorization: `Bearer ${token2}`,
+      Accept: "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28"
+    },
+    signal: AbortSignal.timeout(8e3)
+  });
+  if (response.status === 401) {
+    throw new GithubError("GitHub rejected the token. It may have expired.", true);
+  }
+  if (response.status === 403) {
+    throw new GithubError(
+      "GitHub refused: the token has no permission for that. Re-running checks needs a token with Actions write on the repository.",
+      true
+    );
+  }
+  if (!response.ok) {
+    throw new GithubError(`GitHub answered ${response.status}.`);
+  }
+  const body = await response.text();
+  return body ? JSON.parse(body) : {};
+}
+function shape(items) {
+  return items.slice(0, 8).map((item) => ({
+    title: item.title,
+    repo: item.repository_url.split("/repos/")[1] ?? "",
+    url: item.html_url
+  }));
+}
+async function githubView() {
+  const me = await call("/user");
+  const login = me.login;
+  const [prs, reviews, issues] = await Promise.all([
+    call(
+      `/search/issues?q=${encodeURIComponent(`is:pr is:open author:${login}`)}&per_page=8`
+    ),
+    call(
+      `/search/issues?q=${encodeURIComponent(`is:pr is:open review-requested:${login}`)}&per_page=8`
+    ),
+    call(
+      `/search/issues?q=${encodeURIComponent(`is:issue is:open assignee:${login}`)}&per_page=8`
+    )
+  ]);
+  return {
+    login,
+    prs: shape(prs.items),
+    reviewsWanted: shape(reviews.items),
+    issues: shape(issues.items)
+  };
+}
+async function rerunFailedChecks(repoSaid) {
+  const said2 = repoSaid.trim().replace(/^https?:\/\/github\.com\//, "");
+  let repo = said2;
+  if (!said2.includes("/")) {
+    const view = await githubView();
+    const known2 = [...view.prs, ...view.reviewsWanted, ...view.issues].map(
+      (item) => item.repo
+    );
+    const hit = known2.find(
+      (full) => full.toLowerCase().endsWith(`/${said2.toLowerCase()}`)
+    );
+    if (!hit) {
+      throw new GithubError(
+        `Not sure which repository "${said2}" is. Ask them for the owner and name, as owner/name.`
+      );
+    }
+    repo = hit;
+  }
+  const runs = await call(`/repos/${repo}/actions/runs?status=failure&per_page=1`);
+  const run = runs.workflow_runs?.[0];
+  if (!run) {
+    throw new GithubError(`Nothing has failed recently in ${repo}.`);
+  }
+  await call(`/repos/${repo}/actions/runs/${run.id}/rerun-failed-jobs`, "POST");
+  return {
+    repo,
+    workflow: run.name ?? "the workflow",
+    branch: run.head_branch ?? "its branch"
+  };
+}
+function githubConfigured() {
+  return Boolean(githubToken());
+}
+var API, GithubError;
+var init_github = __esm({
+  "server/github.ts"() {
+    init_keys();
+    API = "https://api.github.com";
+    GithubError = class extends Error {
+      constructor(message, needsToken = false) {
+        super(message);
+        this.needsToken = needsToken;
+      }
+    };
+  }
+});
+
+// server/lights.ts
+import { randomUUID as randomUUID5 } from "node:crypto";
+async function call2(path3, body) {
+  const key = goveeKey();
+  if (!key) {
+    throw new LightError(
+      "The lights are not connected. Govee gives out an API key from the app, under Settings, About Us, Apply for API Key \u2014 it arrives by email. Pasting it into her keys is the whole setup.",
+      true
+    );
+  }
+  const response = await fetch(`${BASE}${path3}`, {
+    method: body ? "POST" : "GET",
+    headers: { "Govee-API-Key": key, "Content-Type": "application/json" },
+    ...body ? { body: JSON.stringify(body) } : {},
+    signal: AbortSignal.timeout(8e3)
+  });
+  if (response.status === 401 || response.status === 403) {
+    throw new LightError("Govee rejected the key. It may have been revoked.", true);
+  }
+  if (response.status === 429) {
+    throw new LightError("Govee is rate-limiting; try again in a minute.");
+  }
+  if (!response.ok) throw new LightError(`Govee answered ${response.status}.`);
+  const parsed = await response.json();
+  if (parsed.code !== void 0 && parsed.code !== 200 && parsed.code !== 0) {
+    throw new LightError(parsed.message || `Govee refused that (${parsed.code}).`);
+  }
+  return parsed;
+}
+function forgetLights() {
+  known = null;
+}
+async function lights() {
+  if (known && Date.now() - known.at < KNOWN_FOR_MS) return known.lights;
+  const { data } = await call2(
+    "/user/devices"
+  );
+  const found = (data ?? []).map((one) => ({
+    sku: one.sku,
+    device: one.device,
+    name: one.deviceName
+  }));
+  known = { at: Date.now(), lights: found };
+  return found;
+}
+async function pick(said2) {
+  const all = await lights();
+  if (all.length === 0) {
+    throw new LightError("Govee has no devices on this account.");
+  }
+  const needle = (said2 ?? "").toLowerCase().trim();
+  if (!needle || /^(all|the )?(lights?|everything)$/.test(needle)) return all;
+  const found = all.filter((light) => light.name.toLowerCase().includes(needle));
+  if (found.length === 0) {
+    throw new LightError(
+      `No light called "${said2}". They are: ${all.map((one) => one.name).join(", ")}.`
+    );
+  }
+  return found;
+}
+async function stateOf(light) {
+  const reported = await call2("/device/state", {
+    requestId: randomUUID5(),
+    payload: { sku: light.sku, device: light.device }
+  });
+  const found = /* @__PURE__ */ new Map();
+  for (const one of reported.payload?.capabilities ?? []) {
+    if (one.instance) found.set(one.instance, one.state?.value);
+  }
+  const number = (name) => {
+    const raw = found.get(name);
+    return typeof raw === "number" && Number.isFinite(raw) ? raw : null;
+  };
+  const power = number("powerSwitch");
+  const online = found.get("online");
+  return {
+    on: power === null ? null : power === 1,
+    brightness: number("brightness"),
+    colour: number("colorRgb"),
+    online: typeof online === "boolean" ? online : null
+  };
+}
+async function pace(device) {
+  const since = Date.now() - (commandedAt.get(device) ?? 0);
+  if (since < SETTLE_MS) await sleep(SETTLE_MS - since);
+  commandedAt.set(device, Date.now());
+}
+function close(a, b, by) {
+  return Math.abs(a - b) <= by;
+}
+function took(state, capability) {
+  if (state.on === false && capability.instance !== "powerSwitch") return null;
+  switch (capability.instance) {
+    case "powerSwitch":
+      return state.on === null ? null : state.on === (capability.value === 1);
+    case "brightness": {
+      if (state.brightness === null) return null;
+      if (state.brightness > 100) return null;
+      return close(state.brightness, capability.value, 6);
+    }
+    case "colorRgb": {
+      if (state.colour === null || state.colour === 0) return null;
+      const channels = (packed) => [
+        packed >> 16 & 255,
+        packed >> 8 & 255,
+        packed & 255
+      ];
+      const got = channels(state.colour);
+      const wanted = channels(capability.value);
+      return got.every((value, at) => close(value, wanted[at], 24));
+    }
+  }
+}
+async function apply(light, capabilities) {
+  const send2 = async (capability) => {
+    await pace(light.device);
+    await call2("/device/control", {
+      requestId: randomUUID5(),
+      payload: { sku: light.sku, device: light.device, capability }
+    });
+  };
+  try {
+    for (const capability of capabilities) await send2(capability);
+    await sleep(CONFIRM_AFTER_MS);
+    let state = await stateOf(light).catch(() => UNKNOWN);
+    const missed = capabilities.filter((one) => took(state, one) === false);
+    if (missed.length > 0) {
+      for (const capability of missed) await send2(capability);
+      await sleep(CONFIRM_AFTER_MS);
+      state = await stateOf(light).catch(() => UNKNOWN);
+    }
+    return {
+      name: light.name,
+      state,
+      unconfirmed: capabilities.filter((one) => took(state, one) === false).map((one) => PLAINLY[one.instance] ?? one.instance),
+      failed: null
+    };
+  } catch (error) {
+    return {
+      name: light.name,
+      state: UNKNOWN,
+      unconfirmed: [],
+      failed: error instanceof LightError ? error.message : error.message
+    };
+  }
+}
+async function applyScene(said2, rgb, brightness) {
+  const chosen = await pick(said2);
+  const level = Math.max(1, Math.min(100, Math.round(brightness)));
+  const packed = rgb[0] << 16 | rgb[1] << 8 | rgb[2];
+  return Promise.all(
+    chosen.map(
+      (light) => apply(light, [
+        { type: "devices.capabilities.on_off", instance: "powerSwitch", value: 1 },
+        {
+          type: "devices.capabilities.color_setting",
+          instance: "colorRgb",
+          value: packed
+        },
+        { type: "devices.capabilities.range", instance: "brightness", value: level }
+      ])
+    )
+  );
+}
+async function setPower(said2, on) {
+  const chosen = await pick(said2);
+  return Promise.all(
+    chosen.map(
+      (light) => control(light, {
+        type: "devices.capabilities.on_off",
+        instance: "powerSwitch",
+        value: on ? 1 : 0
+      })
+    )
+  );
+}
+async function setBrightness(said2, percent) {
+  const level = Math.max(1, Math.min(100, Math.round(percent)));
+  const chosen = await pick(said2);
+  return Promise.all(
+    chosen.map(
+      (light) => control(light, {
+        type: "devices.capabilities.range",
+        instance: "brightness",
+        value: level
+      })
+    )
+  );
+}
+async function setColour(said2, colour) {
+  const wanted = colour.toLowerCase().trim();
+  const rgb = COLOURS[wanted];
+  if (!rgb) {
+    throw new LightError(
+      `I don't have a "${colour}". I know: ${Object.keys(COLOURS).join(", ")}.`
+    );
+  }
+  const chosen = await pick(said2);
+  const packed = rgb[0] << 16 | rgb[1] << 8 | rgb[2];
+  const landed = await Promise.all(
+    chosen.map(
+      (light) => control(light, {
+        type: "devices.capabilities.color_setting",
+        instance: "colorRgb",
+        value: packed
+      })
+    )
+  );
+  return { landed, colour: wanted };
+}
+function nameOfColour(packed) {
+  const channels = [packed >> 16 & 255, packed >> 8 & 255, packed & 255];
+  let nearest2 = "something";
+  let best = Infinity;
+  for (const [name, rgb] of Object.entries(COLOURS)) {
+    const distance = rgb.reduce(
+      (total, value, at) => total + (value - channels[at]) ** 2,
+      0
+    );
+    if (distance < best) {
+      best = distance;
+      nearest2 = name;
+    }
+  }
+  return nearest2;
+}
+async function survey(said2) {
+  const chosen = await pick(said2);
+  return Promise.all(
+    chosen.map(async (light) => ({
+      name: light.name,
+      state: await stateOf(light).catch(() => UNKNOWN)
+    }))
+  );
+}
+function lightsConfigured() {
+  return Boolean(goveeKey());
+}
+var LightError, BASE, known, KNOWN_FOR_MS, UNKNOWN, sleep, SETTLE_MS, commandedAt, CONFIRM_AFTER_MS, PLAINLY, control, COLOURS;
+var init_lights = __esm({
+  "server/lights.ts"() {
+    init_keys();
+    LightError = class extends Error {
+      constructor(message, needsKey = false) {
+        super(message);
+        this.needsKey = needsKey;
+      }
+    };
+    BASE = "https://openapi.api.govee.com/router/api/v1";
+    known = null;
+    KNOWN_FOR_MS = 6e4;
+    UNKNOWN = { on: null, brightness: null, colour: null, online: null };
+    sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    SETTLE_MS = 900;
+    commandedAt = /* @__PURE__ */ new Map();
+    CONFIRM_AFTER_MS = 500;
+    PLAINLY = {
+      powerSwitch: "switching",
+      brightness: "brightness",
+      colorRgb: "colour"
+    };
+    control = (light, capability) => apply(light, [capability]);
+    COLOURS = {
+      red: [255, 0, 0],
+      orange: [255, 110, 0],
+      amber: [255, 170, 40],
+      yellow: [255, 230, 0],
+      lime: [160, 255, 0],
+      green: [0, 255, 60],
+      teal: [0, 220, 190],
+      cyan: [0, 220, 255],
+      blue: [0, 90, 255],
+      indigo: [75, 0, 220],
+      violet: [150, 60, 255],
+      purple: [180, 0, 255],
+      magenta: [255, 0, 200],
+      pink: [255, 105, 180],
+      white: [255, 255, 255],
+      warm: [255, 180, 110],
+      cool: [200, 225, 255],
+      gold: [255, 200, 70]
+    };
+  }
+});
+
+// server/google/oauth.ts
+function googleConfigured() {
+  const client = googleClient();
+  return Boolean(client.id && client.secret);
+}
+function redirectUri() {
+  if (process.env.GOOGLE_REDIRECT_URI) return process.env.GOOGLE_REDIRECT_URI;
+  const host = process.env.VERCEL_PROJECT_PRODUCTION_URL;
+  return host ? `https://${host}/api/google-callback` : "http://localhost:3001/api/google-callback";
+}
+function authorizeUrl() {
+  const state = issueNonce("google-oauth");
+  const params = new URLSearchParams({
+    client_id: googleClient().id,
+    redirect_uri: redirectUri(),
+    response_type: "code",
+    scope: SCOPES.join(" "),
+    // Without offline there is no refresh token at all, and without consent
+    // Google returns one only on the very first authorisation — which makes
+    // every subsequent attempt look like it worked while leaving nothing to
+    // reconnect with tomorrow.
+    access_type: "offline",
+    prompt: "consent",
+    include_granted_scopes: "true",
+    state
+  });
+  return `${AUTH_URL}?${params.toString()}`;
+}
+async function postToken(body) {
+  const response = await fetch(TOKEN_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams(body).toString()
+  });
+  return await response.json();
+}
+function emailFromIdToken(idToken) {
+  if (!idToken) return "";
+  try {
+    const payload = idToken.split(".")[1];
+    const json = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    return json.email ?? "";
+  } catch {
+    return "";
+  }
+}
+async function completeSignIn(code, state) {
+  if (!checkNonce("google-oauth", state)) {
+    throw new GoogleError("That sign-in link had expired. Start again.");
+  }
+  const token2 = await postToken({
+    code,
+    client_id: googleClient().id,
+    client_secret: googleClient().secret,
+    redirect_uri: redirectUri(),
+    grant_type: "authorization_code"
+  });
+  if (token2.error || !token2.refresh_token) {
+    throw new GoogleError(
+      token2.error_description ?? token2.error ?? "Google returned no refresh token. Remove Grace at myaccount.google.com/permissions and try again."
+    );
+  }
+  const email = emailFromIdToken(token2.id_token);
+  const owner = googleClient().owner;
+  if (owner && email && email.toLowerCase() !== owner.toLowerCase()) {
+    throw new GoogleError(
+      `This is Grace's owner's account only. Signed in as ${email}, expected ${owner}.`
+    );
+  }
+  await store6.write({
+    refreshToken: token2.refresh_token,
+    email,
+    scopes: (token2.scope ?? "").split(" ").filter(Boolean),
+    connectedAt: (/* @__PURE__ */ new Date()).toISOString()
+  });
+  return { email };
+}
+async function connection() {
+  return store6.read();
+}
+async function missingScopes() {
+  const saved = await store6.read();
+  if (!saved) return [];
+  return SCOPES.filter(
+    (scope) => scope.includes("/auth/") && !saved.scopes.includes(scope)
+  );
+}
+async function disconnect() {
+  accessTokens.clear();
+  await store6.write(null);
+}
+async function accessToken() {
+  const saved = await store6.read();
+  if (!saved) throw new GoogleError("Google is not connected yet.", true);
+  if (saved.brokenReason) throw new GoogleError(saved.brokenReason, true);
+  const cached6 = accessTokens.get(saved.refreshToken);
+  if (cached6 && cached6.expiresAt > Date.now() + 6e4) return cached6.token;
+  const token2 = await postToken({
+    client_id: googleClient().id,
+    client_secret: googleClient().secret,
+    refresh_token: saved.refreshToken,
+    grant_type: "refresh_token"
+  });
+  if (token2.error === "invalid_grant") {
+    const reason = "Google has disconnected Grace \u2014 usually a changed password or a revoked permission. Reconnect to put it back.";
+    await store6.write({ ...saved, brokenReason: reason });
+    throw new GoogleError(reason, true);
+  }
+  if (token2.error || !token2.access_token) {
+    throw new GoogleError(token2.error_description ?? "Google refused the token.");
+  }
+  accessTokens.set(saved.refreshToken, {
+    token: token2.access_token,
+    expiresAt: Date.now() + (token2.expires_in ?? 3600) * 1e3
+  });
+  return token2.access_token;
+}
+async function googleFetch(url, init = {}) {
+  const token2 = await accessToken();
+  const response = await fetch(url, {
+    ...init,
+    headers: {
+      ...init.headers ?? {},
+      Authorization: `Bearer ${token2}`,
+      "Content-Type": "application/json"
+    }
+  });
+  if (response.status === 401) {
+    throw new GoogleError("Google rejected that request. Try reconnecting.", true);
+  }
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new GoogleError(
+      `Google returned ${response.status}: ${detail.slice(0, 200)}`
+    );
+  }
+  return response.json();
+}
+var AUTH_URL, TOKEN_URL, SCOPES, store6, accessTokens, GoogleError;
+var init_oauth = __esm({
+  "server/google/oauth.ts"() {
+    init_auth();
+    init_keys();
+    init_store();
+    AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
+    TOKEN_URL = "https://oauth2.googleapis.com/token";
+    SCOPES = [
+      "https://www.googleapis.com/auth/gmail.readonly",
+      "https://www.googleapis.com/auth/gmail.compose",
+      "https://www.googleapis.com/auth/gmail.modify",
+      "https://www.googleapis.com/auth/calendar.events",
+      "openid",
+      "email"
+    ];
+    store6 = new Document("google", () => null);
+    accessTokens = /* @__PURE__ */ new Map();
+    GoogleError = class extends Error {
+      constructor(message, needsReconnect = false) {
+        super(message);
+        this.needsReconnect = needsReconnect;
+        this.name = "GoogleError";
+      }
+    };
+  }
+});
+
+// server/n8n.ts
+async function call3(path3, method = "GET") {
+  const { key, url } = n8nAccess();
+  if (!key || !url) {
+    throw new N8nError(
+      "n8n is not connected. It needs two things pasted into her keys: the instance address, and an API key from Settings, n8n API.",
+      true
+    );
+  }
+  const response = await fetch(`${url}/api/v1${path3}`, {
+    method,
+    headers: { "X-N8N-API-KEY": key },
+    signal: AbortSignal.timeout(8e3)
+  });
+  if (response.status === 401) {
+    throw new N8nError("n8n rejected the key. It may have been revoked.", true);
+  }
+  if (!response.ok) throw new N8nError(`n8n answered ${response.status}.`);
+  return response.json();
+}
+async function n8nView() {
+  const [workflows, failed, recent] = await Promise.all([
+    call3("/workflows?limit=100"),
+    call3(
+      "/executions?status=error&limit=10"
+    ),
+    call3("/executions?limit=50")
+  ]);
+  return {
+    active: workflows.data.filter((one) => one.active).length,
+    inactive: workflows.data.filter((one) => !one.active).length,
+    failures: failed.data.map((one) => ({
+      workflow: one.workflowData?.name ?? "unnamed workflow",
+      at: one.startedAt
+    })),
+    recentTotal: recent.data.length
+  };
+}
+async function setWorkflowActive(said2, active) {
+  const needle = said2.toLowerCase().trim();
+  const { data } = await call3(
+    "/workflows?limit=200"
+  );
+  const exact = data.filter((one) => one.name.toLowerCase().trim() === needle);
+  const partial = data.filter((one) => one.name.toLowerCase().includes(needle));
+  const candidates = exact.length > 0 ? exact : partial;
+  if (candidates.length === 0) {
+    throw new N8nError(
+      `No workflow called "${said2}". They are: ${data.map((one) => one.name).join(", ") || "none at all"}.`
+    );
+  }
+  if (candidates.length > 1) {
+    throw new N8nError(
+      `"${said2}" matches more than one: ${candidates.map((one) => one.name).join(", ")}. Ask which they mean.`
+    );
+  }
+  const target = candidates[0];
+  if (target.active === active) return { name: target.name, changed: false };
+  await call3(`/workflows/${target.id}/${active ? "activate" : "deactivate"}`, "POST");
+  return { name: target.name, changed: true };
+}
+function n8nConfigured() {
+  const { key, url } = n8nAccess();
+  return Boolean(key && url);
+}
+var N8nError;
+var init_n8n = __esm({
+  "server/n8n.ts"() {
+    init_keys();
+    N8nError = class extends Error {
+      constructor(message, needsKey = false) {
+        super(message);
+        this.needsKey = needsKey;
+      }
+    };
+  }
+});
+
+// server/push.ts
+import webpush from "web-push";
+async function keys2() {
+  const saved = await keyStore.read();
+  if (saved) return saved;
+  const fresh2 = webpush.generateVAPIDKeys();
+  await keyStore.write(fresh2);
+  return fresh2;
+}
+async function publicKey() {
+  return (await keys2()).publicKey;
+}
+async function subscribe(raw) {
+  const candidate = raw;
+  const endpoint = candidate?.endpoint;
+  const p256dh = candidate?.keys?.p256dh;
+  const auth = candidate?.keys?.auth;
+  if (typeof endpoint !== "string" || !p256dh || !auth) {
+    return { ok: false, error: "that is not a usable subscription" };
+  }
+  await subscriptions.update((current) => {
+    const others = current.filter((entry) => entry.endpoint !== endpoint);
+    return [
+      ...others,
+      { endpoint, keys: { p256dh, auth }, addedAt: (/* @__PURE__ */ new Date()).toISOString() }
+    ];
+  });
+  return { ok: true };
+}
+async function devices() {
+  return (await subscriptions.read()).filter((entry) => !entry.goneAt).length;
+}
+async function notify(title, body) {
+  const all = await subscriptions.read();
+  const live2 = all.filter((entry) => !entry.goneAt);
+  if (live2.length === 0) return 0;
+  const { publicKey: pub, privateKey } = await keys2();
+  webpush.setVapidDetails(CONTACT, pub, privateKey);
+  const payload = JSON.stringify({ title, body });
+  const gone = [];
+  let sent = 0;
+  await Promise.all(
+    live2.map(async (entry) => {
+      try {
+        await webpush.sendNotification(
+          { endpoint: entry.endpoint, keys: entry.keys },
+          payload,
+          { TTL: 900 }
+        );
+        sent += 1;
+      } catch (error) {
+        const status = error.statusCode;
+        if (status === 404 || status === 410) gone.push(entry.endpoint);
+        else console.error("[grace] push failed:", error.message);
+      }
+    })
+  );
+  if (gone.length > 0) {
+    const at = (/* @__PURE__ */ new Date()).toISOString();
+    await subscriptions.update(
+      (current) => current.map(
+        (entry) => gone.includes(entry.endpoint) ? { ...entry, goneAt: at } : entry
+      )
+    );
+  }
+  return sent;
+}
+var keyStore, subscriptions, CONTACT;
+var init_push = __esm({
+  "server/push.ts"() {
+    init_store();
+    keyStore = new Document("push-keys", () => null);
+    subscriptions = new Document("push-subs", () => []);
+    CONTACT = "mailto:grace@localhost";
+  }
+});
+
+// server/google/calendar.ts
+function shape2(event) {
+  const allDay = Boolean(event.start?.date);
+  return {
+    id: event.id,
+    summary: event.summary ?? "(no title)",
+    location: event.location ?? "",
+    start: event.start?.dateTime ?? event.start?.date ?? "",
+    end: event.end?.dateTime ?? event.end?.date ?? "",
+    allDay,
+    attendees: (event.attendees ?? []).map((attendee) => attendee.email ?? "").filter(Boolean)
+  };
+}
+async function upcoming(hours = 24, limit = 20) {
+  const from = /* @__PURE__ */ new Date();
+  const to = new Date(from.getTime() + hours * 36e5);
+  const params = new URLSearchParams({
+    timeMin: from.toISOString(),
+    timeMax: to.toISOString(),
+    singleEvents: "true",
+    orderBy: "startTime",
+    maxResults: String(limit)
+  });
+  const response = await googleFetch(`${BASE2}?${params.toString()}`);
+  return (response.items ?? []).map(shape2);
+}
+async function addAppointment(options) {
+  const zone = options.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC";
+  const created = await googleFetch(`${BASE2}?sendUpdates=none`, {
+    method: "POST",
+    body: JSON.stringify({
+      summary: options.summary,
+      location: options.location,
+      description: options.description,
+      start: { dateTime: options.start, timeZone: zone },
+      end: { dateTime: options.end, timeZone: zone }
+    })
+  });
+  return shape2(created);
+}
+async function changeAppointment(id, patch) {
+  const zone = patch.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC";
+  const body = {};
+  if (patch.summary) body.summary = patch.summary;
+  if (patch.location) body.location = patch.location;
+  if (patch.start) body.start = { dateTime: patch.start, timeZone: zone };
+  if (patch.end) body.end = { dateTime: patch.end, timeZone: zone };
+  if (Object.keys(body).length === 0) {
+    throw new Error("nothing to change");
+  }
+  const updated = await googleFetch(
+    `${BASE2}/${encodeURIComponent(id)}?sendUpdates=none`,
+    { method: "PATCH", body: JSON.stringify(body) }
+  );
+  return shape2(updated);
+}
+var BASE2;
+var init_calendar = __esm({
+  "server/google/calendar.ts"() {
+    init_oauth();
+    BASE2 = "https://www.googleapis.com/calendar/v3/calendars/primary/events";
+  }
+});
+
+// server/google/gmail.ts
+function headerMap(headers) {
+  return Object.fromEntries(
+    (headers ?? []).map((header) => [header.name.toLowerCase(), header.value])
+  );
+}
+function findText(part) {
+  if (!part) return "";
+  if (part.mimeType === "text/plain" && !part.filename && part.body?.data) {
+    return Buffer.from(part.body.data, "base64url").toString("utf8");
+  }
+  for (const child of part.parts ?? []) {
+    const found = findText(child);
+    if (found) return found;
+  }
+  if (part.mimeType === "text/html" && !part.filename && part.body?.data) {
+    return Buffer.from(part.body.data, "base64url").toString("utf8").replace(/<style[\s\S]*?<\/style>/gi, "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  }
+  return "";
+}
+async function recentMail(query = "in:inbox", limit = 10) {
+  const list = await googleFetch(
+    `${BASE3}/messages?maxResults=${limit}&q=${encodeURIComponent(query)}`
+  );
+  const ids = (list.messages ?? []).slice(0, limit);
+  if (ids.length === 0) return [];
+  const messages = await Promise.all(
+    ids.map(
+      (message) => googleFetch(
+        `${BASE3}/messages/${message.id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date&metadataHeaders=List-Unsubscribe&metadataHeaders=Precedence`
+      ).catch(() => null)
+    )
+  );
+  return messages.filter(Boolean).map((raw) => {
+    const message = raw;
+    const headers = headerMap(message.payload?.headers);
+    return {
+      id: message.id,
+      threadId: message.threadId,
+      from: headers.from ?? "unknown sender",
+      subject: headers.subject ?? "(no subject)",
+      // Server-authoritative and trivially sortable, unlike the Date header.
+      date: new Date(Number(message.internalDate ?? 0)).toISOString(),
+      snippet: message.snippet ?? "",
+      unread: (message.labelIds ?? []).includes("UNREAD"),
+      bulk: Boolean(headers["list-unsubscribe"]) || /^(bulk|list|auto_reply)$/i.test(headers.precedence ?? "") || (message.labelIds ?? []).some(
+        (id) => ["CATEGORY_PROMOTIONS", "CATEGORY_SOCIAL", "CATEGORY_FORUMS"].includes(id)
+      )
+    };
+  });
+}
+async function readMail(id) {
+  const message = await googleFetch(`${BASE3}/messages/${id}?format=full`);
+  const headers = headerMap(message.payload?.headers);
+  return {
+    id: message.id,
+    threadId: message.threadId,
+    from: headers.from ?? "unknown sender",
+    subject: headers.subject ?? "(no subject)",
+    date: new Date(Number(message.internalDate ?? 0)).toISOString(),
+    snippet: message.snippet ?? "",
+    unread: (message.labelIds ?? []).includes("UNREAD"),
+    // Opening one deliberately means it is wanted regardless of what it is.
+    bulk: false,
+    body: findText(message.payload) || (message.snippet ?? "")
+  };
+}
+async function modify(id, change) {
+  const addLabelIds = change.add ?? [];
+  const removeLabelIds = change.remove ?? [];
+  const banned = [...addLabelIds, ...removeLabelIds].find(
+    (label2) => FORBIDDEN.includes(label2.toUpperCase())
+  );
+  if (banned) throw new Error(`${banned} is not hers to touch`);
+  await googleFetch(`${BASE3}/messages/${id}/modify`, {
+    method: "POST",
+    body: JSON.stringify({ addLabelIds, removeLabelIds })
+  });
+}
+async function fileMail(id) {
+  await modify(id, { remove: ["INBOX"] });
+}
+async function markRead(id) {
+  await modify(id, { remove: ["UNREAD"] });
+}
+async function markUnread(id) {
+  await modify(id, { add: ["UNREAD", "INBOX"] });
+}
+async function star(id) {
+  await modify(id, { add: ["STARRED"] });
+}
+async function labelMail(id, name) {
+  const wanted = name.trim();
+  if (!wanted) throw new Error("a label needs a name");
+  if (FORBIDDEN.includes(wanted.toUpperCase())) {
+    throw new Error(`${wanted} is not hers to touch`);
+  }
+  const existing = await googleFetch(`${BASE3}/labels`);
+  const found = (existing.labels ?? []).find(
+    (label2) => label2.name.toLowerCase() === wanted.toLowerCase()
+  );
+  const labelId = found?.id ?? (await googleFetch(`${BASE3}/labels`, {
+    method: "POST",
+    body: JSON.stringify({
+      name: wanted,
+      labelListVisibility: "labelShow",
+      messageListVisibility: "show"
+    })
+  })).id;
+  await modify(id, { add: [labelId] });
+  return found ? wanted : `${wanted} (new label)`;
+}
+async function draftReply(options) {
+  const mime = [
+    `To: ${options.to}`,
+    `Subject: ${encodeHeader(options.subject)}`,
+    'Content-Type: text/plain; charset="UTF-8"',
+    "",
+    options.body
+  ].join("\r\n");
+  const draft = await googleFetch(`${BASE3}/drafts`, {
+    method: "POST",
+    body: JSON.stringify({
+      message: {
+        raw: Buffer.from(mime, "utf8").toString("base64url"),
+        ...options.threadId ? { threadId: options.threadId } : {}
+      }
+    })
+  });
+  return { id: draft.id };
+}
+function encodeHeader(value) {
+  if (/^[\x00-\x7F]*$/.test(value)) return value;
+  return `=?UTF-8?B?${Buffer.from(value, "utf8").toString("base64")}?=`;
+}
+var BASE3, FORBIDDEN;
+var init_gmail = __esm({
+  "server/google/gmail.ts"() {
+    init_oauth();
+    BASE3 = "https://gmail.googleapis.com/gmail/v1/users/me";
+    FORBIDDEN = ["TRASH", "SPAM"];
+  }
+});
+
+// server/modes.ts
+function getMode() {
+  return store7.read();
+}
+function isMode(value) {
+  return typeof value === "string" && Object.hasOwn(MODES, value);
+}
+async function setMode(mode) {
+  const current = await store7.read();
+  if (current.mode === mode) return current;
+  const next = { mode, since: (/* @__PURE__ */ new Date()).toISOString() };
+  await store7.write(next);
+  return next;
+}
+var MODES, DEFAULT, store7;
+var init_modes = __esm({
+  "server/modes.ts"() {
+    init_store();
+    MODES = {
+      open: {
+        label: "Open",
+        blurb: "Normal. She speaks up when it\u2019s worth it.",
+        guidance: "No special constraints. Answer as you normally would, and raise anything genuinely worth raising."
+      },
+      work: {
+        label: "Work",
+        blurb: "Brisk and on-task. Personal matters wait.",
+        guidance: "The user is working. Be brisk and concrete \u2014 lead with the answer, cut the preamble entirely. Keep replies to a sentence or two unless asked for more. Hold anything personal or non-urgent until they are out of Work mode, and say you are holding it rather than dropping it."
+      },
+      focus: {
+        label: "Focus",
+        blurb: "Answers only. Nothing volunteered.",
+        guidance: "The user is concentrating and every word costs them. Answer exactly what was asked, in as few words as will do \u2014 often a fragment rather than a sentence. Volunteer nothing at all: no observations, no suggestions, no follow-up questions. If something is genuinely urgent, say only that it is urgent and what it is, in under ten words."
+      },
+      away: {
+        label: "Away",
+        blurb: "She takes messages and holds them.",
+        guidance: "The user is away from their desk and may be listening rather than reading. Assume everything is being spoken aloud: short sentences, no detail they cannot hold in their head. Take note of anything that arrives and tell them it is waiting rather than working through it now."
+      }
+    };
+    DEFAULT = { mode: "open", since: (/* @__PURE__ */ new Date(0)).toISOString() };
+    store7 = new Document("mode", () => DEFAULT);
+  }
+});
+
+// server/tools/ask.ts
+function parseChoices(raw) {
+  return raw.split(/\s*\|\s*|\n+/).map((line) => line.trim()).filter(Boolean).map((line) => {
+    const [label2, ...rest] = line.split(/\s+[—-]{1,2}\s+/);
+    return {
+      label: label2.trim().slice(0, 48),
+      detail: rest.join(" \u2014 ").trim().slice(0, 120) || void 0
+    };
+  }).slice(0, 4);
+}
+function onAsk(handler) {
+  deliver = handler;
+}
+var deliver, askTools;
+var init_ask = __esm({
+  "server/tools/ask.ts"() {
+    deliver = null;
+    askTools = [
+      {
+        name: "ask_choice",
+        description: "Ask the user a question and give them buttons to answer with, instead of making them type. Use it whenever you need a decision from them and the sensible answers are a short list: which of two times, whether to go ahead, which of three options they prefer. Ask the question in your reply as well, in your own words \u2014 the buttons are how they answer, not a substitute for asking. Do not use it for open questions, and do not use it more than once in a reply.",
+        category: "research",
+        parameters: {
+          question: {
+            type: "string",
+            description: "The question itself, short and plain."
+          },
+          choices: {
+            type: "string",
+            description: 'Two to four answers, separated by | \u2014 each optionally "Label \u2014 what it means". For example: "Tuesday \u2014 before the weekend | Thursday \u2014 gives you more time".'
+          }
+        },
+        required: ["question", "choices"],
+        run: async (args) => {
+          const question = String(args.question ?? "").trim();
+          const choices = parseChoices(String(args.choices ?? ""));
+          if (choices.length < 2) {
+            return "That needs at least two answers to choose between. Just ask them in words instead.";
+          }
+          deliver?.(question, choices);
+          return `The buttons are on their screen. Ask the question in your reply too, in one short sentence, then stop \u2014 do not guess which they will pick, and do not carry on as though they had already answered.`;
+        }
+      }
+    ];
+  }
+});
+
+// server/approvals.ts
+import { randomUUID as randomUUID6 } from "node:crypto";
+function live(all, now = Date.now()) {
+  return all.filter((entry) => now - new Date(entry.at).getTime() < HOLD_FOR_MS);
+}
+async function hold(name, args) {
+  const entry = { id: randomUUID6().slice(0, 8), name, args, at: (/* @__PURE__ */ new Date()).toISOString() };
+  await store9.update((all) => [...live(all), entry]);
+  return entry;
+}
+async function take(id) {
+  let found = null;
+  await store9.update((all) => {
+    const current = live(all);
+    found = current.find((entry) => entry.id === id) ?? null;
+    return current.filter((entry) => entry.id !== id);
+  });
+  return found;
+}
+async function restore(entry) {
+  await store9.update((all) => [...live(all).filter((e) => e.id !== entry.id), entry]);
+}
+var HOLD_FOR_MS, store9;
+var init_approvals = __esm({
+  "server/approvals.ts"() {
+    init_store();
+    HOLD_FOR_MS = 5 * 60 * 1e3;
+    store9 = new Document("approvals", () => []);
+  }
+});
+
+// server/journal.ts
+import { randomUUID as randomUUID7 } from "node:crypto";
+async function recentDeeds(limit = 25) {
+  const all = await store10.read();
+  return all.slice(-limit).reverse();
+}
+async function noteDeed(kind, text, unprompted = false) {
+  const clean = text.trim().slice(0, 300);
+  if (!clean) return;
+  const entry = {
+    id: randomUUID7(),
+    at: (/* @__PURE__ */ new Date()).toISOString(),
+    kind,
+    text: clean,
+    ...unprompted ? { unprompted: true } : {}
+  };
+  await store10.update((current) => [...current, entry].slice(-LIMIT));
+}
+var LIMIT, store10;
+var init_journal = __esm({
+  "server/journal.ts"() {
+    init_store();
+    LIMIT = 120;
+    store10 = new Document("journal", () => []);
+  }
+});
+
+// server/tools/coding.ts
+function howLong(startedAt) {
+  const seconds = Math.round((Date.now() - startedAt) / 1e3);
+  if (seconds < 90) return `${seconds} seconds`;
+  return `${Math.round(seconds / 60)} minutes`;
+}
+var NOT_HERE, NOT_LOCAL, codingTools;
+var init_coding2 = __esm({
+  "server/tools/coding.ts"() {
+    init_coding();
+    init_budget();
+    init_config();
+    NOT_HERE = "Claude Code is not on this machine, so there is nothing to hand the work to. Tell the user to install it \u2014 `npm install -g @anthropic-ai/claude-code` and then `claude` once to sign in \u2014 and do not imply you tried to code.";
+    NOT_LOCAL = "Coding runs on the machine she is installed on, and this one is in a data centre with none of the user\u2019s code on it. Say so plainly: the local install is the one that can do this.";
+    codingTools = [
+      {
+        name: "write_code",
+        description: "Put a programming task to Opus, which will read and edit files in a folder on the user\u2019s machine. Use this for anything that means writing or changing code \u2014 do not try to write it yourself and paste it. It runs in the background and takes minutes, so say you have set it going and carry on; check on it with check_code. Describe the task fully, as you would to a colleague who cannot see this conversation: it gets the task and the folder and nothing else.",
+        parameters: {
+          task: {
+            type: "string",
+            description: 'The whole job, in plain words. Include what to build or change, anything about how the user wants it, and what "done" looks like.'
+          },
+          folder: {
+            type: "string",
+            description: "Which folder to work in, e.g. ~/projects/thing"
+          }
+        },
+        required: ["task", "folder"],
+        category: "machine",
+        run: async (args) => {
+          if (config.deployed) return NOT_LOCAL;
+          if (!codingAvailable()) return NOT_HERE;
+          try {
+            await requireBudget();
+          } catch (stopped) {
+            return `${stopped.message} A coding run costs real money, so it is not something to start against a spent budget. Say so plainly.`;
+          }
+          const folder = String(args.folder);
+          const { runTool: runTool2 } = await Promise.resolve().then(() => (init_tools(), tools_exports));
+          const looked2 = await runTool2({ name: "list_folder", args: { path: folder } });
+          if (!looked2.ok || /outside the folders/.test(looked2.result)) {
+            return `I cannot work there. ${looked2.result}`;
+          }
+          const job = startJob(String(args.task), folder);
+          return `Started. Job ${job.id}, working in ${folder}. It will take minutes, not seconds \u2014 tell the user it is running and what it is doing, then get on with the conversation. Check on it with check_code when they ask, or when enough time has passed that they would expect news.`;
+        }
+      },
+      {
+        name: "check_code",
+        description: "See how a coding job is getting on, or how the last one finished. Report what it says rather than reciting it.",
+        parameters: {
+          id: {
+            type: "string",
+            description: "Which job. Leave it out for the most recent one."
+          }
+        },
+        required: [],
+        category: "machine",
+        run: async (args) => {
+          if (config.deployed) return NOT_LOCAL;
+          const wanted = args.id ? jobById(String(args.id)) : recentJobs()[0];
+          if (!wanted) {
+            return "There are no coding jobs. Nothing has been set going this session.";
+          }
+          if (!wanted.finishedAt) {
+            return `Job ${wanted.id} is still going, ${howLong(wanted.startedAt)} in. It is working on: ${wanted.task}`;
+          }
+          const took2 = Math.round((wanted.finishedAt - wanted.startedAt) / 1e3);
+          const cost = wanted.cost ? `, cost $${wanted.cost.toFixed(2)}` : "";
+          const turns = wanted.turns ? `, ${wanted.turns} steps` : "";
+          return `Job ${wanted.id} ${wanted.ok ? "finished" : "failed"} after ${took2} seconds${turns}${cost}, in ${wanted.folder}.
+
+${wanted.summary}
+
+The files are changed on disk. If the user wants it built or tested, that is a separate thing you run yourself.`;
+        }
+      }
+    ];
+  }
+});
+
+// server/tools/console.ts
+async function send(action, verb, arg) {
+  const { online, state } = await bridgeStatus();
+  if (!online) return NO_LAPTOP;
+  const finished = await awaitResult(await enqueue(action, arg));
+  if (!finished) {
+    return `The laptop took the instruction to ${verb} but has not reported back yet. Say that it is on its way rather than that it is done.`;
+  }
+  if (!finished.ok) {
+    return `That did not work: ${finished.detail || "the laptop gave no reason"}. Say so plainly and do not offer to try again \u2014 it has already been tried twice and checked against the console both times.`;
+  }
+  const done = {
+    open: `Done \u2014 it is up on the laptop screen${finished.detail ? ` (${finished.detail})` : ""}.`,
+    lock: "Done \u2014 the laptop is locked."
+  };
+  return done[action] ?? "Done.";
+}
+var NO_LAPTOP, consoleTools;
+var init_console = __esm({
+  "server/tools/console.ts"() {
+    init_bridge();
+    NO_LAPTOP = "The laptop bridge is not running, so I have no way into the room at all. Tell the user plainly: the laptop can only be reached from a program running in the same house, and it is not answering. Do not imply anything happened.";
+    consoleTools = [
+      /*
+       * Waking and sleeping the console used to live here, and do not any more.
+       *
+       * They worked through playactor, whose last release was February 2022. Both
+       * directions now fail silently against current PS5 firmware: the request is
+       * sent, the console is entirely unmoved, and the process exits zero. There is
+       * no maintained alternative — the most recently published PlayStation
+       * integration on npm still depends on that same version.
+       *
+       * A tool that can never succeed is worse than an absent one. It costs its
+       * description in every prompt, she reaches for it in good faith, and the user
+       * waits ten seconds to be told it did not work. Removing it means she says
+       * plainly that she cannot do it, immediately, which is the honest version of
+       * the same answer.
+       *
+       * The bridge still carries the code for both, and the laptop half of it —
+       * opening a page, locking the screen — is untouched and works. If playactor
+       * is ever revived, this is two tool definitions and a line in NEEDS.
+       */
+      {
+        name: "open_on_laptop",
+        description: 'Put a web page up on the laptop in the room, on its own screen. Use it when the user is not holding a phone and says "pull that up", "put it on the laptop", or "show me". Different from open_pages, which opens a tab in whatever they are looking at now \u2014 this one reaches the machine in the room. Web addresses only.',
+        category: "home",
+        parameters: {
+          url: {
+            type: "string",
+            description: "The full address, including https://."
+          }
+        },
+        required: ["url"],
+        run: (args) => send("open", "open that page", String(args.url ?? ""))
+      },
+      {
+        name: "lock_laptop",
+        description: "Lock the laptop\u2019s screen. Use it when the user says they are leaving, going out, or asks you to lock up. Nothing closes and nothing is lost \u2014 it is the lock screen, not a shutdown.",
+        category: "home",
+        parameters: {},
+        required: [],
+        run: () => send("lock", "lock the laptop")
+      }
+    ];
+  }
+});
+
+// server/tools/google.ts
+function sender(from) {
+  const name = from.split("<")[0].trim().replace(/^"|"$/g, "");
+  return name || from.trim();
+}
+function when(iso, allDay) {
+  const date = new Date(iso);
+  if (!Number.isFinite(date.getTime())) return iso;
+  return allDay ? date.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" }) : date.toLocaleString("en-GB", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+}
+var googleTools;
+var init_google = __esm({
+  "server/tools/google.ts"() {
+    init_calendar();
+    init_gmail();
+    googleTools = [
+      {
+        name: "check_mail",
+        description: "Look at the user\u2019s inbox. Use this whenever they ask you to check their mail, ask whether anything has arrived, or ask about a message from someone. Returns senders and subjects only \u2014 never the contents, and never anything to read out.",
+        category: "research",
+        parameters: {
+          query: {
+            type: "string",
+            description: 'Optional Gmail search, in Gmail\u2019s own syntax \u2014 "is:unread", "from:sam", "newer_than:3d". Leave out for the recent inbox.'
+          }
+        },
+        required: [],
+        run: async (args) => {
+          const query = String(args.query ?? "").trim() || "in:inbox";
+          const all = await recentMail(query, 20);
+          if (all.length === 0) return `Nothing matching "${query}".`;
+          const messages = all.filter((message) => !message.bulk).slice(0, 8);
+          const junked = all.length - messages.length;
+          if (messages.length === 0) {
+            return `Nothing but ${junked} newsletters and automatic notices. Tell them there is nothing that wants them, in a few words. Do not describe the junk, do not count it out loud, and do not offer to read any of it.`;
+          }
+          const list = messages.map(
+            (message) => `- ${message.unread ? "[unread] " : ""}${sender(message.from)}: ${message.subject} (id ${message.id})`
+          ).join("\n");
+          return `${list}
+
+Newsletters and marketing have already been taken out${junked > 0 ? ` \u2014 ${junked} of them, which you should not mention` : ""}. What is left is from people and from companies actually corresponding with them.
+
+The list above is working material and must not appear in your reply in any form: do not repeat it, do not list it, do not quote a subject verbatim, never say an id. One or two sentences, no more. Say how many and what they are about, in your own words. Then ask whether they want any of it read out, and use read_mail if they say yes.`;
+        }
+      },
+      {
+        name: "read_mail",
+        description: "Read one message in full, once check_mail has shown you which. Pass the id from that list.",
+        category: "research",
+        parameters: {
+          id: { type: "string", description: "The message id from check_mail." }
+        },
+        required: ["id"],
+        run: async (args) => {
+          const message = await readMail(String(args.id));
+          return [
+            `From: ${message.from}`,
+            `Subject: ${message.subject}`,
+            "",
+            message.body.slice(0, 4e3)
+          ].join("\n");
+        }
+      },
+      {
+        name: "draft_reply",
+        description: "Write a draft into the user\u2019s drafts folder. It is NOT sent \u2014 they read it and press send themselves. Use this when asked to reply to something or write an email. Tell them plainly afterwards that it is waiting in their drafts, unsent.",
+        category: "research",
+        parameters: {
+          to: { type: "string", description: "Recipient email address." },
+          subject: { type: "string", description: "Subject line." },
+          body: {
+            type: "string",
+            description: "The message, in the user\u2019s own register \u2014 plain, direct, no flourishes."
+          },
+          threadId: {
+            type: "string",
+            description: "The thread to reply within, from check_mail, if replying."
+          }
+        },
+        required: ["to", "subject", "body"],
+        run: async (args) => {
+          await draftReply({
+            to: String(args.to),
+            subject: String(args.subject),
+            body: String(args.body),
+            threadId: args.threadId ? String(args.threadId) : void 0
+          });
+          return `Draft saved to their drafts folder, unsent. They send it.`;
+        }
+      },
+      {
+        name: "check_diary",
+        description: 'Look at what is coming up in the user\u2019s calendar. Use this for "what\u2019s on today", "am I free", "when is my next thing".',
+        category: "research",
+        parameters: {
+          hours: {
+            type: "number",
+            description: "How far ahead to look. 24 for today, 168 for the week."
+          }
+        },
+        required: [],
+        run: async (args) => {
+          const hours = Number(args.hours) || 24;
+          const events = await upcoming(hours, 20);
+          if (events.length === 0) return `Nothing in the next ${hours} hours.`;
+          return events.map(
+            (event) => `- ${when(event.start, event.allDay)}: ${event.summary}` + (event.location ? ` (${event.location})` : "")
+          ).join("\n");
+        }
+      },
+      {
+        name: "add_to_diary",
+        description: "Put something in the user\u2019s calendar. Work out real times from what they said and the current date you were given. Nobody else is notified \u2014 telling people is the user\u2019s to do.",
+        category: "calendar",
+        parameters: {
+          summary: { type: "string", description: "What it is." },
+          start: { type: "string", description: "Start, as ISO 8601." },
+          end: { type: "string", description: "End, as ISO 8601." },
+          location: { type: "string", description: "Where, if given." }
+        },
+        required: ["summary", "start", "end"],
+        run: async (args) => {
+          const event = await addAppointment({
+            summary: String(args.summary),
+            start: String(args.start),
+            end: String(args.end),
+            location: args.location ? String(args.location) : void 0
+          });
+          return `In the diary: ${event.summary}, ${when(event.start, event.allDay)}.`;
+        }
+      },
+      {
+        name: "file_mail",
+        description: "Take a message out of the inbox \u2014 Gmail\u2019s archive. It keeps every word and stays searchable in All Mail; it simply stops sitting in the inbox. Use it when the user says they are done with something, have dealt with it, or asks you to clear or tidy the inbox. Pass the id from check_mail.",
+        category: "research",
+        parameters: {
+          id: { type: "string", description: "The message id from check_mail." }
+        },
+        required: ["id"],
+        run: async (args) => {
+          await fileMail(String(args.id));
+          return "Filed out of the inbox. Still in All Mail, still searchable.";
+        }
+      },
+      {
+        name: "label_mail",
+        description: 'Put a label on a message, making the label if it does not exist yet. Use it when the user wants something filed under a heading \u2014 "put that under taxes". Labelling does not take it out of the inbox; file_mail does that.',
+        category: "research",
+        parameters: {
+          id: { type: "string", description: "The message id from check_mail." },
+          label: { type: "string", description: "The label name, as they said it." }
+        },
+        required: ["id", "label"],
+        run: async (args) => {
+          const applied = await labelMail(String(args.id), String(args.label));
+          return `Labelled ${applied}.`;
+        }
+      },
+      {
+        name: "mark_mail",
+        description: "Change how a message sits in the inbox: mark it read once you have told the user what it says, unread to bring it back for them later, or star it to flag it. Pass the id from check_mail.",
+        category: "research",
+        parameters: {
+          id: { type: "string", description: "The message id from check_mail." },
+          how: {
+            type: "string",
+            description: "What to do with it.",
+            values: ["read", "unread", "starred"]
+          }
+        },
+        required: ["id", "how"],
+        run: async (args) => {
+          const id = String(args.id);
+          const how = String(args.how);
+          if (how === "read") {
+            await markRead(id);
+            return "Marked read.";
+          }
+          if (how === "unread") {
+            await markUnread(id);
+            return "Back in the inbox, unread.";
+          }
+          if (how === "starred") {
+            await star(id);
+            return "Starred.";
+          }
+          return `I do not know what "${how}" means for a message.`;
+        }
+      },
+      {
+        name: "change_diary",
+        description: "Move or amend something already in the user\u2019s calendar \u2014 a new time, a new place, a new name. Say which entry by its title, as they said it. Nobody else is notified, so if other people are on it, tell the user they still have to say so. This cannot remove an entry; nothing can.",
+        category: "calendar",
+        parameters: {
+          which: {
+            type: "string",
+            description: "The title of the entry, or enough of it to find it."
+          },
+          start: { type: "string", description: "New start, as ISO 8601." },
+          end: { type: "string", description: "New end, as ISO 8601." },
+          location: { type: "string", description: "New place." },
+          title: { type: "string", description: "New title." }
+        },
+        required: ["which"],
+        run: async (args) => {
+          const said2 = String(args.which).toLowerCase().trim();
+          const events = await upcoming(24 * 30, 100);
+          const exact = events.filter((one) => one.summary.toLowerCase().trim() === said2);
+          const partial = events.filter((one) => one.summary.toLowerCase().includes(said2));
+          const found = exact.length > 0 ? exact : partial;
+          if (found.length === 0) {
+            return `Nothing called "${args.which}" in the next month. Ask them which entry they mean.`;
+          }
+          if (found.length > 1) {
+            return `"${args.which}" matches ${found.length} entries: ${found.map((one) => `${one.summary} on ${when(one.start, one.allDay)}`).join("; ")}. Ask which one before changing anything.`;
+          }
+          const updated = await changeAppointment(found[0].id, {
+            summary: args.title ? String(args.title) : void 0,
+            start: args.start ? String(args.start) : void 0,
+            end: args.end ? String(args.end) : void 0,
+            location: args.location ? String(args.location) : void 0
+          });
+          return `Moved: ${updated.summary} is now ${when(updated.start, updated.allDay)}${updated.location ? ` at ${updated.location}` : ""}.${updated.attendees.length > 0 ? " Other people are on this one and have not been told." : ""}`;
+        }
+      }
+    ];
+  }
+});
+
+// server/tools/machine.ts
+function hands() {
+  if (!handsPromise) {
+    process.env.GRACE_BRIDGE_EMBEDDED = "1";
+    handsPromise = import("../../bridge/bridge.mjs");
+  }
+  return handsPromise;
+}
+async function ask(action, arg, extra = {}) {
+  if (!config.deployed) {
+    const { carryOut } = await hands();
+    const done = await carryOut(action, arg, extra);
+    return done.ok ? done.detail : `That did not work: ${done.detail}`;
+  }
+  const { online } = await bridgeStatus();
+  if (!online) return NO_BRIDGE;
+  const id = await enqueue(action, arg, extra);
+  const finished = await awaitResult(id, PATIENCE[action] ?? 12e3);
+  if (!finished) {
+    return "The machine took the instruction but has not reported back yet. Say it is still going rather than that it is done, and offer to check again.";
+  }
+  if (!finished.ok) {
+    return `That did not work: ${finished.detail || "the machine gave no reason"}.`;
+  }
+  return finished.detail || "Done.";
+}
+function looksDestructive(command) {
+  return DESTRUCTIVE.some((pattern) => pattern.test(command));
+}
+var NO_BRIDGE, PATIENCE, handsPromise, DESTRUCTIVE, machineTools;
+var init_machine = __esm({
+  "server/tools/machine.ts"() {
+    init_bridge();
+    init_config();
+    NO_BRIDGE = "The bridge is not running on the user\u2019s machine, so I cannot reach their files or their shell at all. Say exactly that \u2014 the program has to be started on the computer itself \u2014 and do not imply anything happened.";
+    PATIENCE = {
+      shell: 45e3,
+      ls: 2e4,
+      read: 25e3,
+      write: 25e3,
+      remove: 25e3
+    };
+    handsPromise = null;
+    DESTRUCTIVE = [
+      /\brm\b/,
+      /\brmdir\b/,
+      /\bunlink\b/,
+      /\bshred\b/,
+      /\btruncate\b/,
+      /\bdd\b/,
+      /\bmkfs/,
+      /\bfdisk\b/,
+      /\bdiskutil\b/,
+      /\bformat\b/,
+      /\bmv\b/,
+      /\bchmod\b/,
+      /\bchown\b/,
+      /\bkillall\b/,
+      /\bpkill\b/,
+      /\bshutdown\b/,
+      /\breboot\b/,
+      /\bhalt\b/,
+      /\bgit\s+(reset|clean|checkout\s+--|push\s+.*--force|push\s+.*-f\b)/,
+      /\b(npm|pnpm|yarn)\s+(publish|unpublish)\b/,
+      /\bdrop\s+(table|database)\b/i,
+      /\bsudo\b/,
+      /\bsu\b/,
+      /*
+       * Redirection that lands on top of a file.
+       *
+       * Not `>>`, which appends and loses nothing, and not `2>&1`, which points
+       * one stream at another and touches no file at all. The lookbehind is what
+       * makes the first of those work: without it the second angle bracket of
+       * `>>` is itself a `>` not followed by a `>`, so every append was read as
+       * an overwrite and asked about.
+       */
+      /(?<!>)>(?!>)(?!\s*&)/
+    ];
+    machineTools = [
+      {
+        name: "list_folder",
+        description: "List what is in a folder on the user\u2019s own computer. Paths may be absolute or start with ~ for their home folder. Use this before guessing at a path \u2014 she can see the machine, so she should look.",
+        parameters: {
+          path: { type: "string", description: "The folder, e.g. ~/Documents" }
+        },
+        required: ["path"],
+        category: "machine",
+        run: (args) => ask("ls", String(args.path))
+      },
+      {
+        name: "read_file",
+        description: "Read a text file on the user\u2019s own computer. Large files come back shortened, and binary files are refused rather than mangled.",
+        parameters: {
+          path: { type: "string", description: "The file, e.g. ~/notes/todo.md" }
+        },
+        required: ["path"],
+        category: "machine",
+        run: (args) => ask("read", String(args.path))
+      },
+      {
+        name: "write_file",
+        description: "Write a text file on the user\u2019s own computer. Creating a new file is free. Landing on top of a file that already exists needs replace=true, and that will stop and ask the user first.",
+        parameters: {
+          path: { type: "string", description: "The file to write" },
+          text: { type: "string", description: "The whole contents of the file" },
+          replace: {
+            type: "boolean",
+            description: "True to overwrite a file that already exists. Without it, an existing file is left alone and you are told so."
+          }
+        },
+        required: ["path", "text"],
+        category: "machine",
+        // Creating something is not destroying anything. Replacing something is.
+        risky: (args) => args.replace === true,
+        run: (args) => ask("write", String(args.path), {
+          body: String(args.text ?? ""),
+          replace: args.replace === true
+        })
+      },
+      {
+        name: "delete_file",
+        description: "Delete a file on the user\u2019s own computer. This always stops and asks them first \u2014 it is one of the three things they said must be confirmed.",
+        parameters: {
+          path: { type: "string", description: "The file to delete" }
+        },
+        required: ["path"],
+        category: "machine",
+        destructive: true,
+        run: (args) => ask("remove", String(args.path))
+      },
+      {
+        name: "run_command",
+        description: "Run a command in the terminal on the user\u2019s own computer and return what it printed. Anything that could destroy something \u2014 deleting, moving, overwriting, sudo \u2014 stops and asks them first. Prefer the plainest command that answers the question.",
+        parameters: {
+          command: { type: "string", description: "The command line to run" },
+          folder: {
+            type: "string",
+            description: "Which folder to run it in. Defaults to their home folder."
+          }
+        },
+        required: ["command"],
+        category: "machine",
+        risky: (args) => looksDestructive(String(args.command ?? "")),
+        run: (args) => ask("shell", String(args.command), {
+          body: args.folder ? String(args.folder) : void 0
+        })
+      }
+    ];
+  }
+});
+
+// server/files.ts
+import { randomUUID as randomUUID8 } from "node:crypto";
+async function liveFiles() {
+  return (await store11.read()).filter((file) => !file.archivedAt).sort((left, right) => right.addedAt.localeCompare(left.addedAt));
+}
+async function findFile(said2) {
+  const needle = said2.toLowerCase().trim();
+  if (!needle) return void 0;
+  const live2 = await liveFiles();
+  return live2.find((file) => file.name.toLowerCase().trim() === needle) ?? live2.find((file) => file.name.toLowerCase().includes(needle));
+}
+async function addFile(name, text) {
+  const clean = name.trim().slice(0, 120) || "untitled";
+  const body = text.trim().slice(0, MAX_CHARS);
+  if (!body) throw new Error("there was no readable text in that file");
+  const file = {
+    id: randomUUID8(),
+    name: clean,
+    text: body,
+    chars: body.length,
+    addedAt: (/* @__PURE__ */ new Date()).toISOString()
+  };
+  await store11.update((files) => {
+    const others = files.filter((one) => one.name !== clean || one.archivedAt);
+    const kept = [file, ...others];
+    const live2 = kept.filter((one) => !one.archivedAt);
+    if (live2.length > MAX_FILES) {
+      const cut = live2.slice(MAX_FILES).map((one) => one.id);
+      return kept.map(
+        (one) => cut.includes(one.id) ? { ...one, archivedAt: (/* @__PURE__ */ new Date()).toISOString() } : one
+      );
+    }
+    return kept;
+  });
+  return file;
+}
+async function archiveFile(id) {
+  await store11.update(
+    (files) => files.map(
+      (file) => file.id === id ? { ...file, archivedAt: (/* @__PURE__ */ new Date()).toISOString() } : file
+    )
+  );
+  return liveFiles();
+}
+async function searchFiles(query) {
+  const needles = query.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter((word) => word.length > 2 && !NOISE2.has(word));
+  if (needles.length === 0) return [];
+  const files = await liveFiles();
+  return files.map((file) => {
+    const lower = file.text.toLowerCase();
+    const hits = needles.filter((needle) => lower.includes(needle));
+    if (hits.length === 0) return null;
+    const at = lower.indexOf(hits[0]);
+    const excerpt = file.text.slice(Math.max(0, at - 120), at + 400).trim();
+    return { name: file.name, excerpt, score: hits.length };
+  }).filter((row) => Boolean(row)).sort((left, right) => right.score - left.score).slice(0, 4).map(({ name, excerpt }) => ({ name, excerpt }));
+}
+var MAX_CHARS, MAX_FILES, store11, NOISE2;
+var init_files = __esm({
+  "server/files.ts"() {
+    init_store();
+    MAX_CHARS = 4e4;
+    MAX_FILES = 40;
+    store11 = new Document("files", () => []);
+    NOISE2 = /* @__PURE__ */ new Set([
+      "the",
+      "a",
+      "an",
+      "and",
+      "or",
+      "of",
+      "to",
+      "in",
+      "on",
+      "for",
+      "with",
+      "is",
+      "was",
+      "what",
+      "does",
+      "say",
+      "about",
+      "my",
+      "the",
+      "that",
+      "this",
+      "it"
+    ]);
+  }
+});
+
+// server/notes.ts
+import { randomUUID as randomUUID9 } from "node:crypto";
+async function liveNotes() {
+  const all = await store12.read();
+  return all.filter((note) => !note.archivedAt).sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+}
+function match(notes, title) {
+  const needle = title.toLowerCase().trim();
+  const meaning = essence(title);
+  return notes.find(
+    (note) => note.title.toLowerCase().trim() === needle || meaning.length > 0 && essence(note.title) === meaning
+  );
+}
+function words(text) {
+  return text.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+}
+function essence(text) {
+  return words(text).filter((word) => !FILLER.has(word)).sort().join(" ");
+}
+function findForReading(notes, title) {
+  const exact = match(notes, title);
+  if (exact) return exact;
+  const asked = words(title).filter((word) => !FILLER.has(word));
+  if (asked.length === 0) return void 0;
+  return notes.find((note) => {
+    const own = new Set(words(note.title));
+    return asked.every((word) => own.has(word));
+  });
+}
+async function writeNote(title, text, mode = "append") {
+  const clean = title.trim().slice(0, 80);
+  const body = text.trim();
+  if (!clean || !body) throw new Error("a note needs a title and something to say");
+  const now = (/* @__PURE__ */ new Date()).toISOString();
+  let saved = null;
+  await store12.update((notes) => {
+    const existing = match(
+      notes.filter((note) => !note.archivedAt),
+      clean
+    );
+    if (existing) {
+      saved = {
+        ...existing,
+        body: mode === "replace" ? body : `${existing.body}
+
+${dateLine(now)} ${body}`,
+        updatedAt: now
+      };
+      return notes.map((note) => note.id === existing.id ? saved : note);
+    }
+    saved = {
+      id: randomUUID9(),
+      title: clean,
+      body: `${dateLine(now)} ${body}`,
+      createdAt: now,
+      updatedAt: now
+    };
+    return [...notes, saved];
+  });
+  return saved;
+}
+function dateLine(iso) {
+  return `[${new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}]`;
+}
+async function readNote(title) {
+  return findForReading(await liveNotes(), title.trim()) ?? null;
+}
+async function saveNoteBody(id, title, body) {
+  const now = (/* @__PURE__ */ new Date()).toISOString();
+  await store12.update(
+    (notes) => notes.map(
+      (note) => note.id === id ? { ...note, title: title.trim().slice(0, 80), body: body.trim(), updatedAt: now } : note
+    )
+  );
+  return liveNotes();
+}
+async function archiveNote(id) {
+  const now = (/* @__PURE__ */ new Date()).toISOString();
+  await store12.update(
+    (notes) => notes.map((note) => note.id === id ? { ...note, archivedAt: now } : note)
+  );
+  return liveNotes();
+}
+var store12, FILLER;
+var init_notes = __esm({
+  "server/notes.ts"() {
+    init_store();
+    store12 = new Document("notes", () => []);
+    FILLER = /* @__PURE__ */ new Set(["the", "a", "an", "my", "our", "this", "that", "of", "for"]);
+  }
+});
+
+// server/situations.ts
+import { randomUUID as randomUUID10 } from "node:crypto";
+function allSituations() {
+  return store13.read();
+}
+async function openSituations() {
+  const all = await store13.read();
+  return all.filter((one) => one.status === "open").sort((left, right) => lastMove(right).localeCompare(lastMove(left)));
+}
+function lastMove(one) {
+  return one.updates[one.updates.length - 1]?.at ?? one.createdAt;
+}
+function find(list, title) {
+  const needle = title.toLowerCase().trim();
+  const meaning = essence2(title);
+  return list.find(
+    (one) => one.title.toLowerCase().trim() === needle || meaning.length > 0 && essence2(one.title) === meaning
+  );
+}
+function words2(text) {
+  return text.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+}
+function essence2(text) {
+  return words2(text).filter((word) => !FILLER2.has(word)).sort().join(" ");
+}
+function findForResolving(list, title) {
+  const exact = find(list, title);
+  if (exact) return exact;
+  const asked = words2(title).filter((word) => !FILLER2.has(word));
+  if (asked.length === 0) return void 0;
+  return list.find((one) => {
+    const own = new Set(words2(one.title));
+    return asked.every((word) => own.has(word));
+  });
+}
+async function trackSituation(title, update) {
+  const clean = title.trim().slice(0, 80);
+  const text = update.trim();
+  if (!clean || !text) throw new Error("a situation needs a title and an update");
+  const now = (/* @__PURE__ */ new Date()).toISOString();
+  let saved = null;
+  await store13.update((list) => {
+    const existing = find(
+      list.filter((one) => one.status === "open"),
+      clean
+    );
+    if (existing) {
+      saved = { ...existing, updates: [...existing.updates, { at: now, text }] };
+      return list.map((one) => one.id === existing.id ? saved : one);
+    }
+    saved = {
+      id: randomUUID10(),
+      title: clean,
+      status: "open",
+      updates: [{ at: now, text }],
+      createdAt: now
+    };
+    return [...list, saved];
+  });
+  return saved;
+}
+async function resolveSituation(title) {
+  const now = (/* @__PURE__ */ new Date()).toISOString();
+  let resolved = null;
+  await store13.update((list) => {
+    const one = findForResolving(
+      list.filter((s) => s.status === "open"),
+      title.trim()
+    );
+    if (!one) return list;
+    resolved = { ...one, status: "resolved", resolvedAt: now };
+    return list.map((s) => s.id === one.id ? resolved : s);
+  });
+  return resolved;
+}
+var store13, FILLER2;
+var init_situations = __esm({
+  "server/situations.ts"() {
+    init_store();
+    store13 = new Document("situations", () => []);
+    FILLER2 = /* @__PURE__ */ new Set(["the", "a", "an", "my", "our", "this", "that", "of", "for"]);
+  }
+});
+
+// server/tools/keep.ts
+var keepTools;
+var init_keep = __esm({
+  "server/tools/keep.ts"() {
+    init_files();
+    init_notes();
+    init_situations();
+    keepTools = [
+      {
+        name: "write_note",
+        description: "Add to a project note \u2014 an ongoing topic like a trip, a piece of work, a plan. Use it when the user tells you where something has got to, or asks you to jot something down about a subject. Match an existing note by title, or a new one is started. It appends by default.",
+        category: "research",
+        parameters: {
+          title: { type: "string", description: "The project or topic, short." },
+          text: { type: "string", description: "What to add, in a sentence or two." }
+        },
+        required: ["title", "text"],
+        run: async (args) => {
+          const note = await writeNote(String(args.title), String(args.text));
+          return `Noted under "${note.title}".`;
+        }
+      },
+      {
+        name: "read_note",
+        description: "Read back a project note in full. Use it when the user asks where something stands, or what you have on a topic.",
+        category: "research",
+        parameters: {
+          title: { type: "string", description: "The note to read." }
+        },
+        required: ["title"],
+        run: async (args) => {
+          const note = await readNote(String(args.title));
+          if (!note) {
+            const have = (await liveNotes()).map((one) => one.title).join(", ");
+            return have ? `No note called that. You have: ${have}.` : "No notes yet.";
+          }
+          return `${note.title}:
+${note.body}`;
+        }
+      },
+      {
+        name: "track_situation",
+        description: "Record a development in something ongoing that has a state \u2014 an order, a dispute, a setup in progress. Use it when something moves: a parcel ships, a reply arrives, a step is done. Distinct from a note (prose) and a reminder (a dated to-do): a situation is a thing you are watching.",
+        category: "research",
+        parameters: {
+          title: { type: "string", description: "What the situation is, short." },
+          update: { type: "string", description: "What just happened." }
+        },
+        required: ["title", "update"],
+        run: async (args) => {
+          const one = await trackSituation(String(args.title), String(args.update));
+          return `Logged against "${one.title}" (${one.updates.length} update${one.updates.length === 1 ? "" : "s"}).`;
+        }
+      },
+      {
+        name: "list_situations",
+        description: 'List what is currently open \u2014 the things in progress you are tracking. Use it for "what is going on", "where are we with things", "any updates".',
+        category: "research",
+        parameters: {},
+        required: [],
+        run: async () => {
+          const open = await openSituations();
+          if (open.length === 0) return "Nothing open right now.";
+          return open.map((one) => {
+            const last = one.updates[one.updates.length - 1];
+            return `- ${one.title}: ${last?.text ?? "no updates yet"}`;
+          }).join("\n");
+        }
+      },
+      {
+        name: "resolve_situation",
+        description: "Mark a situation settled once it is done \u2014 the order arrived, the dispute closed. It is filed, not deleted.",
+        category: "research",
+        parameters: {
+          title: { type: "string", description: "Which situation is finished." }
+        },
+        required: ["title"],
+        run: async (args) => {
+          const one = await resolveSituation(String(args.title));
+          return one ? `Marked "${one.title}" resolved.` : "Nothing open by that name.";
+        }
+      },
+      {
+        name: "search_files",
+        description: "Search the documents the user has given you to keep. Use it when they ask about something that might be in a document they uploaded \u2014 a contract, notes, a spec. Returns the relevant passages.",
+        category: "research",
+        parameters: {
+          about: { type: "string", description: "What to look for." }
+        },
+        required: ["about"],
+        run: async (args) => {
+          const hits = await searchFiles(String(args.about));
+          if (hits.length === 0) return "Nothing in their documents mentions that.";
+          return hits.map((hit) => `From ${hit.name}:
+"${hit.excerpt}"`).join("\n\n");
+        }
+      },
+      {
+        name: "read_document",
+        description: "Read one of the user\u2019s documents in full, by name. Use it when they ask you to summarise, check, rework or pull something out of a document \u2014 search_files finds passages, this gives you the whole thing to work on.",
+        category: "research",
+        parameters: {
+          name: { type: "string", description: "The document\u2019s name, or part of it." }
+        },
+        required: ["name"],
+        run: async (args) => {
+          const found = await findFile(String(args.name));
+          if (!found) {
+            const all = await liveFiles();
+            return all.length === 0 ? "They have not given you any documents to keep." : `Nothing called that. They have: ${all.map((one) => one.name).join(", ")}.`;
+          }
+          return `${found.name}, in full:
+
+${found.text}`;
+        }
+      },
+      {
+        name: "write_document",
+        description: "Write a document and keep it for the user \u2014 a draft, a summary, notes worked up into something readable, a rewrite of one they already have. Use it when they ask you to write something down properly rather than say it. Writing over a name that exists replaces it, so say so if you are replacing something. This never sends anything to anybody.",
+        category: "research",
+        parameters: {
+          name: { type: "string", description: "What to call it." },
+          text: {
+            type: "string",
+            description: "The whole document, written out. Plain text, in the user\u2019s own register \u2014 no markdown headings, no bullet salad."
+          }
+        },
+        required: ["name", "text"],
+        run: async (args) => {
+          const name = String(args.name).trim();
+          const text = String(args.text);
+          if (text.trim().length < 20) return "That is too short to be a document.";
+          const existing = await findFile(name);
+          const saved = await addFile(name, text);
+          return existing && existing.name === saved.name ? `Rewritten "${saved.name}" \u2014 the old version is gone, so tell them it was replaced.` : `Kept as "${saved.name}", ${saved.chars} characters. It is theirs to read in Files.`;
+        }
+      }
+    ];
+  }
+});
+
+// server/scenes.ts
+async function allScenes() {
+  const { changes } = await store14.read();
+  return DEFAULTS.map((scene) => {
+    const change = changes[scene.id];
+    if (!change) return scene;
+    return {
+      ...scene,
+      kelvin: change.kelvin ?? scene.kelvin,
+      brightness: change.brightness ?? scene.brightness
+    };
+  });
+}
+async function findScene(said2) {
+  const needle = said2.toLowerCase().replace(/\b(mode|scene|setting|lighting|please|activate|set|to|the)\b/g, " ").replace(/\s+/g, " ").trim();
+  if (!needle) return null;
+  const scenes = await allScenes();
+  let best = null;
+  for (const scene of scenes) {
+    for (const alias of scene.say) {
+      const word = new RegExp(`\\b${alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`);
+      if (word.test(needle) && (!best || alias.length > best.length)) {
+        best = { scene, length: alias.length };
+      }
+    }
+  }
+  return best?.scene ?? null;
+}
+async function tuneScene(id, change) {
+  const before = (await allScenes()).find((scene) => scene.id === id);
+  if (!before) throw new Error(`no scene called ${id}`);
+  const step = change.much ? STEP.lot : STEP.little;
+  let { kelvin, brightness } = before;
+  if (change.nudge === "dimmer") brightness -= step.brightness;
+  if (change.nudge === "brighter") brightness += step.brightness;
+  if (change.nudge === "warmer") kelvin -= step.kelvin;
+  if (change.nudge === "cooler") kelvin += step.kelvin;
+  if (change.brightness !== void 0) brightness = change.brightness;
+  if (change.kelvin !== void 0) kelvin = change.kelvin;
+  const tuned = {
+    kelvin: clamp(kelvin, KELVIN_RANGE.low, KELVIN_RANGE.high),
+    brightness: clamp(brightness, 1, 100)
+  };
+  await store14.update((current) => ({
+    changes: { ...current.changes, [id]: tuned }
+  }));
+  return { ...before, ...tuned };
+}
+async function restoreScene(id) {
+  await store14.update((current) => {
+    const changes = { ...current.changes };
+    delete changes[id];
+    return { changes };
+  });
+  const scene = DEFAULTS.find((one) => one.id === id);
+  if (!scene) throw new Error(`no scene called ${id}`);
+  return scene;
+}
+function kelvinToRgb(kelvin) {
+  const temp = clamp(kelvin, 1e3, 4e4) / 100;
+  const bound = (value) => clamp(value, 0, 255);
+  const red = temp <= 66 ? 255 : bound(329.698727446 * (temp - 60) ** -0.1332047592);
+  const green = temp <= 66 ? bound(99.4708025861 * Math.log(temp) - 161.1195681661) : bound(288.1221695283 * (temp - 60) ** -0.0755148492);
+  const blue = temp >= 66 ? 255 : temp <= 19 ? 0 : bound(138.5177312231 * Math.log(temp - 10) - 305.0447927307);
+  return [red, green, blue];
+}
+var KELVIN_RANGE, DEFAULTS, SCENE_NAMES, store14, clamp, STEP;
+var init_scenes = __esm({
+  "server/scenes.ts"() {
+    init_store();
+    KELVIN_RANGE = { low: 1e3, high: 6500 };
+    DEFAULTS = [
+      {
+        id: "morning",
+        say: ["morning", "wake up", "wake", "good morning"],
+        kelvin: 5e3,
+        brightness: 100,
+        why: "Bright and blue-rich on waking anchors the body clock to the day. Real daylight does this far better \u2014 treat this as a stand-in until you get to a window."
+      },
+      {
+        id: "day",
+        say: ["day", "midday", "daytime", "afternoon"],
+        kelvin: 5500,
+        brightness: 100,
+        why: "Daytime wants as much light as you can comfortably take. Brightness is doing the work here; the colour is a distant second."
+      },
+      {
+        id: "work",
+        say: ["work", "working", "focus", "concentrate", "study"],
+        kelvin: 6e3,
+        brightness: 100,
+        why: "Blue-enriched white around 6000K measurably speeds up sustained attention and cuts sleepiness. It does little for deeper reasoning \u2014 it keeps you awake, it does not make you cleverer."
+      },
+      {
+        id: "energise",
+        say: ["energise", "energize", "boost", "wake me up", "slump"],
+        kelvin: 6500,
+        brightness: 100,
+        why: "The coolest and brightest setting, for the afternoon dip. Fine before about four in the afternoon and a bad idea after it."
+      },
+      {
+        id: "reading",
+        say: ["reading", "read"],
+        kelvin: 3200,
+        brightness: 70,
+        why: "Enough light to read comfortably without the short wavelengths of a work setting. Eye strain comes from too little light far more often than from the wrong colour."
+      },
+      {
+        id: "evening",
+        say: ["evening", "sunset", "dinner"],
+        kelvin: 2200,
+        brightness: 35,
+        why: "From about three hours before bed the target is under 10 melanopic lux at the eye. Dim is what gets you there; amber helps."
+      },
+      {
+        id: "relax",
+        say: ["relax", "relaxing", "chill", "unwind", "calm"],
+        kelvin: 2400,
+        brightness: 30,
+        why: "Low and warm. Nothing about a particular hue is relaxing in itself \u2014 it is the dimness the body reads as evening."
+      },
+      {
+        id: "wind down",
+        say: ["wind down", "winding down", "bedtime", "bed time", "getting ready for bed"],
+        kelvin: 1800,
+        brightness: 15,
+        why: "The last hour. Deep amber with almost no blue, dim enough to leave melatonin alone."
+      },
+      {
+        id: "film",
+        say: ["film", "movie", "movies", "cinema", "tv"],
+        kelvin: 2e3,
+        brightness: 12,
+        why: "Dim warm bias light behind the screen. Easier on the eyes than a bright screen in a dark room, and late enough at night that it should not be blue."
+      },
+      {
+        id: "sleep",
+        say: ["sleep", "sleeping", "night", "goodnight", "good night", "lights down"],
+        kelvin: 1200,
+        brightness: 1,
+        why: "As close to darkness as a light gets, and red, which has the least power of any visible colour to suppress melatonin. The bedroom target is under 1 melanopic lux."
+      },
+      {
+        id: "night light",
+        say: ["night light", "nightlight", "getting up", "bathroom"],
+        kelvin: 1200,
+        brightness: 3,
+        why: "Enough red light to cross a room at three in the morning without waking your body clock up. White light at this hour undoes hours of sleep pressure."
+      }
+    ];
+    SCENE_NAMES = DEFAULTS.map((scene) => scene.id);
+    store14 = new Document("scenes", () => ({ changes: {} }));
+    clamp = (value, low, high) => Number.isFinite(value) ? Math.max(low, Math.min(high, Math.round(value))) : low;
+    STEP = {
+      little: { brightness: 8, kelvin: 250 },
+      lot: { brightness: 20, kelvin: 700 }
+    };
+  }
+});
+
+// server/tools/lights.ts
+async function sceneList() {
+  const scenes = await allScenes();
+  return `Settings: ${scenes.map((scene) => `${scene.id} (${scene.kelvin}K, ${scene.brightness}%)`).join("; ")}.`;
+}
+function said(names) {
+  if (names.length === 1) return names[0];
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  return `all ${names.length} of them`;
+}
+function outcome(landed, what) {
+  const worked = landed.filter((one) => !one.failed);
+  const broken = landed.filter((one) => one.failed);
+  const dark = worked.filter((one) => one.state.on === false);
+  const unsure = worked.filter((one) => one.unconfirmed.length > 0);
+  if (worked.length === 0) {
+    return `Could not reach ${said(broken.map((one) => one.name))}: ${broken[0]?.failed}`;
+  }
+  const parts = [`${said(worked.map((one) => one.name))} ${what}.`];
+  if (broken.length > 0) {
+    parts.push(
+      `${said(broken.map((one) => one.name))} could not be reached (${broken[0]?.failed}) \u2014 say which one, rather than calling the whole thing a failure.`
+    );
+  }
+  if (dark.length > 0) {
+    parts.push(
+      `${said(dark.map((one) => one.name))} ${dark.length === 1 ? "is" : "are"} switched off, so nothing shows yet \u2014 mention it and offer to turn ${dark.length === 1 ? "it" : "them"} on.`
+    );
+  }
+  if (unsure.length > 0) {
+    parts.push(
+      `${said(unsure.map((one) => one.name))} would not confirm its ${unsure[0].unconfirmed.join(" and ")} \u2014 the instruction was sent twice and accepted both times. Do NOT say it is not working; if they can see it changed, it changed. Only mention this if they ask.`
+    );
+  }
+  return parts.join(" ");
+}
+async function guarded(work) {
+  try {
+    return await work();
+  } catch (error) {
+    if (error instanceof LightError) return error.message;
+    throw error;
+  }
+}
+var NUDGES, DEFAULT_NAMES, lightTools;
+var init_lights2 = __esm({
+  "server/tools/lights.ts"() {
+    init_lights();
+    init_scenes();
+    NUDGES = ["dimmer", "brighter", "warmer", "cooler"];
+    DEFAULT_NAMES = SCENE_NAMES.join(", ");
+    lightTools = [
+      {
+        name: "set_lights",
+        description: "Turn the lights on or off. Use it whenever the user asks for lights on, off, out, or killed, and when they say they are going to bed or leaving the room. Leave the name out to mean all of them.",
+        category: "home",
+        parameters: {
+          on: { type: "boolean", description: "True for on, false for off." },
+          which: {
+            type: "string",
+            description: 'Which light or group, as they said it \u2014 "kitchen", "desk". Leave out for all of them.'
+          }
+        },
+        required: ["on"],
+        run: (args) => guarded(async () => {
+          const on = Boolean(args.on);
+          const landed = await setPower(args.which ? String(args.which) : void 0, on);
+          return `${outcome(landed, on ? "on" : "off")} Say it in a few words.`;
+        })
+      },
+      {
+        name: "dim_lights",
+        description: 'Set how bright the lights are, from 1 to 100. Use it for "dim the lights", "brighter", "all the way up", and work out a sensible number from what they said rather than asking for one.',
+        category: "home",
+        parameters: {
+          percent: { type: "number", description: "Brightness, 1 to 100." },
+          which: { type: "string", description: "Which light. Leave out for all." }
+        },
+        required: ["percent"],
+        run: (args) => guarded(async () => {
+          const percent = Number(args.percent);
+          if (!Number.isFinite(percent)) return "That was not a brightness.";
+          const landed = await setBrightness(
+            args.which ? String(args.which) : void 0,
+            percent
+          );
+          const level = Math.max(1, Math.min(100, Math.round(percent)));
+          return outcome(landed, `at ${level}%`);
+        })
+      },
+      {
+        name: "colour_lights",
+        description: `Set the colour of the lights. Known colours: ${Object.keys(COLOURS).join(", ")}. Map what they said to the nearest of those \u2014 "make it cosy" is warm, "party" is magenta \u2014 rather than refusing an unlisted word.`,
+        category: "home",
+        parameters: {
+          colour: { type: "string", description: "One of the known colours." },
+          which: { type: "string", description: "Which light. Leave out for all." }
+        },
+        required: ["colour"],
+        run: (args) => guarded(async () => {
+          const { landed, colour } = await setColour(
+            args.which ? String(args.which) : void 0,
+            String(args.colour)
+          );
+          return outcome(landed, `now ${colour}`);
+        })
+      },
+      {
+        name: "set_scene",
+        description: `Put the lights into one of the named settings: ${DEFAULT_NAMES}. Use it whenever the user names one \u2014 "sleep mode", "activate work mode", "put it in evening", "movie time" \u2014 and also whenever what they describe plainly is one of them ("I'm going to bed", "time to focus"). Each one sets a colour and a brightness together, chosen from the research on light and the body clock. Prefer this over setting a colour and a brightness separately.`,
+        category: "home",
+        parameters: {
+          scene: { type: "string", description: "The setting they named, as they said it." },
+          which: { type: "string", description: "Which light. Leave out for all." }
+        },
+        required: ["scene"],
+        run: (args) => guarded(async () => {
+          const scene = await findScene(String(args.scene));
+          if (!scene) return `No setting called "${args.scene}". ${await sceneList()}`;
+          const landed = await applyScene(
+            args.which ? String(args.which) : void 0,
+            kelvinToRgb(scene.kelvin),
+            scene.brightness
+          );
+          return `${outcome(landed, `in ${scene.id}, ${scene.kelvin}K at ${scene.brightness}%`)} Say it in a few words. If they ask why it is set this way: ${scene.why}`;
+        })
+      },
+      {
+        name: "adjust_scene",
+        description: 'Change what one of the named settings means, and keep the change. Use it for "make sleep mode a bit dimmer", "work mode is too blue", "warmer evening". It saves the new values and shows them immediately, so the next time they ask for that setting they get the new one. Use nudge for "a bit"/"a lot" changes and the exact numbers only when they give you one.',
+        category: "home",
+        parameters: {
+          scene: { type: "string", description: "Which setting to change." },
+          nudge: {
+            type: "string",
+            description: "One of: dimmer, brighter, warmer, cooler."
+          },
+          much: {
+            type: "boolean",
+            description: 'True for "a lot"/"much", false or omitted for "a bit".'
+          },
+          brightness: { type: "number", description: "An exact brightness, 1 to 100." },
+          kelvin: {
+            type: "number",
+            description: "An exact colour temperature, 1000 (deep red) to 6500 (cool daylight)."
+          }
+        },
+        required: ["scene"],
+        run: (args) => guarded(async () => {
+          const scene = await findScene(String(args.scene));
+          if (!scene) return `No setting called "${args.scene}". ${await sceneList()}`;
+          const nudge = args.nudge ? String(args.nudge).toLowerCase() : void 0;
+          if (nudge && !NUDGES.includes(nudge)) {
+            return `A nudge is one of: ${NUDGES.join(", ")}.`;
+          }
+          const tuned = await tuneScene(scene.id, {
+            ...nudge ? { nudge } : {},
+            ...args.much !== void 0 ? { much: Boolean(args.much) } : {},
+            ...args.brightness !== void 0 ? { brightness: Number(args.brightness) } : {},
+            ...args.kelvin !== void 0 ? { kelvin: Number(args.kelvin) } : {}
+          });
+          const landed = await applyScene(void 0, kelvinToRgb(tuned.kelvin), tuned.brightness);
+          return `${scene.id} is now ${tuned.kelvin}K at ${tuned.brightness}%, saved for next time. ${outcome(landed, "showing it")}`;
+        })
+      },
+      {
+        name: "restore_scene",
+        description: 'Put one of the named settings back to how it started, undoing any adjustments. Use it for "put sleep mode back", "reset work mode".',
+        category: "home",
+        parameters: { scene: { type: "string", description: "Which setting." } },
+        required: ["scene"],
+        run: (args) => guarded(async () => {
+          const scene = await findScene(String(args.scene));
+          if (!scene) return `No setting called "${args.scene}". ${await sceneList()}`;
+          const back = await restoreScene(scene.id);
+          return `${back.id} is back to ${back.kelvin}K at ${back.brightness}%.`;
+        })
+      },
+      {
+        name: "list_scenes",
+        description: "List the named light settings and what each one is currently set to. Use it when the user asks what settings there are, or names one you do not recognise.",
+        category: "research",
+        parameters: {},
+        required: [],
+        run: () => guarded(sceneList)
+      },
+      {
+        name: "check_lights",
+        description: "Read what the lights are actually doing right now \u2014 on or off, how bright, what colour, whether they are reachable. Use it whenever the user asks about the state of the lights, when they say something did not happen, and before answering any question about the room that you would otherwise be guessing at. Never assume a light is as you last left it; people use switches and apps too.",
+        category: "research",
+        parameters: {
+          which: { type: "string", description: "Which light. Leave out for all." }
+        },
+        required: [],
+        run: (args) => guarded(async () => {
+          const found = await survey(args.which ? String(args.which) : void 0);
+          if (found.length === 0) return "No lights on the account.";
+          const count = `${found.length} light${found.length === 1 ? "" : "s"} on the account.`;
+          return `${count} ${found.map(({ name, state }) => {
+            if (state.online === false) return `${name}: offline, not reachable.`;
+            if (state.on === null) return `${name}: not reporting its state.`;
+            if (!state.on) return `${name}: off.`;
+            const parts = [
+              state.brightness === null ? null : `${state.brightness}%`,
+              state.colour === null ? null : nameOfColour(state.colour)
+            ].filter(Boolean);
+            return `${name}: on${parts.length ? `, ${parts.join(", ")}` : ""}.`;
+          }).join(" ")}`;
+        })
+      },
+      {
+        name: "list_lights",
+        description: "Find out what lights exist and what they are called. Use it when the user asks what you can control, or when a name they used did not match.",
+        category: "research",
+        parameters: {},
+        required: [],
+        run: () => guarded(async () => {
+          const found = await lights();
+          return found.length === 0 ? "No lights on the account." : `${found.length} light${found.length === 1 ? "" : "s"} on the account: ${found.map((one) => one.name).join(", ")}. If that is more than they actually have plugged in, the extra ones are stale entries in the Govee app and are worth deleting there.`;
+        })
+      }
+    ];
+  }
+});
+
+// server/workspaces.ts
+import { randomUUID as randomUUID11 } from "node:crypto";
+async function workspaces() {
+  const saved = await store15.read();
+  const missing = DEFAULTS2.filter((one) => !saved.some((other) => other.id === one.id));
+  return [...saved, ...missing].filter((one) => !one.hidden);
+}
+async function findWorkspace(said2) {
+  const needle = said2.toLowerCase().replace(/[^a-z0-9 ]/g, "").trim();
+  if (!needle) return null;
+  const all = await workspaces();
+  return all.find((one) => one.id === needle || one.name.toLowerCase() === needle) ?? all.find((one) => needle.includes(one.name.toLowerCase())) ?? all.find((one) => one.name.toLowerCase().includes(needle)) ?? null;
+}
+async function saveWorkspace(patch) {
+  const clean = {
+    id: patch.id?.trim() || randomUUID11().slice(0, 8),
+    name: (patch.name ?? "Untitled").trim().slice(0, 24),
+    icon: patch.icon ?? "sparkles",
+    accent: patch.accent ?? "ice",
+    opens: (patch.opens ?? []).map((url) => url.trim()).filter((url) => /^https?:\/\//i.test(url)).slice(0, 8),
+    panels: patch.panels ?? [],
+    blurb: patch.blurb?.slice(0, 80),
+    brief: patch.brief?.slice(0, 200)
+  };
+  await store15.update((current) => {
+    const rest = current.filter((one) => one.id !== clean.id);
+    const at = current.findIndex((one) => one.id === clean.id);
+    if (at < 0) return [...current, clean];
+    const next = [...rest];
+    next.splice(at, 0, clean);
+    return next;
+  });
+  return workspaces();
+}
+async function hideWorkspace(id) {
+  await store15.update((current) => {
+    const known2 = current.some((one) => one.id === id);
+    const base = known2 ? current : [...current, ...DEFAULTS2.filter((one) => one.id === id)];
+    return base.map((one) => one.id === id ? { ...one, hidden: true } : one);
+  });
+  return workspaces();
+}
+var DEFAULTS2, store15;
+var init_workspaces = __esm({
+  "server/workspaces.ts"() {
+    init_store();
+    DEFAULTS2 = [
+      {
+        id: "grace",
+        name: "Grace",
+        icon: "sparkles",
+        accent: "ice",
+        opens: [],
+        panels: ["orb", "faculties", "attention", "connections", "spend"],
+        blurb: "Her, and what she knows."
+      },
+      {
+        id: "day",
+        name: "Home",
+        icon: "house",
+        accent: "ice",
+        opens: [],
+        panels: ["day", "needs", "weather", "notes", "situations", "files", "deeds"],
+        blurb: "Your day, and what wants you."
+      },
+      {
+        id: "work",
+        name: "Work",
+        icon: "briefcase",
+        accent: "amber",
+        // Opened in order; the first is the one brought forward.
+        opens: ["https://app.n8n.cloud", "https://mail.google.com"],
+        panels: ["needs", "github", "workflows", "notes", "activity"],
+        blurb: "Mail, workflows, and what is failing.",
+        brief: "Brief me on my workflows and anything in my mail that needs me."
+      },
+      {
+        id: "play",
+        name: "Play",
+        icon: "gamepad",
+        accent: "violet",
+        opens: [],
+        panels: ["day", "playstation", "games", "activity"],
+        blurb: "The console, and what you have been playing."
+      }
+    ];
+    store15 = new Document("workspaces", () => DEFAULTS2);
+  }
+});
+
+// server/tools/open.ts
+function onOpen(handler) {
+  deliver2 = handler;
+}
+function toUrl(raw) {
+  const said2 = raw.trim().replace(/\s+/g, "");
+  if (!said2) return null;
+  if (/^https?:\/\//i.test(said2)) return said2;
+  const host = said2.includes(".") ? said2 : `${said2}.com`;
+  return /^[a-z0-9.-]+(\/.*)?$/i.test(host) ? `https://${host}` : null;
+}
+var deliver2, openTools;
+var init_open = __esm({
+  "server/tools/open.ts"() {
+    init_workspaces();
+    deliver2 = null;
+    openTools = [
+      {
+        name: "open_pages",
+        description: 'Open one or more web pages in the user\u2019s browser. Use it whenever they ask you to open, pull up, or bring up a site \u2014 "open YouTube", "open my GitHub". It only works while they are looking at you, since the browser showing you is the thing that opens them.',
+        category: "research",
+        parameters: {
+          urls: {
+            type: "string",
+            description: 'One or more addresses, separated by spaces or commas. A bare name like "youtube" is fine; a full https address is better when you know it.'
+          }
+        },
+        required: ["urls"],
+        run: async (args) => {
+          const urls = String(args.urls ?? "").split(/[\s,]+/).map(toUrl).filter((url) => Boolean(url)).slice(0, 8);
+          if (urls.length === 0) return "That did not look like an address I could open.";
+          deliver2?.(urls);
+          return `Opening ${urls.length === 1 ? urls[0] : `${urls.length} pages`}. Say so in a few words. If their browser blocks it they will see the links to tap, so do not promise it definitely opened.`;
+        }
+      },
+      {
+        name: "open_workspace",
+        description: 'Switch the user to one of their workspaces \u2014 Work, Home, Play, Grace, or any they have made. Use it for "open work", "go to play", "switch to home". It changes what is on their screen and opens whichever pages that workspace is set to open.',
+        category: "research",
+        parameters: {
+          name: { type: "string", description: "Which workspace, as they said it." }
+        },
+        required: ["name"],
+        run: async (args) => {
+          const workspace = await findWorkspace(String(args.name ?? ""));
+          if (!workspace) {
+            const names = (await workspaces()).map((one) => one.name).join(", ");
+            return `There is no workspace by that name. They have: ${names}.`;
+          }
+          deliver2?.(workspace.opens, workspace.id);
+          return `Switched them to ${workspace.name}` + (workspace.opens.length > 0 ? `, opening ${workspace.opens.length} page${workspace.opens.length === 1 ? "" : "s"}` : "") + `. Say which one you have moved them to, briefly.` + (workspace.brief ? ` Then do this without being asked, and report it in a sentence or two: ${workspace.brief}` : "");
+        }
+      }
+    ];
+  }
+});
+
+// server/ps5.ts
+function psnConfigured() {
+  return Boolean(psnToken());
+}
+async function tokensFromNpsso(npsso) {
+  const query = new URLSearchParams({
+    access_type: "offline",
+    client_id: CLIENT_ID,
+    redirect_uri: REDIRECT,
+    response_type: "code",
+    scope: SCOPE
+  });
+  const handshake = await fetch(`${AUTH}/authorize?${query}`, {
+    headers: { Cookie: `npsso=${npsso}` },
+    redirect: "manual"
+  });
+  const location = handshake.headers.get("location") ?? "";
+  if (!location.includes("?code=")) {
+    throw new PsnError(
+      "PlayStation would not accept that sign-in code. They expire after a couple of months \u2014 fetch a fresh one and paste it in again.",
+      true
+    );
+  }
+  const code = new URLSearchParams(location.split("redirect/")[1] ?? "").get("code");
+  if (!code) throw new PsnError("PlayStation sent back no sign-in code.", true);
+  return exchange({
+    code,
+    redirect_uri: REDIRECT,
+    grant_type: "authorization_code",
+    token_format: "jwt"
+  });
+}
+async function exchange(body) {
+  const response = await fetch(`${AUTH}/token`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Authorization: CLIENT_AUTH
+    },
+    body: new URLSearchParams(body).toString()
+  });
+  const data = await response.json().catch(() => ({}));
+  const accessToken2 = typeof data.access_token === "string" ? data.access_token : "";
+  if (!accessToken2) {
+    throw new PsnError(
+      `PlayStation refused the sign-in (${String(data.error_description ?? response.status)}).`,
+      true
+    );
+  }
+  const now = Date.now();
+  return {
+    accessToken: accessToken2,
+    // A minute of margin, so a token never expires mid-request.
+    expiresAt: now + (Number(data.expires_in) || 3600) * 1e3 - 6e4,
+    refreshToken: String(data.refresh_token ?? ""),
+    refreshExpiresAt: now + (Number(data.refresh_token_expires_in) || 0) * 1e3
+  };
+}
+async function token() {
+  const npsso = psnToken();
+  if (!npsso) {
+    throw new PsnError(
+      "The PlayStation is not connected. Paste an NPSSO code into her keys.",
+      true
+    );
+  }
+  const saved = await session.read();
+  const now = Date.now();
+  if (saved && saved.expiresAt > now) return saved.accessToken;
+  if (saved?.refreshToken && saved.refreshExpiresAt > now) {
+    try {
+      const refreshed = await exchange({
+        refresh_token: saved.refreshToken,
+        grant_type: "refresh_token",
+        token_format: "jwt",
+        scope: SCOPE
+      });
+      await session.write(refreshed);
+      return refreshed.accessToken;
+    } catch {
+    }
+  }
+  const fresh2 = await tokensFromNpsso(npsso);
+  await session.write(fresh2);
+  return fresh2.accessToken;
+}
+async function read(url) {
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${await token()}`,
+      "Content-Type": "application/json"
+    }
+  });
+  if (response.status === 401 || response.status === 403) {
+    throw new PsnError(
+      "PlayStation stopped accepting the connection. The code needs pasting again.",
+      true
+    );
+  }
+  const data = await response.json().catch(() => null);
+  if (!data) throw new PsnError("PlayStation sent back nothing readable.");
+  return data;
+}
+async function presence() {
+  const data = await read(`${PROFILE}/me/basicPresences?type=primary`);
+  const basic = data.basicPresence ?? {};
+  const platformInfo = basic.primaryPlatformInfo ?? {};
+  const game = basic.gameTitleInfoList?.[0];
+  const online = platformInfo.onlineStatus === "online";
+  return {
+    online,
+    status: game?.titleName ? "playing" : online ? "online" : "offline",
+    playing: game?.titleName ?? null,
+    platform: game?.format ?? platformInfo.platform ?? null,
+    lastOnline: platformInfo.lastOnlineDate ?? null
+  };
+}
+async function player() {
+  const data = await read(`${PROFILE}/me/profiles`);
+  return {
+    onlineId: data.onlineId ?? "unknown",
+    level: data.trophySummary?.level ?? null,
+    plus: Boolean(data.isPsPlus)
+  };
+}
+async function trophies() {
+  const data = await read(`${TROPHY}/me/trophySummary`);
+  const earned = data.earnedTrophies ?? {};
+  return {
+    level: Number(data.trophyLevel ?? 0),
+    progress: Number(data.progress ?? 0),
+    platinum: earned.platinum ?? 0,
+    gold: earned.gold ?? 0,
+    silver: earned.silver ?? 0,
+    bronze: earned.bronze ?? 0
+  };
+}
+async function recentlyPlayed(limit = 10) {
+  const url = new URL(GRAPH);
+  url.searchParams.set("operationName", "getUserGameList");
+  url.searchParams.set(
+    "variables",
+    JSON.stringify({ limit, categories: "ps4_game,ps5_native_game" })
+  );
+  url.searchParams.set(
+    "extensions",
+    JSON.stringify({
+      persistedQuery: {
+        version: 1,
+        sha256Hash: "e780a6d8b921ef0c59ec01ea5c5255671272ca0d819edb61320914cf7a78b3ae"
+      }
+    })
+  );
+  const data = await read(url.toString());
+  const games = data.data?.gameLibraryTitlesRetrieve?.games ?? [];
+  return games.map((game) => ({
+    name: game.name ?? "an unnamed game",
+    platform: game.platform ?? null,
+    lastPlayed: game.lastPlayedDateTime ?? null
+  }));
+}
+async function playstation() {
+  const [now, who, cabinet] = await Promise.all([
+    presence(),
+    player().catch(() => null),
+    trophies().catch(() => null)
+  ]);
+  return { presence: now, player: who, trophies: cabinet };
+}
+var AUTH, PROFILE, TROPHY, GRAPH, CLIENT_AUTH, CLIENT_ID, REDIRECT, SCOPE, session, PsnError;
+var init_ps5 = __esm({
+  "server/ps5.ts"() {
+    init_keys();
+    init_store();
+    AUTH = "https://ca.account.sony.com/api/authz/v3/oauth";
+    PROFILE = "https://m.np.playstation.com/api/userProfile/v1/internal/users";
+    TROPHY = "https://m.np.playstation.com/api/trophy/v1/users";
+    GRAPH = "https://web.np.playstation.com/api/graphql/v1/op";
+    CLIENT_AUTH = "Basic MDk1MTUxNTktNzIzNy00MzcwLTliNDAtMzgwNmU2N2MwODkxOnVjUGprYTV0bnRCMktxc1A=";
+    CLIENT_ID = "09515159-7237-4370-9b40-3806e67c0891";
+    REDIRECT = "com.scee.psxandroid.scecompcall://redirect";
+    SCOPE = "psn:mobile.v2.core psn:clientapp";
+    session = new Document("psn", () => null);
+    PsnError = class extends Error {
+      constructor(message, needsToken = false) {
+        super(message);
+        this.needsToken = needsToken;
+      }
+    };
+  }
+});
+
+// server/tools/playstation.ts
+function when2(iso) {
+  if (!iso) return "at some point";
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "at some point";
+  const minutes = Math.round((Date.now() - then) / 6e4);
+  if (minutes < 2) return "just now";
+  if (minutes < 60) return `${minutes} minutes ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  const days = Math.round(hours / 24);
+  return `${days} day${days === 1 ? "" : "s"} ago`;
+}
+var playstationTools;
+var init_playstation = __esm({
+  "server/tools/playstation.ts"() {
+    init_bridge();
+    init_ps5();
+    playstationTools = [
+      {
+        name: "check_playstation",
+        description: "Look at the PlayStation: whether it is on, whether the user is signed in, and what game is running right now. Use this for anything about the console, the PS5, or what they are playing. It only looks \u2014 there is no way to turn the console on or start a game from here.",
+        category: "home",
+        parameters: {},
+        required: [],
+        run: async () => {
+          const local = await bridgeStatus().catch(() => null);
+          if (local?.online && local.state?.found) {
+            const awake = local.state.status === "AWAKE";
+            const name = local.state.name ? ` (${local.state.name})` : "";
+            const cloud = await presence().catch(() => null);
+            if (awake && cloud?.playing) {
+              return `The console${name} is on, playing ${cloud.playing}.`;
+            }
+            return awake ? `The console${name} is on, with nothing running that I can see.` : `The console${name} is in rest mode. I can switch it on if you want.`;
+          }
+          try {
+            const { presence: now, player: player2, trophies: trophies2 } = await playstation();
+            const who = player2 ? `Signed in as ${player2.onlineId}` : "Signed in";
+            const state = now.playing ? `${who}, playing ${now.playing}${now.platform ? ` on ${now.platform}` : ""} right now.` : now.online ? `${who} and online, but no game is running.` : `${who}. The console is off or signed out \u2014 last seen online ${when2(now.lastOnline)}.`;
+            const cabinet = trophies2 ? ` Trophy level ${trophies2.level}, with ${trophies2.platinum} platinums.` : "";
+            return state + cabinet;
+          } catch (error) {
+            if (error instanceof PsnError) return error.message;
+            throw error;
+          }
+        }
+      },
+      {
+        name: "recent_games",
+        description: "What the user has been playing lately on PlayStation, most recent first. Use it when they ask what they have been playing, when they last played something, or how a game fits into their week.",
+        category: "home",
+        parameters: {},
+        required: [],
+        run: async () => {
+          try {
+            const games = await recentlyPlayed(8);
+            if (games.length === 0) return "Nothing has been played recently.";
+            return games.map((game) => `${game.name} \u2014 last played ${when2(game.lastPlayed)}`).join("\n");
+          } catch (error) {
+            if (error instanceof PsnError) return error.message;
+            throw error;
+          }
+        }
+      }
+    ];
+  }
+});
+
+// server/tools/recall.ts
+function terms(text) {
+  return text.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter((word) => word.length > 2 && !NOISE3.has(word));
+}
+function score(haystack, needles) {
+  const text = haystack.toLowerCase();
+  let hits = 0;
+  for (const needle of needles) {
+    if (text.includes(needle)) hits += 1;
+  }
+  return hits;
+}
+function stamp(iso) {
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return "at some point";
+  return at.toLocaleDateString("en-GB", {
+    weekday: "short",
+    day: "numeric",
+    month: "short"
+  });
+}
+var NOISE3, recallTools;
+var init_recall = __esm({
+  "server/tools/recall.ts"() {
+    init_memory();
+    NOISE3 = /* @__PURE__ */ new Set([
+      "the",
+      "a",
+      "an",
+      "and",
+      "or",
+      "but",
+      "if",
+      "of",
+      "to",
+      "in",
+      "on",
+      "at",
+      "for",
+      "with",
+      "about",
+      "i",
+      "you",
+      "we",
+      "it",
+      "is",
+      "was",
+      "are",
+      "were",
+      "be",
+      "been",
+      "do",
+      "did",
+      "does",
+      "what",
+      "when",
+      "where",
+      "who",
+      "how",
+      "my",
+      "me",
+      "your",
+      "that",
+      "this",
+      "said",
+      "say",
+      "tell",
+      "told",
+      "again"
+    ]);
+    recallTools = [
+      {
+        name: "search_memory",
+        description: 'Search everything the user has ever said to you, and everything you know about them, for a word or subject. Use it whenever they refer to something from an earlier conversation you cannot see any more \u2014 "what did we decide about", "the thing I mentioned last week", a name or a place you half recognise. Search before saying you do not remember.',
+        category: "research",
+        parameters: {
+          about: {
+            type: "string",
+            description: "The subject to look for \u2014 a name, place, or a few words of what was said. Not a full question."
+          }
+        },
+        required: ["about"],
+        run: async (args) => {
+          const about = String(args.about ?? "").trim();
+          const needles = terms(about);
+          if (needles.length === 0) return "That is too vague to search for.";
+          const [log, profile2] = await Promise.all([getMessages(), getProfile()]);
+          const known2 = profile2.entries.filter((entry) => !entry.supersededAt && score(entry.text, needles) > 0).map((entry) => `- ${entry.text}`);
+          const hits = log.map((message, index) => ({ message, index, hits: score(message.text, needles) })).filter((row) => row.hits > 0).sort(
+            (left, right) => right.hits === left.hits ? right.index - left.index : right.hits - left.hits
+          ).slice(0, 6).sort((left, right) => left.index - right.index);
+          if (known2.length === 0 && hits.length === 0) {
+            return `Nothing in the record mentions ${about}.`;
+          }
+          const lines = [];
+          if (known2.length > 0) {
+            lines.push(`What you already know about this:
+${known2.join("\n")}`);
+          }
+          if (hits.length > 0) {
+            lines.push("From earlier conversations:");
+            for (const { message, index } of hits) {
+              const answer = log[index + 1];
+              const who = message.speaker === "grace" ? "You said" : "They said";
+              lines.push(`- ${stamp(message.at)}, ${who}: "${message.text.slice(0, 300)}"`);
+              if (answer && answer.speaker !== message.speaker) {
+                lines.push(`  and the reply was: "${answer.text.slice(0, 300)}"`);
+              }
+            }
+          }
+          return lines.join("\n");
+        }
+      }
+    ];
+  }
+});
+
+// server/tools/reminders.ts
+import { randomUUID as randomUUID12 } from "node:crypto";
+async function outstanding() {
+  const all = await store16.read();
+  return all.filter((reminder) => !reminder.doneAt).sort((left, right) => {
+    if (!left.due) return 1;
+    if (!right.due) return -1;
+    return left.due.localeCompare(right.due);
+  });
+}
+function describe(reminder) {
+  if (!reminder.due) return reminder.text;
+  return `${reminder.text} (${new Date(reminder.due).toLocaleString("en-GB", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit"
+  })})`;
+}
+var store16, reminderTools;
+var init_reminders = __esm({
+  "server/tools/reminders.ts"() {
+    init_store();
+    store16 = new Document("reminders", () => []);
+    reminderTools = [
+      {
+        name: "add_reminder",
+        description: "Add something to the user\u2019s list of things to remember or do. Use this whenever they ask to be reminded of something, or mention something they need to do later.",
+        category: "calendar",
+        parameters: {
+          text: {
+            type: "string",
+            description: "What to remember, in the user\u2019s own words where possible."
+          },
+          due: {
+            type: "string",
+            description: 'When it is wanted, as a full ISO 8601 timestamp. Omit entirely if no particular time was given. Work out real dates from phrases like "tomorrow morning" using the current date you were given.'
+          }
+        },
+        required: ["text"],
+        run: async (args) => {
+          const text = String(args.text ?? "").trim();
+          if (!text) return "Nothing was given to remember.";
+          const raw = args.due ? String(args.due) : "";
+          const parsed = raw ? new Date(raw) : null;
+          const valid2 = parsed && Number.isFinite(parsed.getTime()) ? parsed : null;
+          const reminder = {
+            id: randomUUID12(),
+            text,
+            due: valid2 ? valid2.toISOString() : null,
+            createdAt: (/* @__PURE__ */ new Date()).toISOString(),
+            doneAt: null
+          };
+          await store16.update((current) => [...current, reminder]);
+          return `Noted: ${describe(reminder)}`;
+        }
+      },
+      {
+        name: "list_reminders",
+        description: "List what the user still has outstanding. Use it when they ask what is on their list, what is outstanding, or what they have forgotten.",
+        category: "research",
+        parameters: {},
+        required: [],
+        run: async () => {
+          const open = await outstanding();
+          if (open.length === 0) return "Their list is empty.";
+          return `Outstanding:
+${open.map((item) => `- ${describe(item)}`).join("\n")}`;
+        }
+      },
+      {
+        name: "complete_reminder",
+        description: "Mark something on the list as done. Match on the wording the user used; if more than one thing could be meant, ask which rather than guessing.",
+        category: "calendar",
+        parameters: {
+          text: {
+            type: "string",
+            description: "Enough of the reminder\u2019s wording to identify it."
+          }
+        },
+        required: ["text"],
+        run: async (args) => {
+          const needle = String(args.text ?? "").trim().toLowerCase();
+          if (!needle) return "Which one?";
+          const open = await outstanding();
+          const matches2 = open.filter((item) => item.text.toLowerCase().includes(needle));
+          if (matches2.length === 0) return `Nothing on the list matches "${needle}".`;
+          if (matches2.length > 1) {
+            return `More than one matches: ${matches2.map((item) => item.text).join("; ")}. Ask which one they mean.`;
+          }
+          await store16.update(
+            (current) => current.map(
+              (item) => item.id === matches2[0].id ? { ...item, doneAt: (/* @__PURE__ */ new Date()).toISOString() } : item
+            )
+          );
+          return `Marked done: ${matches2[0].text}`;
+        }
+      }
+    ];
+  }
+});
+
+// server/tools/self.ts
+var selfTools;
+var init_self = __esm({
+  "server/tools/self.ts"() {
+    init_modes();
+    init_memory();
+    init_push();
+    init_workspaces();
+    selfTools = [
+      {
+        name: "remember_this",
+        description: 'Commit something about the user to memory on purpose. Use it when they tell you something worth keeping \u2014 a preference, how they like things done, a fact about their life or work \u2014 and especially when they say "remember that". Do not use it for passing detail, for anything about the current conversation, or for anything they have told you not to keep.',
+        category: "research",
+        parameters: {
+          fact: {
+            type: "string",
+            description: 'One fact, written about the user in the third person, as a full sentence: "The user takes their coffee black". Not a note to self.'
+          },
+          kind: {
+            type: "string",
+            description: "What sort of thing it is.",
+            values: ["preference", "fact", "routine", "goal"]
+          }
+        },
+        required: ["fact"],
+        run: async (args) => {
+          const text = String(args.fact).trim();
+          if (text.length < 4) return "That is too thin to be worth keeping.";
+          const kind = String(args.kind ?? "fact");
+          const added = await remember([
+            {
+              // Said out loud, so it is a stated fact rather than something she
+              // inferred — which is a real distinction the profile keeps.
+              kind: ["preference", "fact", "routine", "goal"].includes(kind) ? kind : "fact",
+              text,
+              source: "stated"
+            }
+          ]);
+          return added.length > 0 ? "Kept. Say so in three or four words, not a sentence about memory." : "Already known \u2014 she has had that for a while. Do not announce it.";
+        }
+      },
+      {
+        name: "correct_memory",
+        description: "Mark something she has been believing as no longer true. Use it when the user corrects you, or says something has changed. Give the old belief roughly as she has been holding it. Nothing is thrown away \u2014 it is marked as overtaken, because that it used to be true still matters. If there is a new version of the fact, also call remember_this.",
+        category: "research",
+        parameters: {
+          old: {
+            type: "string",
+            description: "The belief that is no longer true, as she has been holding it."
+          }
+        },
+        required: ["old"],
+        run: async (args) => {
+          const found = await supersedeEntry(String(args.old));
+          return found ? "Corrected. Acknowledge briefly and move on; do not dwell on it." : "Nothing on file matched that closely enough to correct. Do not claim you changed anything \u2014 say what you do believe and let them put you right.";
+        }
+      },
+      {
+        name: "set_attention",
+        description: "Change how much of the user\u2019s attention you may take. Open is normal, Work is brisk with personal things held back, Focus is answers only and nothing volunteered, Away means they are not at the desk and you take messages. Use it when they say to leave them alone, that they are heads-down, that they are back, or that they are going out.",
+        category: "research",
+        parameters: {
+          mode: {
+            type: "string",
+            description: "Which one to move to.",
+            values: ["open", "work", "focus", "away"]
+          }
+        },
+        required: ["mode"],
+        run: async (args) => {
+          const mode = String(args.mode).toLowerCase();
+          if (!isMode(mode)) {
+            return `There is no "${mode}" mode. They are: open, work, focus, away.`;
+          }
+          await setMode(mode);
+          return `Now in ${MODES[mode].label}. ${MODES[mode].guidance} Confirm in a few words and start behaving that way in this very reply.`;
+        }
+      },
+      {
+        name: "make_room",
+        description: 'Build a new room in her interface, or change one that exists. A room is a name, a colour, the panels it shows and the pages it opens when the user goes there. Use it when they describe a mode or a space they want \u2014 "make me a room for the gym", "add the news to my morning". Saying the name of an existing room changes that one rather than making a second.',
+        category: "research",
+        parameters: {
+          name: { type: "string", description: "What the room is called, one or two words." },
+          panels: {
+            type: "string",
+            description: "Comma-separated, from: day, needs, weather, notes, situations, files, activity, connections, spend, github, workflows, deeds, faculties, attention, playstation, games."
+          },
+          opens: {
+            type: "string",
+            description: "Comma-separated web addresses to open on arrival. Optional."
+          },
+          accent: {
+            type: "string",
+            description: "The colour of the room.",
+            values: ["ice", "amber", "violet", "rose"]
+          },
+          brief: {
+            type: "string",
+            description: "What she should say or check on arrival, in the user\u2019s words. Optional."
+          }
+        },
+        required: ["name"],
+        run: async (args) => {
+          const name = String(args.name).trim().slice(0, 24);
+          if (!name) return "A room needs a name.";
+          const split = (value) => String(value ?? "").split(",").map((part) => part.trim()).filter(Boolean);
+          const existing = (await workspaces()).find(
+            (room) => room.name.toLowerCase() === name.toLowerCase()
+          );
+          const panels = split(args.panels);
+          const opens = split(args.opens);
+          const patch = {
+            ...existing ?? {},
+            ...existing ? { id: existing.id } : {},
+            name,
+            // An empty list from the model means "leave it alone" on an edit, and
+            // "show everything" on a new room — never "show nothing at all".
+            panels: panels.length > 0 ? panels : existing?.panels ?? [],
+            opens: opens.length > 0 ? opens : existing?.opens ?? [],
+            accent: args.accent ?? existing?.accent ?? "ice",
+            ...args.brief ? { brief: String(args.brief) } : {}
+          };
+          await saveWorkspace(patch);
+          return existing ? `${name} updated. It is in the rail already, so say so in a few words.` : `${name} is now a room in the rail. Tell them it is there and what is on it.`;
+        }
+      },
+      {
+        name: "notify_phone",
+        description: "Push a short notice to the user\u2019s phone. Use it only when something genuinely wants them and they are not in front of you \u2014 a build that failed, a timer that finished, something arriving that they asked to be told about. Never for a reply to something they just said, and never for anything that can wait until they next look.",
+        category: "research",
+        parameters: {
+          text: {
+            type: "string",
+            description: "The notice, under about fifteen words. It appears on a lock screen."
+          }
+        },
+        required: ["text"],
+        run: async (args) => {
+          const text = String(args.text).trim().slice(0, 200);
+          if (!text) return "There was nothing to send.";
+          const sent = await notify("Grace", text);
+          return sent > 0 ? `Sent to ${sent} device${sent === 1 ? "" : "s"}.` : "No phone is set up to receive notices yet, so nothing went anywhere. Tell them plainly.";
+        }
+      }
+    ];
+  }
+});
+
+// server/watch.ts
+import { createHash as createHash2, randomUUID as randomUUID13 } from "node:crypto";
+async function liveWatches() {
+  return (await store17.read()).filter((watch) => !watch.archivedAt);
+}
+async function startWatch(what, url, keyword) {
+  const clean = what.trim().slice(0, 100);
+  const address = url.trim();
+  if (!clean || !/^https?:\/\//i.test(address)) {
+    throw new Error("a watch needs something to watch and a full https address");
+  }
+  const watch = {
+    id: randomUUID13(),
+    what: clean,
+    url: address,
+    keyword: keyword?.trim() || void 0,
+    createdAt: (/* @__PURE__ */ new Date()).toISOString()
+  };
+  await store17.update((list) => [...list, watch]);
+  return watch;
+}
+async function stopWatch(what) {
+  const needle = what.toLowerCase().trim();
+  let found = false;
+  await store17.update(
+    (list) => list.map((watch) => {
+      if (watch.archivedAt || !watch.what.toLowerCase().includes(needle)) return watch;
+      found = true;
+      return { ...watch, archivedAt: (/* @__PURE__ */ new Date()).toISOString() };
+    })
+  );
+  return found;
+}
+function textOf(html) {
+  return html.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
+}
+async function observe(watch) {
+  try {
+    const response = await fetch(watch.url, {
+      headers: { "user-agent": "Mozilla/5.0 (Grace watch)" },
+      signal: AbortSignal.timeout(8e3)
+    });
+    if (!response.ok) return null;
+    const text = textOf(await response.text());
+    if (watch.keyword) {
+      return text.includes(watch.keyword.toLowerCase()) ? "present" : "absent";
+    }
+    return createHash2("sha256").update(text).digest("hex").slice(0, 16);
+  } catch {
+    return null;
+  }
+}
+async function checkWatches() {
+  const watches = await liveWatches();
+  if (watches.length === 0) return [];
+  const changes = [];
+  const now = (/* @__PURE__ */ new Date()).toISOString();
+  const readings = await Promise.all(
+    watches.map(async (watch) => ({ watch, reading: await observe(watch) }))
+  );
+  await store17.update(
+    (list) => list.map((stored) => {
+      const found = readings.find((r) => r.watch.id === stored.id);
+      if (!found || found.reading === null) return stored;
+      const { reading } = found;
+      if (stored.last !== void 0 && stored.last !== reading) {
+        changes.push({
+          id: stored.id,
+          what: stored.what,
+          url: stored.url,
+          detail: stored.keyword ? reading === "present" ? `"${stored.keyword}" now appears on the page for ${stored.what}` : `"${stored.keyword}" has gone from the page for ${stored.what}` : `${stored.what} changed`
+        });
+      }
+      return { ...stored, last: reading, lastCheckedAt: now };
+    })
+  );
+  return changes;
+}
+var store17;
+var init_watch = __esm({
+  "server/watch.ts"() {
+    init_store();
+    store17 = new Document("watches", () => []);
+  }
+});
+
+// server/tools/timers.ts
+import { randomUUID as randomUUID14 } from "node:crypto";
+function prune(list) {
+  const cutoff = Date.now() - KEEP_AFTER_MS;
+  return list.filter((timer) => new Date(timer.at).getTime() > cutoff);
+}
+async function runningTimers() {
+  const now = Date.now();
+  return (await store18.read()).filter((timer) => !timer.firedAt && new Date(timer.at).getTime() > now - 6e4).sort((left, right) => left.at.localeCompare(right.at));
+}
+async function markFired(id) {
+  await store18.update(
+    (list) => prune(list).map(
+      (timer) => timer.id === id ? { ...timer, firedAt: (/* @__PURE__ */ new Date()).toISOString() } : timer
+    )
+  );
+}
+function parseDuration(said2) {
+  const text = said2.toLowerCase().replace(/\s+/g, " ").trim();
+  let total = 0;
+  const pattern = /(\d+(?:\.\d+)?)\s*(hours?|hrs?|h|minutes?|mins?|m|seconds?|secs?|s)(?![a-z])/g;
+  for (const [, amount, unit] of text.matchAll(pattern)) {
+    const value = Number(amount);
+    if (unit.startsWith("h")) total += value * 36e5;
+    else if (unit.startsWith("m")) total += value * 6e4;
+    else total += value * 1e3;
+  }
+  if (total === 0 && /^\d+$/.test(text)) total = Number(text) * 6e4;
+  return total > 0 && total <= 24 * 36e5 ? total : null;
+}
+var store18, KEEP_AFTER_MS, timerTools;
+var init_timers = __esm({
+  "server/tools/timers.ts"() {
+    init_watch();
+    init_store();
+    store18 = new Document("timers", () => []);
+    KEEP_AFTER_MS = 24 * 36e5;
+    timerTools = [
+      {
+        name: "set_timer",
+        description: 'Start a countdown that rings when it ends \u2014 "20 minutes for the pasta", "an hour". For short, soon things. Anything tied to a date or a time of day is a reminder instead.',
+        category: "calendar",
+        parameters: {
+          duration: {
+            type: "string",
+            description: 'How long, as said: "20 minutes", "1h30m", "90 seconds".'
+          },
+          label: { type: "string", description: "What it is for, a word or two." }
+        },
+        required: ["duration"],
+        run: async (args) => {
+          const ms = parseDuration(String(args.duration ?? ""));
+          if (!ms) return "I could not make a length of time out of that.";
+          const timer = {
+            id: randomUUID14(),
+            label: String(args.label ?? "").trim() || "timer",
+            at: new Date(Date.now() + ms).toISOString(),
+            createdAt: (/* @__PURE__ */ new Date()).toISOString()
+          };
+          await store18.update((list) => [...prune(list), timer]);
+          const minutes = Math.round(ms / 6e4);
+          return `Timer set: ${timer.label}, ${minutes >= 1 ? `${minutes} minute${minutes === 1 ? "" : "s"}` : `${Math.round(ms / 1e3)} seconds`}.`;
+        }
+      },
+      {
+        name: "list_timers",
+        description: "What timers are running and how long each has left.",
+        category: "research",
+        parameters: {},
+        required: [],
+        run: async () => {
+          const running = await runningTimers();
+          if (running.length === 0) return "No timers running.";
+          const now = Date.now();
+          return running.map((timer) => {
+            const left = Math.max(0, Math.round((new Date(timer.at).getTime() - now) / 6e4));
+            return `- ${timer.label}: about ${left} minute${left === 1 ? "" : "s"} left`;
+          }).join("\n");
+        }
+      },
+      {
+        name: "start_watch",
+        description: 'Watch a web page and speak up when it changes \u2014 a price, availability, a status page, a release. Checked about once an hour while she is open somewhere. Far more reliable with a keyword: watching whether "in stock" appears beats watching a whole page, which half the web rewrites on every load. Ask for a keyword if one is not obvious.',
+        category: "research",
+        parameters: {
+          what: { type: "string", description: "What is being watched, in their words." },
+          url: { type: "string", description: "The full https address of the page." },
+          keyword: {
+            type: "string",
+            description: "A word or phrase whose appearance or disappearance matters."
+          }
+        },
+        required: ["what", "url"],
+        run: async (args) => {
+          const watch = await startWatch(
+            String(args.what),
+            String(args.url),
+            args.keyword ? String(args.keyword) : void 0
+          );
+          return `Watching ${watch.what}, checked every hour${watch.keyword ? ` for "${watch.keyword}"` : ""}. I will say when it moves.`;
+        }
+      },
+      {
+        name: "list_watches",
+        description: "What is being watched for changes right now.",
+        category: "research",
+        parameters: {},
+        required: [],
+        run: async () => {
+          const watches = await liveWatches();
+          if (watches.length === 0) return "Nothing being watched.";
+          return watches.map(
+            (watch) => `- ${watch.what}${watch.keyword ? ` (for "${watch.keyword}")` : ""}${watch.lastCheckedAt ? "" : " \u2014 not checked yet"}`
+          ).join("\n");
+        }
+      },
+      {
+        name: "stop_watch",
+        description: "Stop watching something. It is filed, not deleted.",
+        category: "research",
+        parameters: {
+          what: { type: "string", description: "Which watch to stop, by its wording." }
+        },
+        required: ["what"],
+        run: async (args) => {
+          const stopped = await stopWatch(String(args.what));
+          return stopped ? "Stopped watching it." : "Nothing being watched matches that.";
+        }
+      }
+    ];
+  }
+});
+
+// server/tools/web.ts
+var webTools;
+var init_web = __esm({
+  "server/tools/web.ts"() {
+    init_llm();
+    webTools = [
+      {
+        name: "search_web",
+        description: "Look something up on the web. Use this whenever an answer depends on something current, specific, or outside what you already know \u2014 news, weather, prices, opening times, scores, recent events, anything that has changed since you were trained. Ask it a full question rather than keywords. Do not use it for things you already know.",
+        category: "research",
+        parameters: {
+          query: {
+            type: "string",
+            description: "The question to answer, in full. Include any detail from the conversation that narrows it \u2014 a place, a date, a name."
+          }
+        },
+        required: ["query"],
+        run: async (args) => {
+          const query = String(args.query ?? "").trim();
+          if (!query) return "No question was given to look up.";
+          const answer = await getProvider().complete({
+            system: "Answer the question from current web sources. Be brief and factual. Give the figures, names and dates that were asked for. If the sources disagree or are thin, say so rather than picking one.",
+            turns: [{ role: "user", text: query }],
+            search: true,
+            temperature: 0.2
+          });
+          return answer.trim() || "Nothing useful came back for that.";
+        }
+      }
+    ];
+  }
+});
+
+// server/tools/work.ts
+function ago(iso) {
+  const hours = Math.round((Date.now() - new Date(iso).getTime()) / 36e5);
+  if (hours < 1) return "within the hour";
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.round(hours / 24)}d ago`;
+}
+var workTools;
+var init_work = __esm({
+  "server/tools/work.ts"() {
+    init_github();
+    init_n8n();
+    workTools = [
+      {
+        name: "check_github",
+        description: "Look at the user\u2019s GitHub: their open pull requests, reviews waiting on them, and issues assigned to them. Use it when they ask about their code, PRs, reviews, or what is waiting on them there.",
+        category: "research",
+        parameters: {},
+        required: [],
+        run: async () => {
+          try {
+            const view = await githubView();
+            const lines = [];
+            if (view.reviewsWanted.length > 0) {
+              lines.push(
+                `Reviews waiting on them: ${view.reviewsWanted.map((pr) => `${pr.title} (${pr.repo})`).join("; ")}`
+              );
+            }
+            if (view.prs.length > 0) {
+              lines.push(
+                `Their open PRs: ${view.prs.map((pr) => `${pr.title} (${pr.repo})`).join("; ")}`
+              );
+            }
+            if (view.issues.length > 0) {
+              lines.push(
+                `Assigned issues: ${view.issues.map((issue) => issue.title).join("; ")}`
+              );
+            }
+            return lines.length > 0 ? `Signed in as ${view.login}.
+${lines.join("\n")}
+
+Report this in a sentence or two, not as a list.` : `Signed in as ${view.login}. Nothing is waiting on them anywhere.`;
+          } catch (error) {
+            if (error instanceof GithubError) return error.message;
+            throw error;
+          }
+        }
+      },
+      {
+        name: "check_workflows",
+        description: "Look at the user\u2019s n8n: whether the workflows are healthy and what has failed lately. Use it when they ask about n8n, their workflows, or automation, and as part of a Work briefing.",
+        category: "research",
+        parameters: {},
+        required: [],
+        run: async () => {
+          try {
+            const view = await n8nView();
+            if (view.failures.length === 0) {
+              return `All healthy: ${view.active} active workflow${view.active === 1 ? "" : "s"}${view.inactive > 0 ? ` (${view.inactive} paused)` : ""}, ${view.recentTotal} recent runs, no failures.`;
+            }
+            const failed = view.failures.slice(0, 5).map((one) => `${one.workflow} (${ago(one.at)})`).join("; ");
+            return `${view.failures.length} failed execution${view.failures.length === 1 ? "" : "s"}: ${failed}. ${view.active} workflows active. Report the failures in a sentence; they can open n8n to dig in.`;
+          } catch (error) {
+            if (error instanceof N8nError) return error.message;
+            throw error;
+          }
+        }
+      },
+      {
+        name: "pause_workflow",
+        description: "Pause or resume one of the user\u2019s n8n workflows by name. Use it when they say to stop, pause, turn off, restart or turn back on a workflow \u2014 and offer it yourself when one is failing over and over, since every run of a broken workflow does the damage again. It cannot run a workflow: n8n offers no way to trigger one from outside, so say so if asked.",
+        category: "research",
+        parameters: {
+          name: { type: "string", description: "The workflow\u2019s name, as they said it." },
+          running: {
+            type: "boolean",
+            description: "True to resume it, false to pause it."
+          }
+        },
+        required: ["name", "running"],
+        run: async (args) => {
+          try {
+            const wanted = Boolean(args.running);
+            const { name, changed } = await setWorkflowActive(String(args.name), wanted);
+            if (!changed) {
+              return `${name} was already ${wanted ? "running" : "paused"}. Nothing to do.`;
+            }
+            return `${name} is ${wanted ? "running again" : "paused"}.`;
+          } catch (error) {
+            if (error instanceof N8nError) return error.message;
+            throw error;
+          }
+        }
+      },
+      {
+        name: "rerun_checks",
+        description: "Set the failed jobs of a repository\u2019s most recent red build running again. Use it when the user asks to re-run CI, the build, the checks, or the tests, or says a failure looks flaky. Only the failed jobs re-run.",
+        category: "research",
+        parameters: {
+          repo: {
+            type: "string",
+            description: "The repository, as owner/name if they said it that way, or just the name if it is one you have already seen in their work."
+          }
+        },
+        required: ["repo"],
+        run: async (args) => {
+          try {
+            const { repo, workflow, branch } = await rerunFailedChecks(String(args.repo));
+            return `Re-running the failed jobs of ${workflow} on ${branch} in ${repo}.`;
+          } catch (error) {
+            if (error instanceof GithubError) return error.message;
+            throw error;
+          }
+        }
+      }
+    ];
+  }
+});
+
+// server/tools/index.ts
+var tools_exports = {};
+__export(tools_exports, {
+  allTools: () => allTools,
+  auditTools: () => auditTools,
+  declarations: () => declarations,
+  findTool: () => findTool,
+  runTool: () => runTool
+});
+function allTools() {
+  return TOOLS;
+}
+function findTool(name) {
+  return TOOLS.find((tool) => tool.name === name);
+}
+function auditTools() {
+  const problems = [];
+  for (const tool of TOOLS) {
+    if (tool.category === "communication") {
+      problems.push(`${tool.name} is a communication tool; she has no such power`);
+    }
+    if (tool.category === "purchase") {
+      problems.push(`${tool.name} would spend money`);
+    }
+    const reads = DESTRUCTIVE2.test(tool.description) || DESTRUCTIVE2.test(tool.name);
+    const declares = Boolean(tool.destructive || tool.risky);
+    if ((reads || declares) && tool.category !== "machine") {
+      problems.push(
+        `${tool.name} can destroy something but is not governed by the machine policy`
+      );
+    }
+    if (reads && !declares) {
+      problems.push(
+        `${tool.name} describes itself as destroying something but is not marked destructive, so the gate would let it through unannounced`
+      );
+    }
+  }
+  return problems;
+}
+function label(name) {
+  return LABELS[name] ?? name.replace(/_/g, " ");
+}
+function describe2(name, result) {
+  const short = result.trim().split("\n")[0];
+  return short.length > 0 && short.length <= 60 && !short.includes("  ") ? `${label(name)} \u2014 ${short}` : label(name);
+}
+async function runTool(call4) {
+  const tool = findTool(call4.name);
+  if (!tool) {
+    return {
+      name: call4.name,
+      ok: false,
+      result: `There is no tool called ${call4.name}.`,
+      summary: `Tried to use a tool that doesn't exist (${call4.name})`
+    };
+  }
+  const missing = tool.required.filter(
+    (key) => call4.args[key] === void 0 || call4.args[key] === ""
+  );
+  if (missing.length > 0) {
+    return {
+      name: tool.name,
+      ok: false,
+      result: `Missing: ${missing.join(", ")}. Ask the user for it.`,
+      summary: `Needed more detail for ${tool.name}`
+    };
+  }
+  const destroys = tool.risky?.(call4.args) ?? tool.destructive ?? false;
+  if (tool.name !== confirmTool.name && (destroys || await requiresConfirmation(tool.category, destroys))) {
+    const receipt = await hold(tool.name, call4.args);
+    return {
+      name: tool.name,
+      ok: false,
+      result: `That needs the user's explicit go-ahead first. Describe exactly what you are about to do and ask them to confirm \u2014 then stop. Do not claim to have done it. If they say yes, call confirm_action with the id "${receipt.id}". It is held for five minutes.`,
+      summary: `Waiting on approval for ${tool.name}`
+    };
+  }
+  try {
+    const result = await tool.run(call4.args);
+    await noteDeed("acted", describe2(tool.name, result)).catch(() => {
+    });
+    return { name: tool.name, ok: true, result, summary: describe2(tool.name, result) };
+  } catch (error) {
+    const detail = error.message;
+    console.error(`[grace] tool ${tool.name} failed:`, detail);
+    return {
+      name: tool.name,
+      ok: false,
+      result: `That didn't work: ${detail}. Tell the user plainly.`,
+      summary: `${tool.name} failed`
+    };
+  }
+}
+function declarations(have) {
+  const usable = have ? TOOLS.filter((tool) => {
+    const needs = NEEDS[tool.name];
+    return !needs || have[needs];
+  }) : TOOLS;
+  return usable.map((tool) => {
+    const keys3 = Object.keys(tool.parameters);
+    if (keys3.length === 0) {
+      return { name: tool.name, description: tool.description };
+    }
+    return {
+      name: tool.name,
+      description: tool.description,
+      parameters: {
+        type: "OBJECT",
+        properties: Object.fromEntries(
+          Object.entries(tool.parameters).map(([key, spec]) => [
+            key,
+            {
+              type: spec.type.toUpperCase(),
+              description: spec.description,
+              ...spec.values ? { enum: spec.values } : {}
+            }
+          ])
+        ),
+        required: tool.required
+      }
+    };
+  });
+}
+var TOOLS, AGREED, AGREEMENT_FRESH_MS, confirmTool, DESTRUCTIVE2, LABELS, NEEDS;
+var init_tools = __esm({
+  "server/tools/index.ts"() {
+    init_actions();
+    init_approvals();
+    init_memory();
+    init_journal();
+    init_ask();
+    init_coding2();
+    init_console();
+    init_google();
+    init_machine();
+    init_keep();
+    init_lights2();
+    init_open();
+    init_playstation();
+    init_recall();
+    init_reminders();
+    init_self();
+    init_timers();
+    init_web();
+    init_work();
+    TOOLS = [
+      ...webTools,
+      ...machineTools,
+      ...codingTools,
+      ...reminderTools,
+      ...googleTools,
+      ...playstationTools,
+      ...consoleTools,
+      ...recallTools,
+      ...askTools,
+      ...openTools,
+      ...keepTools,
+      ...timerTools,
+      ...workTools,
+      ...selfTools,
+      ...lightTools
+    ];
+    AGREED = /^\s*(yes|yeah|yep|yup|ok(ay)?|sure|go ahead|do it|confirm(ed)?|send it|approved?|please do|go on|fine|absolutely|of course|make it so)\b/i;
+    AGREEMENT_FRESH_MS = 3 * 60 * 1e3;
+    confirmTool = {
+      name: "confirm_action",
+      description: "Run an action that was held for approval. Only call this after the user has clearly said yes to the specific thing you described. Pass the id you were given when the action was held.",
+      category: "research",
+      parameters: {
+        id: { type: "string", description: "The id from the hold message." }
+      },
+      required: ["id"],
+      run: async (args) => {
+        const id = String(args.id ?? "").trim();
+        const said2 = await lastUserSaid();
+        const entry = await take(id);
+        if (!entry) {
+          return `Nothing is held under "${id}" \u2014 it may have expired. Ask again if it still matters.`;
+        }
+        const agreed = said2 !== null && AGREED.test(said2.text) && new Date(said2.at).getTime() >= new Date(entry.at).getTime() && Date.now() - new Date(said2.at).getTime() < AGREEMENT_FRESH_MS;
+        if (!agreed) {
+          await restore(entry);
+          return `The user has not clearly said yes to that yet. Ask them plainly and wait for their answer. Do not call this again until they have.`;
+        }
+        const tool = findTool(entry.name);
+        if (!tool) return `The held action (${entry.name}) no longer exists.`;
+        const result = await tool.run(entry.args);
+        await noteDeed("acted", `${describe2(tool.name, result)} (confirmed by you)`).catch(() => {
+        });
+        return result;
+      }
+    };
+    TOOLS.push(confirmTool);
+    DESTRUCTIVE2 = /\b(delete|destroy|erase|purge|wipe|permanently remove)\b/i;
+    LABELS = {
+      search_web: "Searched the web",
+      add_reminder: "Added to the list",
+      list_reminders: "Checked the list",
+      complete_reminder: "Marked something done",
+      check_mail: "Checked the mail",
+      read_mail: "Read an email",
+      draft_reply: "Wrote a draft",
+      check_diary: "Checked the diary",
+      add_to_diary: "Added to the diary",
+      check_playstation: "Looked at the PlayStation",
+      recent_games: "Checked recent games",
+      search_memory: "Went back through the record",
+      ask_choice: "Asked you something",
+      open_pages: "Opened a page",
+      open_workspace: "Switched workspace",
+      write_note: "Added to a note",
+      read_note: "Read a note back",
+      track_situation: "Logged a development",
+      list_situations: "Checked what is open",
+      resolve_situation: "Marked something settled",
+      set_timer: "Started a timer",
+      list_timers: "Checked the timers",
+      start_watch: "Started watching something",
+      list_watches: "Checked the watches",
+      stop_watch: "Stopped a watch",
+      search_files: "Looked through your documents",
+      read_document: "Read a document",
+      write_document: "Wrote a document",
+      set_lights: "Changed the lights",
+      dim_lights: "Dimmed the lights",
+      colour_lights: "Recoloured the lights",
+      list_lights: "Checked the lights",
+      check_github: "Checked GitHub",
+      check_workflows: "Checked the workflows",
+      file_mail: "Filed a message",
+      label_mail: "Labelled a message",
+      mark_mail: "Marked a message",
+      change_diary: "Moved something in the diary",
+      pause_workflow: "Changed a workflow",
+      rerun_checks: "Set the build running again",
+      open_on_laptop: "Put a page on the laptop",
+      lock_laptop: "Locked the laptop",
+      remember_this: "Kept something in mind",
+      correct_memory: "Corrected herself",
+      set_attention: "Changed how much she interrupts",
+      make_room: "Built a room",
+      notify_phone: "Reached your phone"
+    };
+    NEEDS = {
+      check_mail: "google",
+      read_mail: "google",
+      draft_reply: "google",
+      file_mail: "google",
+      label_mail: "google",
+      mark_mail: "google",
+      check_diary: "google",
+      add_to_diary: "google",
+      change_diary: "google",
+      check_github: "github",
+      rerun_checks: "github",
+      check_workflows: "n8n",
+      pause_workflow: "n8n",
+      check_playstation: "playstation",
+      recent_games: "playstation",
+      open_on_laptop: "room",
+      /*
+       * The machine tools need the bridge only when she is somewhere else.
+       *
+       * Running on the machine itself, they need nothing — so gating them on the
+       * bridge would hide her own hands from her, which is a very strange way for
+       * a local install to behave. `available.ts` reports the room as present when
+       * she is not deployed for exactly this reason.
+       */
+      list_folder: "room",
+      read_file: "room",
+      write_file: "room",
+      delete_file: "room",
+      run_command: "room",
+      // Coding needs both a machine to code on and Claude Code installed on it.
+      // Offering it without either means she promises and then explains herself.
+      write_code: "coding",
+      check_code: "coding",
+      lock_laptop: "room",
+      notify_phone: "phone",
+      set_lights: "lights",
+      dim_lights: "lights",
+      colour_lights: "lights",
+      list_lights: "lights",
+      check_lights: "lights",
+      set_scene: "lights",
+      adjust_scene: "lights",
+      restore_scene: "lights",
+      list_scenes: "lights"
+    };
+  }
+});
+
+// server/vercel-entry.ts
+import express2 from "express";
+
+// server/api.ts
+init_actions();
+init_auth();
+init_bridge();
+init_budget();
+init_config();
+init_keys();
+import express from "express";
 
 // server/learn.ts
+init_config();
+init_llm();
+init_memory();
+import { Type } from "@google/genai";
 var SCHEMA = {
   type: Type.OBJECT,
   properties: {
@@ -1703,689 +5772,20 @@ Grace: ${graceText}`
   }
 }
 
-// server/github.ts
-var API = "https://api.github.com";
-var GithubError = class extends Error {
-  constructor(message, needsToken = false) {
-    super(message);
-    this.needsToken = needsToken;
-  }
-};
-async function call(path3, method = "GET") {
-  const token2 = githubToken();
-  if (!token2) {
-    throw new GithubError(
-      "GitHub is not connected. A personal access token pasted into her keys fixes that.",
-      true
-    );
-  }
-  const response = await fetch(`${API}${path3}`, {
-    method,
-    headers: {
-      Authorization: `Bearer ${token2}`,
-      Accept: "application/vnd.github+json",
-      "X-GitHub-Api-Version": "2022-11-28"
-    },
-    signal: AbortSignal.timeout(8e3)
-  });
-  if (response.status === 401) {
-    throw new GithubError("GitHub rejected the token. It may have expired.", true);
-  }
-  if (response.status === 403) {
-    throw new GithubError(
-      "GitHub refused: the token has no permission for that. Re-running checks needs a token with Actions write on the repository.",
-      true
-    );
-  }
-  if (!response.ok) {
-    throw new GithubError(`GitHub answered ${response.status}.`);
-  }
-  const body = await response.text();
-  return body ? JSON.parse(body) : {};
-}
-function shape(items) {
-  return items.slice(0, 8).map((item) => ({
-    title: item.title,
-    repo: item.repository_url.split("/repos/")[1] ?? "",
-    url: item.html_url
-  }));
-}
-async function githubView() {
-  const me = await call("/user");
-  const login = me.login;
-  const [prs, reviews, issues] = await Promise.all([
-    call(
-      `/search/issues?q=${encodeURIComponent(`is:pr is:open author:${login}`)}&per_page=8`
-    ),
-    call(
-      `/search/issues?q=${encodeURIComponent(`is:pr is:open review-requested:${login}`)}&per_page=8`
-    ),
-    call(
-      `/search/issues?q=${encodeURIComponent(`is:issue is:open assignee:${login}`)}&per_page=8`
-    )
-  ]);
-  return {
-    login,
-    prs: shape(prs.items),
-    reviewsWanted: shape(reviews.items),
-    issues: shape(issues.items)
-  };
-}
-async function rerunFailedChecks(repoSaid) {
-  const said2 = repoSaid.trim().replace(/^https?:\/\/github\.com\//, "");
-  let repo = said2;
-  if (!said2.includes("/")) {
-    const view = await githubView();
-    const known2 = [...view.prs, ...view.reviewsWanted, ...view.issues].map(
-      (item) => item.repo
-    );
-    const hit = known2.find(
-      (full) => full.toLowerCase().endsWith(`/${said2.toLowerCase()}`)
-    );
-    if (!hit) {
-      throw new GithubError(
-        `Not sure which repository "${said2}" is. Ask them for the owner and name, as owner/name.`
-      );
-    }
-    repo = hit;
-  }
-  const runs = await call(`/repos/${repo}/actions/runs?status=failure&per_page=1`);
-  const run = runs.workflow_runs?.[0];
-  if (!run) {
-    throw new GithubError(`Nothing has failed recently in ${repo}.`);
-  }
-  await call(`/repos/${repo}/actions/runs/${run.id}/rerun-failed-jobs`, "POST");
-  return {
-    repo,
-    workflow: run.name ?? "the workflow",
-    branch: run.head_branch ?? "its branch"
-  };
-}
-function githubConfigured() {
-  return Boolean(githubToken());
-}
-
-// server/lights.ts
-import { randomUUID as randomUUID4 } from "node:crypto";
-var LightError = class extends Error {
-  constructor(message, needsKey = false) {
-    super(message);
-    this.needsKey = needsKey;
-  }
-};
-var BASE = "https://openapi.api.govee.com/router/api/v1";
-async function call2(path3, body) {
-  const key = goveeKey();
-  if (!key) {
-    throw new LightError(
-      "The lights are not connected. Govee gives out an API key from the app, under Settings, About Us, Apply for API Key \u2014 it arrives by email. Pasting it into her keys is the whole setup.",
-      true
-    );
-  }
-  const response = await fetch(`${BASE}${path3}`, {
-    method: body ? "POST" : "GET",
-    headers: { "Govee-API-Key": key, "Content-Type": "application/json" },
-    ...body ? { body: JSON.stringify(body) } : {},
-    signal: AbortSignal.timeout(8e3)
-  });
-  if (response.status === 401 || response.status === 403) {
-    throw new LightError("Govee rejected the key. It may have been revoked.", true);
-  }
-  if (response.status === 429) {
-    throw new LightError("Govee is rate-limiting; try again in a minute.");
-  }
-  if (!response.ok) throw new LightError(`Govee answered ${response.status}.`);
-  const parsed = await response.json();
-  if (parsed.code !== void 0 && parsed.code !== 200 && parsed.code !== 0) {
-    throw new LightError(parsed.message || `Govee refused that (${parsed.code}).`);
-  }
-  return parsed;
-}
-var known = null;
-var KNOWN_FOR_MS = 6e4;
-function forgetLights() {
-  known = null;
-}
-async function lights() {
-  if (known && Date.now() - known.at < KNOWN_FOR_MS) return known.lights;
-  const { data } = await call2(
-    "/user/devices"
-  );
-  const found = (data ?? []).map((one) => ({
-    sku: one.sku,
-    device: one.device,
-    name: one.deviceName
-  }));
-  known = { at: Date.now(), lights: found };
-  return found;
-}
-async function pick(said2) {
-  const all = await lights();
-  if (all.length === 0) {
-    throw new LightError("Govee has no devices on this account.");
-  }
-  const needle = (said2 ?? "").toLowerCase().trim();
-  if (!needle || /^(all|the )?(lights?|everything)$/.test(needle)) return all;
-  const found = all.filter((light) => light.name.toLowerCase().includes(needle));
-  if (found.length === 0) {
-    throw new LightError(
-      `No light called "${said2}". They are: ${all.map((one) => one.name).join(", ")}.`
-    );
-  }
-  return found;
-}
-var UNKNOWN = { on: null, brightness: null, colour: null, online: null };
-async function stateOf(light) {
-  const reported = await call2("/device/state", {
-    requestId: randomUUID4(),
-    payload: { sku: light.sku, device: light.device }
-  });
-  const found = /* @__PURE__ */ new Map();
-  for (const one of reported.payload?.capabilities ?? []) {
-    if (one.instance) found.set(one.instance, one.state?.value);
-  }
-  const number = (name) => {
-    const raw = found.get(name);
-    return typeof raw === "number" && Number.isFinite(raw) ? raw : null;
-  };
-  const power = number("powerSwitch");
-  const online = found.get("online");
-  return {
-    on: power === null ? null : power === 1,
-    brightness: number("brightness"),
-    colour: number("colorRgb"),
-    online: typeof online === "boolean" ? online : null
-  };
-}
-var sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-var SETTLE_MS = 900;
-var commandedAt = /* @__PURE__ */ new Map();
-async function pace(device) {
-  const since = Date.now() - (commandedAt.get(device) ?? 0);
-  if (since < SETTLE_MS) await sleep(SETTLE_MS - since);
-  commandedAt.set(device, Date.now());
-}
-var CONFIRM_AFTER_MS = 500;
-function close(a, b, by) {
-  return Math.abs(a - b) <= by;
-}
-function took(state, capability) {
-  if (state.on === false && capability.instance !== "powerSwitch") return null;
-  switch (capability.instance) {
-    case "powerSwitch":
-      return state.on === null ? null : state.on === (capability.value === 1);
-    case "brightness": {
-      if (state.brightness === null) return null;
-      if (state.brightness > 100) return null;
-      return close(state.brightness, capability.value, 6);
-    }
-    case "colorRgb": {
-      if (state.colour === null || state.colour === 0) return null;
-      const channels = (packed) => [
-        packed >> 16 & 255,
-        packed >> 8 & 255,
-        packed & 255
-      ];
-      const got = channels(state.colour);
-      const wanted = channels(capability.value);
-      return got.every((value, at) => close(value, wanted[at], 24));
-    }
-  }
-}
-var PLAINLY = {
-  powerSwitch: "switching",
-  brightness: "brightness",
-  colorRgb: "colour"
-};
-async function apply(light, capabilities) {
-  const send2 = async (capability) => {
-    await pace(light.device);
-    await call2("/device/control", {
-      requestId: randomUUID4(),
-      payload: { sku: light.sku, device: light.device, capability }
-    });
-  };
-  try {
-    for (const capability of capabilities) await send2(capability);
-    await sleep(CONFIRM_AFTER_MS);
-    let state = await stateOf(light).catch(() => UNKNOWN);
-    const missed = capabilities.filter((one) => took(state, one) === false);
-    if (missed.length > 0) {
-      for (const capability of missed) await send2(capability);
-      await sleep(CONFIRM_AFTER_MS);
-      state = await stateOf(light).catch(() => UNKNOWN);
-    }
-    return {
-      name: light.name,
-      state,
-      unconfirmed: capabilities.filter((one) => took(state, one) === false).map((one) => PLAINLY[one.instance] ?? one.instance),
-      failed: null
-    };
-  } catch (error) {
-    return {
-      name: light.name,
-      state: UNKNOWN,
-      unconfirmed: [],
-      failed: error instanceof LightError ? error.message : error.message
-    };
-  }
-}
-var control = (light, capability) => apply(light, [capability]);
-async function applyScene(said2, rgb, brightness) {
-  const chosen = await pick(said2);
-  const level = Math.max(1, Math.min(100, Math.round(brightness)));
-  const packed = rgb[0] << 16 | rgb[1] << 8 | rgb[2];
-  return Promise.all(
-    chosen.map(
-      (light) => apply(light, [
-        { type: "devices.capabilities.on_off", instance: "powerSwitch", value: 1 },
-        {
-          type: "devices.capabilities.color_setting",
-          instance: "colorRgb",
-          value: packed
-        },
-        { type: "devices.capabilities.range", instance: "brightness", value: level }
-      ])
-    )
-  );
-}
-async function setPower(said2, on) {
-  const chosen = await pick(said2);
-  return Promise.all(
-    chosen.map(
-      (light) => control(light, {
-        type: "devices.capabilities.on_off",
-        instance: "powerSwitch",
-        value: on ? 1 : 0
-      })
-    )
-  );
-}
-async function setBrightness(said2, percent) {
-  const level = Math.max(1, Math.min(100, Math.round(percent)));
-  const chosen = await pick(said2);
-  return Promise.all(
-    chosen.map(
-      (light) => control(light, {
-        type: "devices.capabilities.range",
-        instance: "brightness",
-        value: level
-      })
-    )
-  );
-}
-var COLOURS = {
-  red: [255, 0, 0],
-  orange: [255, 110, 0],
-  amber: [255, 170, 40],
-  yellow: [255, 230, 0],
-  lime: [160, 255, 0],
-  green: [0, 255, 60],
-  teal: [0, 220, 190],
-  cyan: [0, 220, 255],
-  blue: [0, 90, 255],
-  indigo: [75, 0, 220],
-  violet: [150, 60, 255],
-  purple: [180, 0, 255],
-  magenta: [255, 0, 200],
-  pink: [255, 105, 180],
-  white: [255, 255, 255],
-  warm: [255, 180, 110],
-  cool: [200, 225, 255],
-  gold: [255, 200, 70]
-};
-async function setColour(said2, colour) {
-  const wanted = colour.toLowerCase().trim();
-  const rgb = COLOURS[wanted];
-  if (!rgb) {
-    throw new LightError(
-      `I don't have a "${colour}". I know: ${Object.keys(COLOURS).join(", ")}.`
-    );
-  }
-  const chosen = await pick(said2);
-  const packed = rgb[0] << 16 | rgb[1] << 8 | rgb[2];
-  const landed = await Promise.all(
-    chosen.map(
-      (light) => control(light, {
-        type: "devices.capabilities.color_setting",
-        instance: "colorRgb",
-        value: packed
-      })
-    )
-  );
-  return { landed, colour: wanted };
-}
-function nameOfColour(packed) {
-  const channels = [packed >> 16 & 255, packed >> 8 & 255, packed & 255];
-  let nearest2 = "something";
-  let best = Infinity;
-  for (const [name, rgb] of Object.entries(COLOURS)) {
-    const distance = rgb.reduce(
-      (total, value, at) => total + (value - channels[at]) ** 2,
-      0
-    );
-    if (distance < best) {
-      best = distance;
-      nearest2 = name;
-    }
-  }
-  return nearest2;
-}
-async function survey(said2) {
-  const chosen = await pick(said2);
-  return Promise.all(
-    chosen.map(async (light) => ({
-      name: light.name,
-      state: await stateOf(light).catch(() => UNKNOWN)
-    }))
-  );
-}
-function lightsConfigured() {
-  return Boolean(goveeKey());
-}
-
-// server/google/oauth.ts
-var AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
-var TOKEN_URL = "https://oauth2.googleapis.com/token";
-var SCOPES = [
-  "https://www.googleapis.com/auth/gmail.readonly",
-  "https://www.googleapis.com/auth/gmail.compose",
-  "https://www.googleapis.com/auth/gmail.modify",
-  "https://www.googleapis.com/auth/calendar.events",
-  "openid",
-  "email"
-];
-var store6 = new Document("google", () => null);
-var accessTokens = /* @__PURE__ */ new Map();
-function googleConfigured() {
-  const client = googleClient();
-  return Boolean(client.id && client.secret);
-}
-function redirectUri() {
-  if (process.env.GOOGLE_REDIRECT_URI) return process.env.GOOGLE_REDIRECT_URI;
-  const host = process.env.VERCEL_PROJECT_PRODUCTION_URL;
-  return host ? `https://${host}/api/google-callback` : "http://localhost:3001/api/google-callback";
-}
-function authorizeUrl() {
-  const state = issueNonce("google-oauth");
-  const params = new URLSearchParams({
-    client_id: googleClient().id,
-    redirect_uri: redirectUri(),
-    response_type: "code",
-    scope: SCOPES.join(" "),
-    // Without offline there is no refresh token at all, and without consent
-    // Google returns one only on the very first authorisation — which makes
-    // every subsequent attempt look like it worked while leaving nothing to
-    // reconnect with tomorrow.
-    access_type: "offline",
-    prompt: "consent",
-    include_granted_scopes: "true",
-    state
-  });
-  return `${AUTH_URL}?${params.toString()}`;
-}
-async function postToken(body) {
-  const response = await fetch(TOKEN_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams(body).toString()
-  });
-  return await response.json();
-}
-function emailFromIdToken(idToken) {
-  if (!idToken) return "";
-  try {
-    const payload = idToken.split(".")[1];
-    const json = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
-    return json.email ?? "";
-  } catch {
-    return "";
-  }
-}
-var GoogleError = class extends Error {
-  constructor(message, needsReconnect = false) {
-    super(message);
-    this.needsReconnect = needsReconnect;
-    this.name = "GoogleError";
-  }
-};
-async function completeSignIn(code, state) {
-  if (!checkNonce("google-oauth", state)) {
-    throw new GoogleError("That sign-in link had expired. Start again.");
-  }
-  const token2 = await postToken({
-    code,
-    client_id: googleClient().id,
-    client_secret: googleClient().secret,
-    redirect_uri: redirectUri(),
-    grant_type: "authorization_code"
-  });
-  if (token2.error || !token2.refresh_token) {
-    throw new GoogleError(
-      token2.error_description ?? token2.error ?? "Google returned no refresh token. Remove Grace at myaccount.google.com/permissions and try again."
-    );
-  }
-  const email = emailFromIdToken(token2.id_token);
-  const owner = googleClient().owner;
-  if (owner && email && email.toLowerCase() !== owner.toLowerCase()) {
-    throw new GoogleError(
-      `This is Grace's owner's account only. Signed in as ${email}, expected ${owner}.`
-    );
-  }
-  await store6.write({
-    refreshToken: token2.refresh_token,
-    email,
-    scopes: (token2.scope ?? "").split(" ").filter(Boolean),
-    connectedAt: (/* @__PURE__ */ new Date()).toISOString()
-  });
-  return { email };
-}
-async function connection() {
-  return store6.read();
-}
-async function missingScopes() {
-  const saved = await store6.read();
-  if (!saved) return [];
-  return SCOPES.filter(
-    (scope) => scope.includes("/auth/") && !saved.scopes.includes(scope)
-  );
-}
-async function disconnect() {
-  accessTokens.clear();
-  await store6.write(null);
-}
-async function accessToken() {
-  const saved = await store6.read();
-  if (!saved) throw new GoogleError("Google is not connected yet.", true);
-  if (saved.brokenReason) throw new GoogleError(saved.brokenReason, true);
-  const cached6 = accessTokens.get(saved.refreshToken);
-  if (cached6 && cached6.expiresAt > Date.now() + 6e4) return cached6.token;
-  const token2 = await postToken({
-    client_id: googleClient().id,
-    client_secret: googleClient().secret,
-    refresh_token: saved.refreshToken,
-    grant_type: "refresh_token"
-  });
-  if (token2.error === "invalid_grant") {
-    const reason = "Google has disconnected Grace \u2014 usually a changed password or a revoked permission. Reconnect to put it back.";
-    await store6.write({ ...saved, brokenReason: reason });
-    throw new GoogleError(reason, true);
-  }
-  if (token2.error || !token2.access_token) {
-    throw new GoogleError(token2.error_description ?? "Google refused the token.");
-  }
-  accessTokens.set(saved.refreshToken, {
-    token: token2.access_token,
-    expiresAt: Date.now() + (token2.expires_in ?? 3600) * 1e3
-  });
-  return token2.access_token;
-}
-async function googleFetch(url, init = {}) {
-  const token2 = await accessToken();
-  const response = await fetch(url, {
-    ...init,
-    headers: {
-      ...init.headers ?? {},
-      Authorization: `Bearer ${token2}`,
-      "Content-Type": "application/json"
-    }
-  });
-  if (response.status === 401) {
-    throw new GoogleError("Google rejected that request. Try reconnecting.", true);
-  }
-  if (!response.ok) {
-    const detail = await response.text();
-    throw new GoogleError(
-      `Google returned ${response.status}: ${detail.slice(0, 200)}`
-    );
-  }
-  return response.json();
-}
-
-// server/n8n.ts
-var N8nError = class extends Error {
-  constructor(message, needsKey = false) {
-    super(message);
-    this.needsKey = needsKey;
-  }
-};
-async function call3(path3, method = "GET") {
-  const { key, url } = n8nAccess();
-  if (!key || !url) {
-    throw new N8nError(
-      "n8n is not connected. It needs two things pasted into her keys: the instance address, and an API key from Settings, n8n API.",
-      true
-    );
-  }
-  const response = await fetch(`${url}/api/v1${path3}`, {
-    method,
-    headers: { "X-N8N-API-KEY": key },
-    signal: AbortSignal.timeout(8e3)
-  });
-  if (response.status === 401) {
-    throw new N8nError("n8n rejected the key. It may have been revoked.", true);
-  }
-  if (!response.ok) throw new N8nError(`n8n answered ${response.status}.`);
-  return response.json();
-}
-async function n8nView() {
-  const [workflows, failed, recent] = await Promise.all([
-    call3("/workflows?limit=100"),
-    call3(
-      "/executions?status=error&limit=10"
-    ),
-    call3("/executions?limit=50")
-  ]);
-  return {
-    active: workflows.data.filter((one) => one.active).length,
-    inactive: workflows.data.filter((one) => !one.active).length,
-    failures: failed.data.map((one) => ({
-      workflow: one.workflowData?.name ?? "unnamed workflow",
-      at: one.startedAt
-    })),
-    recentTotal: recent.data.length
-  };
-}
-async function setWorkflowActive(said2, active) {
-  const needle = said2.toLowerCase().trim();
-  const { data } = await call3(
-    "/workflows?limit=200"
-  );
-  const exact = data.filter((one) => one.name.toLowerCase().trim() === needle);
-  const partial = data.filter((one) => one.name.toLowerCase().includes(needle));
-  const candidates = exact.length > 0 ? exact : partial;
-  if (candidates.length === 0) {
-    throw new N8nError(
-      `No workflow called "${said2}". They are: ${data.map((one) => one.name).join(", ") || "none at all"}.`
-    );
-  }
-  if (candidates.length > 1) {
-    throw new N8nError(
-      `"${said2}" matches more than one: ${candidates.map((one) => one.name).join(", ")}. Ask which they mean.`
-    );
-  }
-  const target = candidates[0];
-  if (target.active === active) return { name: target.name, changed: false };
-  await call3(`/workflows/${target.id}/${active ? "activate" : "deactivate"}`, "POST");
-  return { name: target.name, changed: true };
-}
-function n8nConfigured() {
-  const { key, url } = n8nAccess();
-  return Boolean(key && url);
-}
-
-// server/push.ts
-import webpush from "web-push";
-var keyStore = new Document("push-keys", () => null);
-var subscriptions = new Document("push-subs", () => []);
-var CONTACT = "mailto:grace@localhost";
-async function keys2() {
-  const saved = await keyStore.read();
-  if (saved) return saved;
-  const fresh2 = webpush.generateVAPIDKeys();
-  await keyStore.write(fresh2);
-  return fresh2;
-}
-async function publicKey() {
-  return (await keys2()).publicKey;
-}
-async function subscribe(raw) {
-  const candidate = raw;
-  const endpoint = candidate?.endpoint;
-  const p256dh = candidate?.keys?.p256dh;
-  const auth = candidate?.keys?.auth;
-  if (typeof endpoint !== "string" || !p256dh || !auth) {
-    return { ok: false, error: "that is not a usable subscription" };
-  }
-  await subscriptions.update((current) => {
-    const others = current.filter((entry) => entry.endpoint !== endpoint);
-    return [
-      ...others,
-      { endpoint, keys: { p256dh, auth }, addedAt: (/* @__PURE__ */ new Date()).toISOString() }
-    ];
-  });
-  return { ok: true };
-}
-async function devices() {
-  return (await subscriptions.read()).filter((entry) => !entry.goneAt).length;
-}
-async function notify(title, body) {
-  const all = await subscriptions.read();
-  const live2 = all.filter((entry) => !entry.goneAt);
-  if (live2.length === 0) return 0;
-  const { publicKey: pub, privateKey } = await keys2();
-  webpush.setVapidDetails(CONTACT, pub, privateKey);
-  const payload = JSON.stringify({ title, body });
-  const gone = [];
-  let sent = 0;
-  await Promise.all(
-    live2.map(async (entry) => {
-      try {
-        await webpush.sendNotification(
-          { endpoint: entry.endpoint, keys: entry.keys },
-          payload,
-          { TTL: 900 }
-        );
-        sent += 1;
-      } catch (error) {
-        const status = error.statusCode;
-        if (status === 404 || status === 410) gone.push(entry.endpoint);
-        else console.error("[grace] push failed:", error.message);
-      }
-    })
-  );
-  if (gone.length > 0) {
-    const at = (/* @__PURE__ */ new Date()).toISOString();
-    await subscriptions.update(
-      (current) => current.map(
-        (entry) => gone.includes(entry.endpoint) ? { ...entry, goneAt: at } : entry
-      )
-    );
-  }
-  return sent;
-}
+// server/turn.ts
+init_effort();
+init_actions();
 
 // server/available.ts
+init_bridge();
+init_coding();
+init_config();
+init_github();
+init_lights();
+init_oauth();
+init_keys();
+init_n8n();
+init_push();
 var HOLD_MS = 5 * 6e4;
 var cached3 = null;
 async function available() {
@@ -2408,7 +5808,10 @@ async function available() {
     // wait for — she is already there, so her own hands are always present.
     room: !config.deployed || Boolean(bridge.seenAt),
     phone: phones > 0,
-    lights: lightsConfigured()
+    lights: lightsConfigured(),
+    // Both halves: a machine of the user's to code on, and the agent that does
+    // the coding actually installed on it.
+    coding: !config.deployed && Boolean(codingAvailable())
   };
   cached3 = { at: Date.now(), value };
   return value;
@@ -2417,203 +5820,14 @@ function forgetAvailable() {
   cached3 = null;
 }
 
-// server/google/calendar.ts
-var BASE2 = "https://www.googleapis.com/calendar/v3/calendars/primary/events";
-function shape2(event) {
-  const allDay = Boolean(event.start?.date);
-  return {
-    id: event.id,
-    summary: event.summary ?? "(no title)",
-    location: event.location ?? "",
-    start: event.start?.dateTime ?? event.start?.date ?? "",
-    end: event.end?.dateTime ?? event.end?.date ?? "",
-    allDay,
-    attendees: (event.attendees ?? []).map((attendee) => attendee.email ?? "").filter(Boolean)
-  };
-}
-async function upcoming(hours = 24, limit = 20) {
-  const from = /* @__PURE__ */ new Date();
-  const to = new Date(from.getTime() + hours * 36e5);
-  const params = new URLSearchParams({
-    timeMin: from.toISOString(),
-    timeMax: to.toISOString(),
-    singleEvents: "true",
-    orderBy: "startTime",
-    maxResults: String(limit)
-  });
-  const response = await googleFetch(`${BASE2}?${params.toString()}`);
-  return (response.items ?? []).map(shape2);
-}
-async function addAppointment(options) {
-  const zone = options.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC";
-  const created = await googleFetch(`${BASE2}?sendUpdates=none`, {
-    method: "POST",
-    body: JSON.stringify({
-      summary: options.summary,
-      location: options.location,
-      description: options.description,
-      start: { dateTime: options.start, timeZone: zone },
-      end: { dateTime: options.end, timeZone: zone }
-    })
-  });
-  return shape2(created);
-}
-async function changeAppointment(id, patch) {
-  const zone = patch.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC";
-  const body = {};
-  if (patch.summary) body.summary = patch.summary;
-  if (patch.location) body.location = patch.location;
-  if (patch.start) body.start = { dateTime: patch.start, timeZone: zone };
-  if (patch.end) body.end = { dateTime: patch.end, timeZone: zone };
-  if (Object.keys(body).length === 0) {
-    throw new Error("nothing to change");
-  }
-  const updated = await googleFetch(
-    `${BASE2}/${encodeURIComponent(id)}?sendUpdates=none`,
-    { method: "PATCH", body: JSON.stringify(body) }
-  );
-  return shape2(updated);
-}
-
-// server/google/gmail.ts
-var BASE3 = "https://gmail.googleapis.com/gmail/v1/users/me";
-function headerMap(headers) {
-  return Object.fromEntries(
-    (headers ?? []).map((header) => [header.name.toLowerCase(), header.value])
-  );
-}
-function findText(part) {
-  if (!part) return "";
-  if (part.mimeType === "text/plain" && !part.filename && part.body?.data) {
-    return Buffer.from(part.body.data, "base64url").toString("utf8");
-  }
-  for (const child of part.parts ?? []) {
-    const found = findText(child);
-    if (found) return found;
-  }
-  if (part.mimeType === "text/html" && !part.filename && part.body?.data) {
-    return Buffer.from(part.body.data, "base64url").toString("utf8").replace(/<style[\s\S]*?<\/style>/gi, "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-  }
-  return "";
-}
-async function recentMail(query = "in:inbox", limit = 10) {
-  const list = await googleFetch(
-    `${BASE3}/messages?maxResults=${limit}&q=${encodeURIComponent(query)}`
-  );
-  const ids = (list.messages ?? []).slice(0, limit);
-  if (ids.length === 0) return [];
-  const messages = await Promise.all(
-    ids.map(
-      (message) => googleFetch(
-        `${BASE3}/messages/${message.id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date&metadataHeaders=List-Unsubscribe&metadataHeaders=Precedence`
-      ).catch(() => null)
-    )
-  );
-  return messages.filter(Boolean).map((raw) => {
-    const message = raw;
-    const headers = headerMap(message.payload?.headers);
-    return {
-      id: message.id,
-      threadId: message.threadId,
-      from: headers.from ?? "unknown sender",
-      subject: headers.subject ?? "(no subject)",
-      // Server-authoritative and trivially sortable, unlike the Date header.
-      date: new Date(Number(message.internalDate ?? 0)).toISOString(),
-      snippet: message.snippet ?? "",
-      unread: (message.labelIds ?? []).includes("UNREAD"),
-      bulk: Boolean(headers["list-unsubscribe"]) || /^(bulk|list|auto_reply)$/i.test(headers.precedence ?? "") || (message.labelIds ?? []).some(
-        (id) => ["CATEGORY_PROMOTIONS", "CATEGORY_SOCIAL", "CATEGORY_FORUMS"].includes(id)
-      )
-    };
-  });
-}
-async function readMail(id) {
-  const message = await googleFetch(`${BASE3}/messages/${id}?format=full`);
-  const headers = headerMap(message.payload?.headers);
-  return {
-    id: message.id,
-    threadId: message.threadId,
-    from: headers.from ?? "unknown sender",
-    subject: headers.subject ?? "(no subject)",
-    date: new Date(Number(message.internalDate ?? 0)).toISOString(),
-    snippet: message.snippet ?? "",
-    unread: (message.labelIds ?? []).includes("UNREAD"),
-    // Opening one deliberately means it is wanted regardless of what it is.
-    bulk: false,
-    body: findText(message.payload) || (message.snippet ?? "")
-  };
-}
-var FORBIDDEN = ["TRASH", "SPAM"];
-async function modify(id, change) {
-  const addLabelIds = change.add ?? [];
-  const removeLabelIds = change.remove ?? [];
-  const banned = [...addLabelIds, ...removeLabelIds].find(
-    (label2) => FORBIDDEN.includes(label2.toUpperCase())
-  );
-  if (banned) throw new Error(`${banned} is not hers to touch`);
-  await googleFetch(`${BASE3}/messages/${id}/modify`, {
-    method: "POST",
-    body: JSON.stringify({ addLabelIds, removeLabelIds })
-  });
-}
-async function fileMail(id) {
-  await modify(id, { remove: ["INBOX"] });
-}
-async function markRead(id) {
-  await modify(id, { remove: ["UNREAD"] });
-}
-async function markUnread(id) {
-  await modify(id, { add: ["UNREAD", "INBOX"] });
-}
-async function star(id) {
-  await modify(id, { add: ["STARRED"] });
-}
-async function labelMail(id, name) {
-  const wanted = name.trim();
-  if (!wanted) throw new Error("a label needs a name");
-  if (FORBIDDEN.includes(wanted.toUpperCase())) {
-    throw new Error(`${wanted} is not hers to touch`);
-  }
-  const existing = await googleFetch(`${BASE3}/labels`);
-  const found = (existing.labels ?? []).find(
-    (label2) => label2.name.toLowerCase() === wanted.toLowerCase()
-  );
-  const labelId = found?.id ?? (await googleFetch(`${BASE3}/labels`, {
-    method: "POST",
-    body: JSON.stringify({
-      name: wanted,
-      labelListVisibility: "labelShow",
-      messageListVisibility: "show"
-    })
-  })).id;
-  await modify(id, { add: [labelId] });
-  return found ? wanted : `${wanted} (new label)`;
-}
-async function draftReply(options) {
-  const mime = [
-    `To: ${options.to}`,
-    `Subject: ${encodeHeader(options.subject)}`,
-    'Content-Type: text/plain; charset="UTF-8"',
-    "",
-    options.body
-  ].join("\r\n");
-  const draft = await googleFetch(`${BASE3}/drafts`, {
-    method: "POST",
-    body: JSON.stringify({
-      message: {
-        raw: Buffer.from(mime, "utf8").toString("base64url"),
-        ...options.threadId ? { threadId: options.threadId } : {}
-      }
-    })
-  });
-  return { id: draft.id };
-}
-function encodeHeader(value) {
-  if (/^[\x00-\x7F]*$/.test(value)) return value;
-  return `=?UTF-8?B?${Buffer.from(value, "utf8").toString("base64")}?=`;
-}
+// server/turn.ts
+init_chats();
+init_config();
 
 // server/google/briefing.ts
+init_calendar();
+init_gmail();
+init_oauth();
 var PATIENCE_MS = 1200;
 var FRESH_FOR_MS = 9e4;
 var cached4 = null;
@@ -2673,46 +5887,13 @@ async function buildBriefing() {
   return text;
 }
 
-// server/modes.ts
-var MODES = {
-  open: {
-    label: "Open",
-    blurb: "Normal. She speaks up when it\u2019s worth it.",
-    guidance: "No special constraints. Answer as you normally would, and raise anything genuinely worth raising."
-  },
-  work: {
-    label: "Work",
-    blurb: "Brisk and on-task. Personal matters wait.",
-    guidance: "The user is working. Be brisk and concrete \u2014 lead with the answer, cut the preamble entirely. Keep replies to a sentence or two unless asked for more. Hold anything personal or non-urgent until they are out of Work mode, and say you are holding it rather than dropping it."
-  },
-  focus: {
-    label: "Focus",
-    blurb: "Answers only. Nothing volunteered.",
-    guidance: "The user is concentrating and every word costs them. Answer exactly what was asked, in as few words as will do \u2014 often a fragment rather than a sentence. Volunteer nothing at all: no observations, no suggestions, no follow-up questions. If something is genuinely urgent, say only that it is urgent and what it is, in under ten words."
-  },
-  away: {
-    label: "Away",
-    blurb: "She takes messages and holds them.",
-    guidance: "The user is away from their desk and may be listening rather than reading. Assume everything is being spoken aloud: short sentences, no detail they cannot hold in their head. Take note of anything that arrives and tell them it is waiting rather than working through it now."
-  }
-};
-var DEFAULT = { mode: "open", since: (/* @__PURE__ */ new Date(0)).toISOString() };
-var store7 = new Document("mode", () => DEFAULT);
-function getMode() {
-  return store7.read();
-}
-function isMode(value) {
-  return typeof value === "string" && Object.hasOwn(MODES, value);
-}
-async function setMode(mode) {
-  const current = await store7.read();
-  if (current.mode === mode) return current;
-  const next = { mode, since: (/* @__PURE__ */ new Date()).toISOString() };
-  await store7.write(next);
-  return next;
-}
+// server/turn.ts
+init_llm();
+init_modes();
+init_memory();
 
 // server/persona.ts
+init_modes();
 var IDENTITY = `You are Grace, a personal assistant to one person \u2014 the user you are speaking with.
 
 You are not a general chatbot and not a search engine. You are their assistant: you hold the details of their life, you keep track of what matters to them, and you make their day run more smoothly. You have one user and you know them well.`;
@@ -2905,6 +6086,9 @@ ${summary}` : null;
 }
 
 // server/style.ts
+init_gmail();
+init_llm();
+init_store();
 var store8 = new Document("style", () => ({
   description: null,
   samples: 0,
@@ -2959,2590 +6143,10 @@ async function styleNote() {
 ${description}`;
 }
 
-// server/tools/ask.ts
-function parseChoices(raw) {
-  return raw.split(/\s*\|\s*|\n+/).map((line) => line.trim()).filter(Boolean).map((line) => {
-    const [label2, ...rest] = line.split(/\s+[—-]{1,2}\s+/);
-    return {
-      label: label2.trim().slice(0, 48),
-      detail: rest.join(" \u2014 ").trim().slice(0, 120) || void 0
-    };
-  }).slice(0, 4);
-}
-var deliver = null;
-function onAsk(handler) {
-  deliver = handler;
-}
-var askTools = [
-  {
-    name: "ask_choice",
-    description: "Ask the user a question and give them buttons to answer with, instead of making them type. Use it whenever you need a decision from them and the sensible answers are a short list: which of two times, whether to go ahead, which of three options they prefer. Ask the question in your reply as well, in your own words \u2014 the buttons are how they answer, not a substitute for asking. Do not use it for open questions, and do not use it more than once in a reply.",
-    category: "research",
-    parameters: {
-      question: {
-        type: "string",
-        description: "The question itself, short and plain."
-      },
-      choices: {
-        type: "string",
-        description: 'Two to four answers, separated by | \u2014 each optionally "Label \u2014 what it means". For example: "Tuesday \u2014 before the weekend | Thursday \u2014 gives you more time".'
-      }
-    },
-    required: ["question", "choices"],
-    run: async (args) => {
-      const question = String(args.question ?? "").trim();
-      const choices = parseChoices(String(args.choices ?? ""));
-      if (choices.length < 2) {
-        return "That needs at least two answers to choose between. Just ask them in words instead.";
-      }
-      deliver?.(question, choices);
-      return `The buttons are on their screen. Ask the question in your reply too, in one short sentence, then stop \u2014 do not guess which they will pick, and do not carry on as though they had already answered.`;
-    }
-  }
-];
-
-// server/approvals.ts
-import { randomUUID as randomUUID5 } from "node:crypto";
-var HOLD_FOR_MS = 5 * 60 * 1e3;
-var store9 = new Document("approvals", () => []);
-function live(all, now = Date.now()) {
-  return all.filter((entry) => now - new Date(entry.at).getTime() < HOLD_FOR_MS);
-}
-async function hold(name, args) {
-  const entry = { id: randomUUID5().slice(0, 8), name, args, at: (/* @__PURE__ */ new Date()).toISOString() };
-  await store9.update((all) => [...live(all), entry]);
-  return entry;
-}
-async function take(id) {
-  let found = null;
-  await store9.update((all) => {
-    const current = live(all);
-    found = current.find((entry) => entry.id === id) ?? null;
-    return current.filter((entry) => entry.id !== id);
-  });
-  return found;
-}
-async function restore(entry) {
-  await store9.update((all) => [...live(all).filter((e) => e.id !== entry.id), entry]);
-}
-
-// server/journal.ts
-import { randomUUID as randomUUID6 } from "node:crypto";
-var LIMIT = 120;
-var store10 = new Document("journal", () => []);
-async function recentDeeds(limit = 25) {
-  const all = await store10.read();
-  return all.slice(-limit).reverse();
-}
-async function noteDeed(kind, text, unprompted = false) {
-  const clean = text.trim().slice(0, 300);
-  if (!clean) return;
-  const entry = {
-    id: randomUUID6(),
-    at: (/* @__PURE__ */ new Date()).toISOString(),
-    kind,
-    text: clean,
-    ...unprompted ? { unprompted: true } : {}
-  };
-  await store10.update((current) => [...current, entry].slice(-LIMIT));
-}
-
-// server/tools/console.ts
-var NO_LAPTOP = "The laptop bridge is not running, so I have no way into the room at all. Tell the user plainly: the laptop can only be reached from a program running in the same house, and it is not answering. Do not imply anything happened.";
-async function send(action, verb, arg) {
-  const { online, state } = await bridgeStatus();
-  if (!online) return NO_LAPTOP;
-  const finished = await awaitResult(await enqueue(action, arg));
-  if (!finished) {
-    return `The laptop took the instruction to ${verb} but has not reported back yet. Say that it is on its way rather than that it is done.`;
-  }
-  if (!finished.ok) {
-    return `That did not work: ${finished.detail || "the laptop gave no reason"}. Say so plainly and do not offer to try again \u2014 it has already been tried twice and checked against the console both times.`;
-  }
-  const done = {
-    open: `Done \u2014 it is up on the laptop screen${finished.detail ? ` (${finished.detail})` : ""}.`,
-    lock: "Done \u2014 the laptop is locked."
-  };
-  return done[action] ?? "Done.";
-}
-var consoleTools = [
-  /*
-   * Waking and sleeping the console used to live here, and do not any more.
-   *
-   * They worked through playactor, whose last release was February 2022. Both
-   * directions now fail silently against current PS5 firmware: the request is
-   * sent, the console is entirely unmoved, and the process exits zero. There is
-   * no maintained alternative — the most recently published PlayStation
-   * integration on npm still depends on that same version.
-   *
-   * A tool that can never succeed is worse than an absent one. It costs its
-   * description in every prompt, she reaches for it in good faith, and the user
-   * waits ten seconds to be told it did not work. Removing it means she says
-   * plainly that she cannot do it, immediately, which is the honest version of
-   * the same answer.
-   *
-   * The bridge still carries the code for both, and the laptop half of it —
-   * opening a page, locking the screen — is untouched and works. If playactor
-   * is ever revived, this is two tool definitions and a line in NEEDS.
-   */
-  {
-    name: "open_on_laptop",
-    description: 'Put a web page up on the laptop in the room, on its own screen. Use it when the user is not holding a phone and says "pull that up", "put it on the laptop", or "show me". Different from open_pages, which opens a tab in whatever they are looking at now \u2014 this one reaches the machine in the room. Web addresses only.',
-    category: "home",
-    parameters: {
-      url: {
-        type: "string",
-        description: "The full address, including https://."
-      }
-    },
-    required: ["url"],
-    run: (args) => send("open", "open that page", String(args.url ?? ""))
-  },
-  {
-    name: "lock_laptop",
-    description: "Lock the laptop\u2019s screen. Use it when the user says they are leaving, going out, or asks you to lock up. Nothing closes and nothing is lost \u2014 it is the lock screen, not a shutdown.",
-    category: "home",
-    parameters: {},
-    required: [],
-    run: () => send("lock", "lock the laptop")
-  }
-];
-
-// server/tools/google.ts
-function sender(from) {
-  const name = from.split("<")[0].trim().replace(/^"|"$/g, "");
-  return name || from.trim();
-}
-function when(iso, allDay) {
-  const date = new Date(iso);
-  if (!Number.isFinite(date.getTime())) return iso;
-  return allDay ? date.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" }) : date.toLocaleString("en-GB", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    hour: "2-digit",
-    minute: "2-digit"
-  });
-}
-var googleTools = [
-  {
-    name: "check_mail",
-    description: "Look at the user\u2019s inbox. Use this whenever they ask you to check their mail, ask whether anything has arrived, or ask about a message from someone. Returns senders and subjects only \u2014 never the contents, and never anything to read out.",
-    category: "research",
-    parameters: {
-      query: {
-        type: "string",
-        description: 'Optional Gmail search, in Gmail\u2019s own syntax \u2014 "is:unread", "from:sam", "newer_than:3d". Leave out for the recent inbox.'
-      }
-    },
-    required: [],
-    run: async (args) => {
-      const query = String(args.query ?? "").trim() || "in:inbox";
-      const all = await recentMail(query, 20);
-      if (all.length === 0) return `Nothing matching "${query}".`;
-      const messages = all.filter((message) => !message.bulk).slice(0, 8);
-      const junked = all.length - messages.length;
-      if (messages.length === 0) {
-        return `Nothing but ${junked} newsletters and automatic notices. Tell them there is nothing that wants them, in a few words. Do not describe the junk, do not count it out loud, and do not offer to read any of it.`;
-      }
-      const list = messages.map(
-        (message) => `- ${message.unread ? "[unread] " : ""}${sender(message.from)}: ${message.subject} (id ${message.id})`
-      ).join("\n");
-      return `${list}
-
-Newsletters and marketing have already been taken out${junked > 0 ? ` \u2014 ${junked} of them, which you should not mention` : ""}. What is left is from people and from companies actually corresponding with them.
-
-The list above is working material and must not appear in your reply in any form: do not repeat it, do not list it, do not quote a subject verbatim, never say an id. One or two sentences, no more. Say how many and what they are about, in your own words. Then ask whether they want any of it read out, and use read_mail if they say yes.`;
-    }
-  },
-  {
-    name: "read_mail",
-    description: "Read one message in full, once check_mail has shown you which. Pass the id from that list.",
-    category: "research",
-    parameters: {
-      id: { type: "string", description: "The message id from check_mail." }
-    },
-    required: ["id"],
-    run: async (args) => {
-      const message = await readMail(String(args.id));
-      return [
-        `From: ${message.from}`,
-        `Subject: ${message.subject}`,
-        "",
-        message.body.slice(0, 4e3)
-      ].join("\n");
-    }
-  },
-  {
-    name: "draft_reply",
-    description: "Write a draft into the user\u2019s drafts folder. It is NOT sent \u2014 they read it and press send themselves. Use this when asked to reply to something or write an email. Tell them plainly afterwards that it is waiting in their drafts, unsent.",
-    category: "research",
-    parameters: {
-      to: { type: "string", description: "Recipient email address." },
-      subject: { type: "string", description: "Subject line." },
-      body: {
-        type: "string",
-        description: "The message, in the user\u2019s own register \u2014 plain, direct, no flourishes."
-      },
-      threadId: {
-        type: "string",
-        description: "The thread to reply within, from check_mail, if replying."
-      }
-    },
-    required: ["to", "subject", "body"],
-    run: async (args) => {
-      await draftReply({
-        to: String(args.to),
-        subject: String(args.subject),
-        body: String(args.body),
-        threadId: args.threadId ? String(args.threadId) : void 0
-      });
-      return `Draft saved to their drafts folder, unsent. They send it.`;
-    }
-  },
-  {
-    name: "check_diary",
-    description: 'Look at what is coming up in the user\u2019s calendar. Use this for "what\u2019s on today", "am I free", "when is my next thing".',
-    category: "research",
-    parameters: {
-      hours: {
-        type: "number",
-        description: "How far ahead to look. 24 for today, 168 for the week."
-      }
-    },
-    required: [],
-    run: async (args) => {
-      const hours = Number(args.hours) || 24;
-      const events = await upcoming(hours, 20);
-      if (events.length === 0) return `Nothing in the next ${hours} hours.`;
-      return events.map(
-        (event) => `- ${when(event.start, event.allDay)}: ${event.summary}` + (event.location ? ` (${event.location})` : "")
-      ).join("\n");
-    }
-  },
-  {
-    name: "add_to_diary",
-    description: "Put something in the user\u2019s calendar. Work out real times from what they said and the current date you were given. Nobody else is notified \u2014 telling people is the user\u2019s to do.",
-    category: "calendar",
-    parameters: {
-      summary: { type: "string", description: "What it is." },
-      start: { type: "string", description: "Start, as ISO 8601." },
-      end: { type: "string", description: "End, as ISO 8601." },
-      location: { type: "string", description: "Where, if given." }
-    },
-    required: ["summary", "start", "end"],
-    run: async (args) => {
-      const event = await addAppointment({
-        summary: String(args.summary),
-        start: String(args.start),
-        end: String(args.end),
-        location: args.location ? String(args.location) : void 0
-      });
-      return `In the diary: ${event.summary}, ${when(event.start, event.allDay)}.`;
-    }
-  },
-  {
-    name: "file_mail",
-    description: "Take a message out of the inbox \u2014 Gmail\u2019s archive. It keeps every word and stays searchable in All Mail; it simply stops sitting in the inbox. Use it when the user says they are done with something, have dealt with it, or asks you to clear or tidy the inbox. Pass the id from check_mail.",
-    category: "research",
-    parameters: {
-      id: { type: "string", description: "The message id from check_mail." }
-    },
-    required: ["id"],
-    run: async (args) => {
-      await fileMail(String(args.id));
-      return "Filed out of the inbox. Still in All Mail, still searchable.";
-    }
-  },
-  {
-    name: "label_mail",
-    description: 'Put a label on a message, making the label if it does not exist yet. Use it when the user wants something filed under a heading \u2014 "put that under taxes". Labelling does not take it out of the inbox; file_mail does that.',
-    category: "research",
-    parameters: {
-      id: { type: "string", description: "The message id from check_mail." },
-      label: { type: "string", description: "The label name, as they said it." }
-    },
-    required: ["id", "label"],
-    run: async (args) => {
-      const applied = await labelMail(String(args.id), String(args.label));
-      return `Labelled ${applied}.`;
-    }
-  },
-  {
-    name: "mark_mail",
-    description: "Change how a message sits in the inbox: mark it read once you have told the user what it says, unread to bring it back for them later, or star it to flag it. Pass the id from check_mail.",
-    category: "research",
-    parameters: {
-      id: { type: "string", description: "The message id from check_mail." },
-      how: {
-        type: "string",
-        description: "What to do with it.",
-        values: ["read", "unread", "starred"]
-      }
-    },
-    required: ["id", "how"],
-    run: async (args) => {
-      const id = String(args.id);
-      const how = String(args.how);
-      if (how === "read") {
-        await markRead(id);
-        return "Marked read.";
-      }
-      if (how === "unread") {
-        await markUnread(id);
-        return "Back in the inbox, unread.";
-      }
-      if (how === "starred") {
-        await star(id);
-        return "Starred.";
-      }
-      return `I do not know what "${how}" means for a message.`;
-    }
-  },
-  {
-    name: "change_diary",
-    description: "Move or amend something already in the user\u2019s calendar \u2014 a new time, a new place, a new name. Say which entry by its title, as they said it. Nobody else is notified, so if other people are on it, tell the user they still have to say so. This cannot remove an entry; nothing can.",
-    category: "calendar",
-    parameters: {
-      which: {
-        type: "string",
-        description: "The title of the entry, or enough of it to find it."
-      },
-      start: { type: "string", description: "New start, as ISO 8601." },
-      end: { type: "string", description: "New end, as ISO 8601." },
-      location: { type: "string", description: "New place." },
-      title: { type: "string", description: "New title." }
-    },
-    required: ["which"],
-    run: async (args) => {
-      const said2 = String(args.which).toLowerCase().trim();
-      const events = await upcoming(24 * 30, 100);
-      const exact = events.filter((one) => one.summary.toLowerCase().trim() === said2);
-      const partial = events.filter((one) => one.summary.toLowerCase().includes(said2));
-      const found = exact.length > 0 ? exact : partial;
-      if (found.length === 0) {
-        return `Nothing called "${args.which}" in the next month. Ask them which entry they mean.`;
-      }
-      if (found.length > 1) {
-        return `"${args.which}" matches ${found.length} entries: ${found.map((one) => `${one.summary} on ${when(one.start, one.allDay)}`).join("; ")}. Ask which one before changing anything.`;
-      }
-      const updated = await changeAppointment(found[0].id, {
-        summary: args.title ? String(args.title) : void 0,
-        start: args.start ? String(args.start) : void 0,
-        end: args.end ? String(args.end) : void 0,
-        location: args.location ? String(args.location) : void 0
-      });
-      return `Moved: ${updated.summary} is now ${when(updated.start, updated.allDay)}${updated.location ? ` at ${updated.location}` : ""}.${updated.attendees.length > 0 ? " Other people are on this one and have not been told." : ""}`;
-    }
-  }
-];
-
-// server/tools/machine.ts
-var NO_BRIDGE = "The bridge is not running on the user\u2019s machine, so I cannot reach their files or their shell at all. Say exactly that \u2014 the program has to be started on the computer itself \u2014 and do not imply anything happened.";
-var PATIENCE = {
-  shell: 45e3,
-  ls: 2e4,
-  read: 25e3,
-  write: 25e3,
-  remove: 25e3
-};
-var handsPromise = null;
-function hands() {
-  if (!handsPromise) {
-    process.env.GRACE_BRIDGE_EMBEDDED = "1";
-    handsPromise = import("../../bridge/bridge.mjs");
-  }
-  return handsPromise;
-}
-async function ask(action, arg, extra = {}) {
-  if (!config.deployed) {
-    const { carryOut } = await hands();
-    const done = await carryOut(action, arg, extra);
-    return done.ok ? done.detail : `That did not work: ${done.detail}`;
-  }
-  const { online } = await bridgeStatus();
-  if (!online) return NO_BRIDGE;
-  const id = await enqueue(action, arg, extra);
-  const finished = await awaitResult(id, PATIENCE[action] ?? 12e3);
-  if (!finished) {
-    return "The machine took the instruction but has not reported back yet. Say it is still going rather than that it is done, and offer to check again.";
-  }
-  if (!finished.ok) {
-    return `That did not work: ${finished.detail || "the machine gave no reason"}.`;
-  }
-  return finished.detail || "Done.";
-}
-var DESTRUCTIVE = [
-  /\brm\b/,
-  /\brmdir\b/,
-  /\bunlink\b/,
-  /\bshred\b/,
-  /\btruncate\b/,
-  /\bdd\b/,
-  /\bmkfs/,
-  /\bfdisk\b/,
-  /\bdiskutil\b/,
-  /\bformat\b/,
-  /\bmv\b/,
-  /\bchmod\b/,
-  /\bchown\b/,
-  /\bkillall\b/,
-  /\bpkill\b/,
-  /\bshutdown\b/,
-  /\breboot\b/,
-  /\bhalt\b/,
-  /\bgit\s+(reset|clean|checkout\s+--|push\s+.*--force|push\s+.*-f\b)/,
-  /\b(npm|pnpm|yarn)\s+(publish|unpublish)\b/,
-  /\bdrop\s+(table|database)\b/i,
-  /\bsudo\b/,
-  /\bsu\b/,
-  /*
-   * Redirection that lands on top of a file.
-   *
-   * Not `>>`, which appends and loses nothing, and not `2>&1`, which points
-   * one stream at another and touches no file at all. The lookbehind is what
-   * makes the first of those work: without it the second angle bracket of
-   * `>>` is itself a `>` not followed by a `>`, so every append was read as
-   * an overwrite and asked about.
-   */
-  /(?<!>)>(?!>)(?!\s*&)/
-];
-function looksDestructive(command) {
-  return DESTRUCTIVE.some((pattern) => pattern.test(command));
-}
-var machineTools = [
-  {
-    name: "list_folder",
-    description: "List what is in a folder on the user\u2019s own computer. Paths may be absolute or start with ~ for their home folder. Use this before guessing at a path \u2014 she can see the machine, so she should look.",
-    parameters: {
-      path: { type: "string", description: "The folder, e.g. ~/Documents" }
-    },
-    required: ["path"],
-    category: "machine",
-    run: (args) => ask("ls", String(args.path))
-  },
-  {
-    name: "read_file",
-    description: "Read a text file on the user\u2019s own computer. Large files come back shortened, and binary files are refused rather than mangled.",
-    parameters: {
-      path: { type: "string", description: "The file, e.g. ~/notes/todo.md" }
-    },
-    required: ["path"],
-    category: "machine",
-    run: (args) => ask("read", String(args.path))
-  },
-  {
-    name: "write_file",
-    description: "Write a text file on the user\u2019s own computer. Creating a new file is free. Landing on top of a file that already exists needs replace=true, and that will stop and ask the user first.",
-    parameters: {
-      path: { type: "string", description: "The file to write" },
-      text: { type: "string", description: "The whole contents of the file" },
-      replace: {
-        type: "boolean",
-        description: "True to overwrite a file that already exists. Without it, an existing file is left alone and you are told so."
-      }
-    },
-    required: ["path", "text"],
-    category: "machine",
-    // Creating something is not destroying anything. Replacing something is.
-    risky: (args) => args.replace === true,
-    run: (args) => ask("write", String(args.path), {
-      body: String(args.text ?? ""),
-      replace: args.replace === true
-    })
-  },
-  {
-    name: "delete_file",
-    description: "Delete a file on the user\u2019s own computer. This always stops and asks them first \u2014 it is one of the three things they said must be confirmed.",
-    parameters: {
-      path: { type: "string", description: "The file to delete" }
-    },
-    required: ["path"],
-    category: "machine",
-    destructive: true,
-    run: (args) => ask("remove", String(args.path))
-  },
-  {
-    name: "run_command",
-    description: "Run a command in the terminal on the user\u2019s own computer and return what it printed. Anything that could destroy something \u2014 deleting, moving, overwriting, sudo \u2014 stops and asks them first. Prefer the plainest command that answers the question.",
-    parameters: {
-      command: { type: "string", description: "The command line to run" },
-      folder: {
-        type: "string",
-        description: "Which folder to run it in. Defaults to their home folder."
-      }
-    },
-    required: ["command"],
-    category: "machine",
-    risky: (args) => looksDestructive(String(args.command ?? "")),
-    run: (args) => ask("shell", String(args.command), {
-      body: args.folder ? String(args.folder) : void 0
-    })
-  }
-];
-
-// server/files.ts
-import { randomUUID as randomUUID7 } from "node:crypto";
-var MAX_CHARS = 4e4;
-var MAX_FILES = 40;
-var store11 = new Document("files", () => []);
-async function liveFiles() {
-  return (await store11.read()).filter((file) => !file.archivedAt).sort((left, right) => right.addedAt.localeCompare(left.addedAt));
-}
-async function findFile(said2) {
-  const needle = said2.toLowerCase().trim();
-  if (!needle) return void 0;
-  const live2 = await liveFiles();
-  return live2.find((file) => file.name.toLowerCase().trim() === needle) ?? live2.find((file) => file.name.toLowerCase().includes(needle));
-}
-async function addFile(name, text) {
-  const clean = name.trim().slice(0, 120) || "untitled";
-  const body = text.trim().slice(0, MAX_CHARS);
-  if (!body) throw new Error("there was no readable text in that file");
-  const file = {
-    id: randomUUID7(),
-    name: clean,
-    text: body,
-    chars: body.length,
-    addedAt: (/* @__PURE__ */ new Date()).toISOString()
-  };
-  await store11.update((files) => {
-    const others = files.filter((one) => one.name !== clean || one.archivedAt);
-    const kept = [file, ...others];
-    const live2 = kept.filter((one) => !one.archivedAt);
-    if (live2.length > MAX_FILES) {
-      const cut = live2.slice(MAX_FILES).map((one) => one.id);
-      return kept.map(
-        (one) => cut.includes(one.id) ? { ...one, archivedAt: (/* @__PURE__ */ new Date()).toISOString() } : one
-      );
-    }
-    return kept;
-  });
-  return file;
-}
-async function archiveFile(id) {
-  await store11.update(
-    (files) => files.map(
-      (file) => file.id === id ? { ...file, archivedAt: (/* @__PURE__ */ new Date()).toISOString() } : file
-    )
-  );
-  return liveFiles();
-}
-var NOISE2 = /* @__PURE__ */ new Set([
-  "the",
-  "a",
-  "an",
-  "and",
-  "or",
-  "of",
-  "to",
-  "in",
-  "on",
-  "for",
-  "with",
-  "is",
-  "was",
-  "what",
-  "does",
-  "say",
-  "about",
-  "my",
-  "the",
-  "that",
-  "this",
-  "it"
-]);
-async function searchFiles(query) {
-  const needles = query.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter((word) => word.length > 2 && !NOISE2.has(word));
-  if (needles.length === 0) return [];
-  const files = await liveFiles();
-  return files.map((file) => {
-    const lower = file.text.toLowerCase();
-    const hits = needles.filter((needle) => lower.includes(needle));
-    if (hits.length === 0) return null;
-    const at = lower.indexOf(hits[0]);
-    const excerpt = file.text.slice(Math.max(0, at - 120), at + 400).trim();
-    return { name: file.name, excerpt, score: hits.length };
-  }).filter((row) => Boolean(row)).sort((left, right) => right.score - left.score).slice(0, 4).map(({ name, excerpt }) => ({ name, excerpt }));
-}
-
-// server/notes.ts
-import { randomUUID as randomUUID8 } from "node:crypto";
-var store12 = new Document("notes", () => []);
-async function liveNotes() {
-  const all = await store12.read();
-  return all.filter((note) => !note.archivedAt).sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
-}
-function match(notes, title) {
-  const needle = title.toLowerCase().trim();
-  const meaning = essence(title);
-  return notes.find(
-    (note) => note.title.toLowerCase().trim() === needle || meaning.length > 0 && essence(note.title) === meaning
-  );
-}
-function words(text) {
-  return text.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
-}
-var FILLER = /* @__PURE__ */ new Set(["the", "a", "an", "my", "our", "this", "that", "of", "for"]);
-function essence(text) {
-  return words(text).filter((word) => !FILLER.has(word)).sort().join(" ");
-}
-function findForReading(notes, title) {
-  const exact = match(notes, title);
-  if (exact) return exact;
-  const asked = words(title).filter((word) => !FILLER.has(word));
-  if (asked.length === 0) return void 0;
-  return notes.find((note) => {
-    const own = new Set(words(note.title));
-    return asked.every((word) => own.has(word));
-  });
-}
-async function writeNote(title, text, mode = "append") {
-  const clean = title.trim().slice(0, 80);
-  const body = text.trim();
-  if (!clean || !body) throw new Error("a note needs a title and something to say");
-  const now = (/* @__PURE__ */ new Date()).toISOString();
-  let saved = null;
-  await store12.update((notes) => {
-    const existing = match(
-      notes.filter((note) => !note.archivedAt),
-      clean
-    );
-    if (existing) {
-      saved = {
-        ...existing,
-        body: mode === "replace" ? body : `${existing.body}
-
-${dateLine(now)} ${body}`,
-        updatedAt: now
-      };
-      return notes.map((note) => note.id === existing.id ? saved : note);
-    }
-    saved = {
-      id: randomUUID8(),
-      title: clean,
-      body: `${dateLine(now)} ${body}`,
-      createdAt: now,
-      updatedAt: now
-    };
-    return [...notes, saved];
-  });
-  return saved;
-}
-function dateLine(iso) {
-  return `[${new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}]`;
-}
-async function readNote(title) {
-  return findForReading(await liveNotes(), title.trim()) ?? null;
-}
-async function saveNoteBody(id, title, body) {
-  const now = (/* @__PURE__ */ new Date()).toISOString();
-  await store12.update(
-    (notes) => notes.map(
-      (note) => note.id === id ? { ...note, title: title.trim().slice(0, 80), body: body.trim(), updatedAt: now } : note
-    )
-  );
-  return liveNotes();
-}
-async function archiveNote(id) {
-  const now = (/* @__PURE__ */ new Date()).toISOString();
-  await store12.update(
-    (notes) => notes.map((note) => note.id === id ? { ...note, archivedAt: now } : note)
-  );
-  return liveNotes();
-}
-
-// server/situations.ts
-import { randomUUID as randomUUID9 } from "node:crypto";
-var store13 = new Document("situations", () => []);
-function allSituations() {
-  return store13.read();
-}
-async function openSituations() {
-  const all = await store13.read();
-  return all.filter((one) => one.status === "open").sort((left, right) => lastMove(right).localeCompare(lastMove(left)));
-}
-function lastMove(one) {
-  return one.updates[one.updates.length - 1]?.at ?? one.createdAt;
-}
-function find(list, title) {
-  const needle = title.toLowerCase().trim();
-  const meaning = essence2(title);
-  return list.find(
-    (one) => one.title.toLowerCase().trim() === needle || meaning.length > 0 && essence2(one.title) === meaning
-  );
-}
-function words2(text) {
-  return text.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
-}
-var FILLER2 = /* @__PURE__ */ new Set(["the", "a", "an", "my", "our", "this", "that", "of", "for"]);
-function essence2(text) {
-  return words2(text).filter((word) => !FILLER2.has(word)).sort().join(" ");
-}
-function findForResolving(list, title) {
-  const exact = find(list, title);
-  if (exact) return exact;
-  const asked = words2(title).filter((word) => !FILLER2.has(word));
-  if (asked.length === 0) return void 0;
-  return list.find((one) => {
-    const own = new Set(words2(one.title));
-    return asked.every((word) => own.has(word));
-  });
-}
-async function trackSituation(title, update) {
-  const clean = title.trim().slice(0, 80);
-  const text = update.trim();
-  if (!clean || !text) throw new Error("a situation needs a title and an update");
-  const now = (/* @__PURE__ */ new Date()).toISOString();
-  let saved = null;
-  await store13.update((list) => {
-    const existing = find(
-      list.filter((one) => one.status === "open"),
-      clean
-    );
-    if (existing) {
-      saved = { ...existing, updates: [...existing.updates, { at: now, text }] };
-      return list.map((one) => one.id === existing.id ? saved : one);
-    }
-    saved = {
-      id: randomUUID9(),
-      title: clean,
-      status: "open",
-      updates: [{ at: now, text }],
-      createdAt: now
-    };
-    return [...list, saved];
-  });
-  return saved;
-}
-async function resolveSituation(title) {
-  const now = (/* @__PURE__ */ new Date()).toISOString();
-  let resolved = null;
-  await store13.update((list) => {
-    const one = findForResolving(
-      list.filter((s) => s.status === "open"),
-      title.trim()
-    );
-    if (!one) return list;
-    resolved = { ...one, status: "resolved", resolvedAt: now };
-    return list.map((s) => s.id === one.id ? resolved : s);
-  });
-  return resolved;
-}
-
-// server/tools/keep.ts
-var keepTools = [
-  {
-    name: "write_note",
-    description: "Add to a project note \u2014 an ongoing topic like a trip, a piece of work, a plan. Use it when the user tells you where something has got to, or asks you to jot something down about a subject. Match an existing note by title, or a new one is started. It appends by default.",
-    category: "research",
-    parameters: {
-      title: { type: "string", description: "The project or topic, short." },
-      text: { type: "string", description: "What to add, in a sentence or two." }
-    },
-    required: ["title", "text"],
-    run: async (args) => {
-      const note = await writeNote(String(args.title), String(args.text));
-      return `Noted under "${note.title}".`;
-    }
-  },
-  {
-    name: "read_note",
-    description: "Read back a project note in full. Use it when the user asks where something stands, or what you have on a topic.",
-    category: "research",
-    parameters: {
-      title: { type: "string", description: "The note to read." }
-    },
-    required: ["title"],
-    run: async (args) => {
-      const note = await readNote(String(args.title));
-      if (!note) {
-        const have = (await liveNotes()).map((one) => one.title).join(", ");
-        return have ? `No note called that. You have: ${have}.` : "No notes yet.";
-      }
-      return `${note.title}:
-${note.body}`;
-    }
-  },
-  {
-    name: "track_situation",
-    description: "Record a development in something ongoing that has a state \u2014 an order, a dispute, a setup in progress. Use it when something moves: a parcel ships, a reply arrives, a step is done. Distinct from a note (prose) and a reminder (a dated to-do): a situation is a thing you are watching.",
-    category: "research",
-    parameters: {
-      title: { type: "string", description: "What the situation is, short." },
-      update: { type: "string", description: "What just happened." }
-    },
-    required: ["title", "update"],
-    run: async (args) => {
-      const one = await trackSituation(String(args.title), String(args.update));
-      return `Logged against "${one.title}" (${one.updates.length} update${one.updates.length === 1 ? "" : "s"}).`;
-    }
-  },
-  {
-    name: "list_situations",
-    description: 'List what is currently open \u2014 the things in progress you are tracking. Use it for "what is going on", "where are we with things", "any updates".',
-    category: "research",
-    parameters: {},
-    required: [],
-    run: async () => {
-      const open = await openSituations();
-      if (open.length === 0) return "Nothing open right now.";
-      return open.map((one) => {
-        const last = one.updates[one.updates.length - 1];
-        return `- ${one.title}: ${last?.text ?? "no updates yet"}`;
-      }).join("\n");
-    }
-  },
-  {
-    name: "resolve_situation",
-    description: "Mark a situation settled once it is done \u2014 the order arrived, the dispute closed. It is filed, not deleted.",
-    category: "research",
-    parameters: {
-      title: { type: "string", description: "Which situation is finished." }
-    },
-    required: ["title"],
-    run: async (args) => {
-      const one = await resolveSituation(String(args.title));
-      return one ? `Marked "${one.title}" resolved.` : "Nothing open by that name.";
-    }
-  },
-  {
-    name: "search_files",
-    description: "Search the documents the user has given you to keep. Use it when they ask about something that might be in a document they uploaded \u2014 a contract, notes, a spec. Returns the relevant passages.",
-    category: "research",
-    parameters: {
-      about: { type: "string", description: "What to look for." }
-    },
-    required: ["about"],
-    run: async (args) => {
-      const hits = await searchFiles(String(args.about));
-      if (hits.length === 0) return "Nothing in their documents mentions that.";
-      return hits.map((hit) => `From ${hit.name}:
-"${hit.excerpt}"`).join("\n\n");
-    }
-  },
-  {
-    name: "read_document",
-    description: "Read one of the user\u2019s documents in full, by name. Use it when they ask you to summarise, check, rework or pull something out of a document \u2014 search_files finds passages, this gives you the whole thing to work on.",
-    category: "research",
-    parameters: {
-      name: { type: "string", description: "The document\u2019s name, or part of it." }
-    },
-    required: ["name"],
-    run: async (args) => {
-      const found = await findFile(String(args.name));
-      if (!found) {
-        const all = await liveFiles();
-        return all.length === 0 ? "They have not given you any documents to keep." : `Nothing called that. They have: ${all.map((one) => one.name).join(", ")}.`;
-      }
-      return `${found.name}, in full:
-
-${found.text}`;
-    }
-  },
-  {
-    name: "write_document",
-    description: "Write a document and keep it for the user \u2014 a draft, a summary, notes worked up into something readable, a rewrite of one they already have. Use it when they ask you to write something down properly rather than say it. Writing over a name that exists replaces it, so say so if you are replacing something. This never sends anything to anybody.",
-    category: "research",
-    parameters: {
-      name: { type: "string", description: "What to call it." },
-      text: {
-        type: "string",
-        description: "The whole document, written out. Plain text, in the user\u2019s own register \u2014 no markdown headings, no bullet salad."
-      }
-    },
-    required: ["name", "text"],
-    run: async (args) => {
-      const name = String(args.name).trim();
-      const text = String(args.text);
-      if (text.trim().length < 20) return "That is too short to be a document.";
-      const existing = await findFile(name);
-      const saved = await addFile(name, text);
-      return existing && existing.name === saved.name ? `Rewritten "${saved.name}" \u2014 the old version is gone, so tell them it was replaced.` : `Kept as "${saved.name}", ${saved.chars} characters. It is theirs to read in Files.`;
-    }
-  }
-];
-
-// server/scenes.ts
-var KELVIN_RANGE = { low: 1e3, high: 6500 };
-var DEFAULTS = [
-  {
-    id: "morning",
-    say: ["morning", "wake up", "wake", "good morning"],
-    kelvin: 5e3,
-    brightness: 100,
-    why: "Bright and blue-rich on waking anchors the body clock to the day. Real daylight does this far better \u2014 treat this as a stand-in until you get to a window."
-  },
-  {
-    id: "day",
-    say: ["day", "midday", "daytime", "afternoon"],
-    kelvin: 5500,
-    brightness: 100,
-    why: "Daytime wants as much light as you can comfortably take. Brightness is doing the work here; the colour is a distant second."
-  },
-  {
-    id: "work",
-    say: ["work", "working", "focus", "concentrate", "study"],
-    kelvin: 6e3,
-    brightness: 100,
-    why: "Blue-enriched white around 6000K measurably speeds up sustained attention and cuts sleepiness. It does little for deeper reasoning \u2014 it keeps you awake, it does not make you cleverer."
-  },
-  {
-    id: "energise",
-    say: ["energise", "energize", "boost", "wake me up", "slump"],
-    kelvin: 6500,
-    brightness: 100,
-    why: "The coolest and brightest setting, for the afternoon dip. Fine before about four in the afternoon and a bad idea after it."
-  },
-  {
-    id: "reading",
-    say: ["reading", "read"],
-    kelvin: 3200,
-    brightness: 70,
-    why: "Enough light to read comfortably without the short wavelengths of a work setting. Eye strain comes from too little light far more often than from the wrong colour."
-  },
-  {
-    id: "evening",
-    say: ["evening", "sunset", "dinner"],
-    kelvin: 2200,
-    brightness: 35,
-    why: "From about three hours before bed the target is under 10 melanopic lux at the eye. Dim is what gets you there; amber helps."
-  },
-  {
-    id: "relax",
-    say: ["relax", "relaxing", "chill", "unwind", "calm"],
-    kelvin: 2400,
-    brightness: 30,
-    why: "Low and warm. Nothing about a particular hue is relaxing in itself \u2014 it is the dimness the body reads as evening."
-  },
-  {
-    id: "wind down",
-    say: ["wind down", "winding down", "bedtime", "bed time", "getting ready for bed"],
-    kelvin: 1800,
-    brightness: 15,
-    why: "The last hour. Deep amber with almost no blue, dim enough to leave melatonin alone."
-  },
-  {
-    id: "film",
-    say: ["film", "movie", "movies", "cinema", "tv"],
-    kelvin: 2e3,
-    brightness: 12,
-    why: "Dim warm bias light behind the screen. Easier on the eyes than a bright screen in a dark room, and late enough at night that it should not be blue."
-  },
-  {
-    id: "sleep",
-    say: ["sleep", "sleeping", "night", "goodnight", "good night", "lights down"],
-    kelvin: 1200,
-    brightness: 1,
-    why: "As close to darkness as a light gets, and red, which has the least power of any visible colour to suppress melatonin. The bedroom target is under 1 melanopic lux."
-  },
-  {
-    id: "night light",
-    say: ["night light", "nightlight", "getting up", "bathroom"],
-    kelvin: 1200,
-    brightness: 3,
-    why: "Enough red light to cross a room at three in the morning without waking your body clock up. White light at this hour undoes hours of sleep pressure."
-  }
-];
-var SCENE_NAMES = DEFAULTS.map((scene) => scene.id);
-var store14 = new Document("scenes", () => ({ changes: {} }));
-var clamp = (value, low, high) => Number.isFinite(value) ? Math.max(low, Math.min(high, Math.round(value))) : low;
-async function allScenes() {
-  const { changes } = await store14.read();
-  return DEFAULTS.map((scene) => {
-    const change = changes[scene.id];
-    if (!change) return scene;
-    return {
-      ...scene,
-      kelvin: change.kelvin ?? scene.kelvin,
-      brightness: change.brightness ?? scene.brightness
-    };
-  });
-}
-async function findScene(said2) {
-  const needle = said2.toLowerCase().replace(/\b(mode|scene|setting|lighting|please|activate|set|to|the)\b/g, " ").replace(/\s+/g, " ").trim();
-  if (!needle) return null;
-  const scenes = await allScenes();
-  let best = null;
-  for (const scene of scenes) {
-    for (const alias of scene.say) {
-      const word = new RegExp(`\\b${alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`);
-      if (word.test(needle) && (!best || alias.length > best.length)) {
-        best = { scene, length: alias.length };
-      }
-    }
-  }
-  return best?.scene ?? null;
-}
-var STEP = {
-  little: { brightness: 8, kelvin: 250 },
-  lot: { brightness: 20, kelvin: 700 }
-};
-async function tuneScene(id, change) {
-  const before = (await allScenes()).find((scene) => scene.id === id);
-  if (!before) throw new Error(`no scene called ${id}`);
-  const step = change.much ? STEP.lot : STEP.little;
-  let { kelvin, brightness } = before;
-  if (change.nudge === "dimmer") brightness -= step.brightness;
-  if (change.nudge === "brighter") brightness += step.brightness;
-  if (change.nudge === "warmer") kelvin -= step.kelvin;
-  if (change.nudge === "cooler") kelvin += step.kelvin;
-  if (change.brightness !== void 0) brightness = change.brightness;
-  if (change.kelvin !== void 0) kelvin = change.kelvin;
-  const tuned = {
-    kelvin: clamp(kelvin, KELVIN_RANGE.low, KELVIN_RANGE.high),
-    brightness: clamp(brightness, 1, 100)
-  };
-  await store14.update((current) => ({
-    changes: { ...current.changes, [id]: tuned }
-  }));
-  return { ...before, ...tuned };
-}
-async function restoreScene(id) {
-  await store14.update((current) => {
-    const changes = { ...current.changes };
-    delete changes[id];
-    return { changes };
-  });
-  const scene = DEFAULTS.find((one) => one.id === id);
-  if (!scene) throw new Error(`no scene called ${id}`);
-  return scene;
-}
-function kelvinToRgb(kelvin) {
-  const temp = clamp(kelvin, 1e3, 4e4) / 100;
-  const bound = (value) => clamp(value, 0, 255);
-  const red = temp <= 66 ? 255 : bound(329.698727446 * (temp - 60) ** -0.1332047592);
-  const green = temp <= 66 ? bound(99.4708025861 * Math.log(temp) - 161.1195681661) : bound(288.1221695283 * (temp - 60) ** -0.0755148492);
-  const blue = temp >= 66 ? 255 : temp <= 19 ? 0 : bound(138.5177312231 * Math.log(temp - 10) - 305.0447927307);
-  return [red, green, blue];
-}
-
-// server/tools/lights.ts
-var NUDGES = ["dimmer", "brighter", "warmer", "cooler"];
-var DEFAULT_NAMES = SCENE_NAMES.join(", ");
-async function sceneList() {
-  const scenes = await allScenes();
-  return `Settings: ${scenes.map((scene) => `${scene.id} (${scene.kelvin}K, ${scene.brightness}%)`).join("; ")}.`;
-}
-function said(names) {
-  if (names.length === 1) return names[0];
-  if (names.length === 2) return `${names[0]} and ${names[1]}`;
-  return `all ${names.length} of them`;
-}
-function outcome(landed, what) {
-  const worked = landed.filter((one) => !one.failed);
-  const broken = landed.filter((one) => one.failed);
-  const dark = worked.filter((one) => one.state.on === false);
-  const unsure = worked.filter((one) => one.unconfirmed.length > 0);
-  if (worked.length === 0) {
-    return `Could not reach ${said(broken.map((one) => one.name))}: ${broken[0]?.failed}`;
-  }
-  const parts = [`${said(worked.map((one) => one.name))} ${what}.`];
-  if (broken.length > 0) {
-    parts.push(
-      `${said(broken.map((one) => one.name))} could not be reached (${broken[0]?.failed}) \u2014 say which one, rather than calling the whole thing a failure.`
-    );
-  }
-  if (dark.length > 0) {
-    parts.push(
-      `${said(dark.map((one) => one.name))} ${dark.length === 1 ? "is" : "are"} switched off, so nothing shows yet \u2014 mention it and offer to turn ${dark.length === 1 ? "it" : "them"} on.`
-    );
-  }
-  if (unsure.length > 0) {
-    parts.push(
-      `${said(unsure.map((one) => one.name))} would not confirm its ${unsure[0].unconfirmed.join(" and ")} \u2014 the instruction was sent twice and accepted both times. Do NOT say it is not working; if they can see it changed, it changed. Only mention this if they ask.`
-    );
-  }
-  return parts.join(" ");
-}
-async function guarded(work) {
-  try {
-    return await work();
-  } catch (error) {
-    if (error instanceof LightError) return error.message;
-    throw error;
-  }
-}
-var lightTools = [
-  {
-    name: "set_lights",
-    description: "Turn the lights on or off. Use it whenever the user asks for lights on, off, out, or killed, and when they say they are going to bed or leaving the room. Leave the name out to mean all of them.",
-    category: "home",
-    parameters: {
-      on: { type: "boolean", description: "True for on, false for off." },
-      which: {
-        type: "string",
-        description: 'Which light or group, as they said it \u2014 "kitchen", "desk". Leave out for all of them.'
-      }
-    },
-    required: ["on"],
-    run: (args) => guarded(async () => {
-      const on = Boolean(args.on);
-      const landed = await setPower(args.which ? String(args.which) : void 0, on);
-      return `${outcome(landed, on ? "on" : "off")} Say it in a few words.`;
-    })
-  },
-  {
-    name: "dim_lights",
-    description: 'Set how bright the lights are, from 1 to 100. Use it for "dim the lights", "brighter", "all the way up", and work out a sensible number from what they said rather than asking for one.',
-    category: "home",
-    parameters: {
-      percent: { type: "number", description: "Brightness, 1 to 100." },
-      which: { type: "string", description: "Which light. Leave out for all." }
-    },
-    required: ["percent"],
-    run: (args) => guarded(async () => {
-      const percent = Number(args.percent);
-      if (!Number.isFinite(percent)) return "That was not a brightness.";
-      const landed = await setBrightness(
-        args.which ? String(args.which) : void 0,
-        percent
-      );
-      const level = Math.max(1, Math.min(100, Math.round(percent)));
-      return outcome(landed, `at ${level}%`);
-    })
-  },
-  {
-    name: "colour_lights",
-    description: `Set the colour of the lights. Known colours: ${Object.keys(COLOURS).join(", ")}. Map what they said to the nearest of those \u2014 "make it cosy" is warm, "party" is magenta \u2014 rather than refusing an unlisted word.`,
-    category: "home",
-    parameters: {
-      colour: { type: "string", description: "One of the known colours." },
-      which: { type: "string", description: "Which light. Leave out for all." }
-    },
-    required: ["colour"],
-    run: (args) => guarded(async () => {
-      const { landed, colour } = await setColour(
-        args.which ? String(args.which) : void 0,
-        String(args.colour)
-      );
-      return outcome(landed, `now ${colour}`);
-    })
-  },
-  {
-    name: "set_scene",
-    description: `Put the lights into one of the named settings: ${DEFAULT_NAMES}. Use it whenever the user names one \u2014 "sleep mode", "activate work mode", "put it in evening", "movie time" \u2014 and also whenever what they describe plainly is one of them ("I'm going to bed", "time to focus"). Each one sets a colour and a brightness together, chosen from the research on light and the body clock. Prefer this over setting a colour and a brightness separately.`,
-    category: "home",
-    parameters: {
-      scene: { type: "string", description: "The setting they named, as they said it." },
-      which: { type: "string", description: "Which light. Leave out for all." }
-    },
-    required: ["scene"],
-    run: (args) => guarded(async () => {
-      const scene = await findScene(String(args.scene));
-      if (!scene) return `No setting called "${args.scene}". ${await sceneList()}`;
-      const landed = await applyScene(
-        args.which ? String(args.which) : void 0,
-        kelvinToRgb(scene.kelvin),
-        scene.brightness
-      );
-      return `${outcome(landed, `in ${scene.id}, ${scene.kelvin}K at ${scene.brightness}%`)} Say it in a few words. If they ask why it is set this way: ${scene.why}`;
-    })
-  },
-  {
-    name: "adjust_scene",
-    description: 'Change what one of the named settings means, and keep the change. Use it for "make sleep mode a bit dimmer", "work mode is too blue", "warmer evening". It saves the new values and shows them immediately, so the next time they ask for that setting they get the new one. Use nudge for "a bit"/"a lot" changes and the exact numbers only when they give you one.',
-    category: "home",
-    parameters: {
-      scene: { type: "string", description: "Which setting to change." },
-      nudge: {
-        type: "string",
-        description: "One of: dimmer, brighter, warmer, cooler."
-      },
-      much: {
-        type: "boolean",
-        description: 'True for "a lot"/"much", false or omitted for "a bit".'
-      },
-      brightness: { type: "number", description: "An exact brightness, 1 to 100." },
-      kelvin: {
-        type: "number",
-        description: "An exact colour temperature, 1000 (deep red) to 6500 (cool daylight)."
-      }
-    },
-    required: ["scene"],
-    run: (args) => guarded(async () => {
-      const scene = await findScene(String(args.scene));
-      if (!scene) return `No setting called "${args.scene}". ${await sceneList()}`;
-      const nudge = args.nudge ? String(args.nudge).toLowerCase() : void 0;
-      if (nudge && !NUDGES.includes(nudge)) {
-        return `A nudge is one of: ${NUDGES.join(", ")}.`;
-      }
-      const tuned = await tuneScene(scene.id, {
-        ...nudge ? { nudge } : {},
-        ...args.much !== void 0 ? { much: Boolean(args.much) } : {},
-        ...args.brightness !== void 0 ? { brightness: Number(args.brightness) } : {},
-        ...args.kelvin !== void 0 ? { kelvin: Number(args.kelvin) } : {}
-      });
-      const landed = await applyScene(void 0, kelvinToRgb(tuned.kelvin), tuned.brightness);
-      return `${scene.id} is now ${tuned.kelvin}K at ${tuned.brightness}%, saved for next time. ${outcome(landed, "showing it")}`;
-    })
-  },
-  {
-    name: "restore_scene",
-    description: 'Put one of the named settings back to how it started, undoing any adjustments. Use it for "put sleep mode back", "reset work mode".',
-    category: "home",
-    parameters: { scene: { type: "string", description: "Which setting." } },
-    required: ["scene"],
-    run: (args) => guarded(async () => {
-      const scene = await findScene(String(args.scene));
-      if (!scene) return `No setting called "${args.scene}". ${await sceneList()}`;
-      const back = await restoreScene(scene.id);
-      return `${back.id} is back to ${back.kelvin}K at ${back.brightness}%.`;
-    })
-  },
-  {
-    name: "list_scenes",
-    description: "List the named light settings and what each one is currently set to. Use it when the user asks what settings there are, or names one you do not recognise.",
-    category: "research",
-    parameters: {},
-    required: [],
-    run: () => guarded(sceneList)
-  },
-  {
-    name: "check_lights",
-    description: "Read what the lights are actually doing right now \u2014 on or off, how bright, what colour, whether they are reachable. Use it whenever the user asks about the state of the lights, when they say something did not happen, and before answering any question about the room that you would otherwise be guessing at. Never assume a light is as you last left it; people use switches and apps too.",
-    category: "research",
-    parameters: {
-      which: { type: "string", description: "Which light. Leave out for all." }
-    },
-    required: [],
-    run: (args) => guarded(async () => {
-      const found = await survey(args.which ? String(args.which) : void 0);
-      if (found.length === 0) return "No lights on the account.";
-      const count = `${found.length} light${found.length === 1 ? "" : "s"} on the account.`;
-      return `${count} ${found.map(({ name, state }) => {
-        if (state.online === false) return `${name}: offline, not reachable.`;
-        if (state.on === null) return `${name}: not reporting its state.`;
-        if (!state.on) return `${name}: off.`;
-        const parts = [
-          state.brightness === null ? null : `${state.brightness}%`,
-          state.colour === null ? null : nameOfColour(state.colour)
-        ].filter(Boolean);
-        return `${name}: on${parts.length ? `, ${parts.join(", ")}` : ""}.`;
-      }).join(" ")}`;
-    })
-  },
-  {
-    name: "list_lights",
-    description: "Find out what lights exist and what they are called. Use it when the user asks what you can control, or when a name they used did not match.",
-    category: "research",
-    parameters: {},
-    required: [],
-    run: () => guarded(async () => {
-      const found = await lights();
-      return found.length === 0 ? "No lights on the account." : `${found.length} light${found.length === 1 ? "" : "s"} on the account: ${found.map((one) => one.name).join(", ")}. If that is more than they actually have plugged in, the extra ones are stale entries in the Govee app and are worth deleting there.`;
-    })
-  }
-];
-
-// server/workspaces.ts
-import { randomUUID as randomUUID10 } from "node:crypto";
-var DEFAULTS2 = [
-  {
-    id: "grace",
-    name: "Grace",
-    icon: "sparkles",
-    accent: "ice",
-    opens: [],
-    panels: ["orb", "faculties", "attention", "connections", "spend"],
-    blurb: "Her, and what she knows."
-  },
-  {
-    id: "day",
-    name: "Home",
-    icon: "house",
-    accent: "ice",
-    opens: [],
-    panels: ["day", "needs", "weather", "notes", "situations", "files", "deeds"],
-    blurb: "Your day, and what wants you."
-  },
-  {
-    id: "work",
-    name: "Work",
-    icon: "briefcase",
-    accent: "amber",
-    // Opened in order; the first is the one brought forward.
-    opens: ["https://app.n8n.cloud", "https://mail.google.com"],
-    panels: ["needs", "github", "workflows", "notes", "activity"],
-    blurb: "Mail, workflows, and what is failing.",
-    brief: "Brief me on my workflows and anything in my mail that needs me."
-  },
-  {
-    id: "play",
-    name: "Play",
-    icon: "gamepad",
-    accent: "violet",
-    opens: [],
-    panels: ["day", "playstation", "games", "activity"],
-    blurb: "The console, and what you have been playing."
-  }
-];
-var store15 = new Document("workspaces", () => DEFAULTS2);
-async function workspaces() {
-  const saved = await store15.read();
-  const missing = DEFAULTS2.filter((one) => !saved.some((other) => other.id === one.id));
-  return [...saved, ...missing].filter((one) => !one.hidden);
-}
-async function findWorkspace(said2) {
-  const needle = said2.toLowerCase().replace(/[^a-z0-9 ]/g, "").trim();
-  if (!needle) return null;
-  const all = await workspaces();
-  return all.find((one) => one.id === needle || one.name.toLowerCase() === needle) ?? all.find((one) => needle.includes(one.name.toLowerCase())) ?? all.find((one) => one.name.toLowerCase().includes(needle)) ?? null;
-}
-async function saveWorkspace(patch) {
-  const clean = {
-    id: patch.id?.trim() || randomUUID10().slice(0, 8),
-    name: (patch.name ?? "Untitled").trim().slice(0, 24),
-    icon: patch.icon ?? "sparkles",
-    accent: patch.accent ?? "ice",
-    opens: (patch.opens ?? []).map((url) => url.trim()).filter((url) => /^https?:\/\//i.test(url)).slice(0, 8),
-    panels: patch.panels ?? [],
-    blurb: patch.blurb?.slice(0, 80),
-    brief: patch.brief?.slice(0, 200)
-  };
-  await store15.update((current) => {
-    const rest = current.filter((one) => one.id !== clean.id);
-    const at = current.findIndex((one) => one.id === clean.id);
-    if (at < 0) return [...current, clean];
-    const next = [...rest];
-    next.splice(at, 0, clean);
-    return next;
-  });
-  return workspaces();
-}
-async function hideWorkspace(id) {
-  await store15.update((current) => {
-    const known2 = current.some((one) => one.id === id);
-    const base = known2 ? current : [...current, ...DEFAULTS2.filter((one) => one.id === id)];
-    return base.map((one) => one.id === id ? { ...one, hidden: true } : one);
-  });
-  return workspaces();
-}
-
-// server/tools/open.ts
-var deliver2 = null;
-function onOpen(handler) {
-  deliver2 = handler;
-}
-function toUrl(raw) {
-  const said2 = raw.trim().replace(/\s+/g, "");
-  if (!said2) return null;
-  if (/^https?:\/\//i.test(said2)) return said2;
-  const host = said2.includes(".") ? said2 : `${said2}.com`;
-  return /^[a-z0-9.-]+(\/.*)?$/i.test(host) ? `https://${host}` : null;
-}
-var openTools = [
-  {
-    name: "open_pages",
-    description: 'Open one or more web pages in the user\u2019s browser. Use it whenever they ask you to open, pull up, or bring up a site \u2014 "open YouTube", "open my GitHub". It only works while they are looking at you, since the browser showing you is the thing that opens them.',
-    category: "research",
-    parameters: {
-      urls: {
-        type: "string",
-        description: 'One or more addresses, separated by spaces or commas. A bare name like "youtube" is fine; a full https address is better when you know it.'
-      }
-    },
-    required: ["urls"],
-    run: async (args) => {
-      const urls = String(args.urls ?? "").split(/[\s,]+/).map(toUrl).filter((url) => Boolean(url)).slice(0, 8);
-      if (urls.length === 0) return "That did not look like an address I could open.";
-      deliver2?.(urls);
-      return `Opening ${urls.length === 1 ? urls[0] : `${urls.length} pages`}. Say so in a few words. If their browser blocks it they will see the links to tap, so do not promise it definitely opened.`;
-    }
-  },
-  {
-    name: "open_workspace",
-    description: 'Switch the user to one of their workspaces \u2014 Work, Home, Play, Grace, or any they have made. Use it for "open work", "go to play", "switch to home". It changes what is on their screen and opens whichever pages that workspace is set to open.',
-    category: "research",
-    parameters: {
-      name: { type: "string", description: "Which workspace, as they said it." }
-    },
-    required: ["name"],
-    run: async (args) => {
-      const workspace = await findWorkspace(String(args.name ?? ""));
-      if (!workspace) {
-        const names = (await workspaces()).map((one) => one.name).join(", ");
-        return `There is no workspace by that name. They have: ${names}.`;
-      }
-      deliver2?.(workspace.opens, workspace.id);
-      return `Switched them to ${workspace.name}` + (workspace.opens.length > 0 ? `, opening ${workspace.opens.length} page${workspace.opens.length === 1 ? "" : "s"}` : "") + `. Say which one you have moved them to, briefly.` + (workspace.brief ? ` Then do this without being asked, and report it in a sentence or two: ${workspace.brief}` : "");
-    }
-  }
-];
-
-// server/ps5.ts
-var AUTH = "https://ca.account.sony.com/api/authz/v3/oauth";
-var PROFILE = "https://m.np.playstation.com/api/userProfile/v1/internal/users";
-var TROPHY = "https://m.np.playstation.com/api/trophy/v1/users";
-var GRAPH = "https://web.np.playstation.com/api/graphql/v1/op";
-var CLIENT_AUTH = "Basic MDk1MTUxNTktNzIzNy00MzcwLTliNDAtMzgwNmU2N2MwODkxOnVjUGprYTV0bnRCMktxc1A=";
-var CLIENT_ID = "09515159-7237-4370-9b40-3806e67c0891";
-var REDIRECT = "com.scee.psxandroid.scecompcall://redirect";
-var SCOPE = "psn:mobile.v2.core psn:clientapp";
-var session = new Document("psn", () => null);
-var PsnError = class extends Error {
-  constructor(message, needsToken = false) {
-    super(message);
-    this.needsToken = needsToken;
-  }
-};
-function psnConfigured() {
-  return Boolean(psnToken());
-}
-async function tokensFromNpsso(npsso) {
-  const query = new URLSearchParams({
-    access_type: "offline",
-    client_id: CLIENT_ID,
-    redirect_uri: REDIRECT,
-    response_type: "code",
-    scope: SCOPE
-  });
-  const handshake = await fetch(`${AUTH}/authorize?${query}`, {
-    headers: { Cookie: `npsso=${npsso}` },
-    redirect: "manual"
-  });
-  const location = handshake.headers.get("location") ?? "";
-  if (!location.includes("?code=")) {
-    throw new PsnError(
-      "PlayStation would not accept that sign-in code. They expire after a couple of months \u2014 fetch a fresh one and paste it in again.",
-      true
-    );
-  }
-  const code = new URLSearchParams(location.split("redirect/")[1] ?? "").get("code");
-  if (!code) throw new PsnError("PlayStation sent back no sign-in code.", true);
-  return exchange({
-    code,
-    redirect_uri: REDIRECT,
-    grant_type: "authorization_code",
-    token_format: "jwt"
-  });
-}
-async function exchange(body) {
-  const response = await fetch(`${AUTH}/token`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      Authorization: CLIENT_AUTH
-    },
-    body: new URLSearchParams(body).toString()
-  });
-  const data = await response.json().catch(() => ({}));
-  const accessToken2 = typeof data.access_token === "string" ? data.access_token : "";
-  if (!accessToken2) {
-    throw new PsnError(
-      `PlayStation refused the sign-in (${String(data.error_description ?? response.status)}).`,
-      true
-    );
-  }
-  const now = Date.now();
-  return {
-    accessToken: accessToken2,
-    // A minute of margin, so a token never expires mid-request.
-    expiresAt: now + (Number(data.expires_in) || 3600) * 1e3 - 6e4,
-    refreshToken: String(data.refresh_token ?? ""),
-    refreshExpiresAt: now + (Number(data.refresh_token_expires_in) || 0) * 1e3
-  };
-}
-async function token() {
-  const npsso = psnToken();
-  if (!npsso) {
-    throw new PsnError(
-      "The PlayStation is not connected. Paste an NPSSO code into her keys.",
-      true
-    );
-  }
-  const saved = await session.read();
-  const now = Date.now();
-  if (saved && saved.expiresAt > now) return saved.accessToken;
-  if (saved?.refreshToken && saved.refreshExpiresAt > now) {
-    try {
-      const refreshed = await exchange({
-        refresh_token: saved.refreshToken,
-        grant_type: "refresh_token",
-        token_format: "jwt",
-        scope: SCOPE
-      });
-      await session.write(refreshed);
-      return refreshed.accessToken;
-    } catch {
-    }
-  }
-  const fresh2 = await tokensFromNpsso(npsso);
-  await session.write(fresh2);
-  return fresh2.accessToken;
-}
-async function read(url) {
-  const response = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${await token()}`,
-      "Content-Type": "application/json"
-    }
-  });
-  if (response.status === 401 || response.status === 403) {
-    throw new PsnError(
-      "PlayStation stopped accepting the connection. The code needs pasting again.",
-      true
-    );
-  }
-  const data = await response.json().catch(() => null);
-  if (!data) throw new PsnError("PlayStation sent back nothing readable.");
-  return data;
-}
-async function presence() {
-  const data = await read(`${PROFILE}/me/basicPresences?type=primary`);
-  const basic = data.basicPresence ?? {};
-  const platformInfo = basic.primaryPlatformInfo ?? {};
-  const game = basic.gameTitleInfoList?.[0];
-  const online = platformInfo.onlineStatus === "online";
-  return {
-    online,
-    status: game?.titleName ? "playing" : online ? "online" : "offline",
-    playing: game?.titleName ?? null,
-    platform: game?.format ?? platformInfo.platform ?? null,
-    lastOnline: platformInfo.lastOnlineDate ?? null
-  };
-}
-async function player() {
-  const data = await read(`${PROFILE}/me/profiles`);
-  return {
-    onlineId: data.onlineId ?? "unknown",
-    level: data.trophySummary?.level ?? null,
-    plus: Boolean(data.isPsPlus)
-  };
-}
-async function trophies() {
-  const data = await read(`${TROPHY}/me/trophySummary`);
-  const earned = data.earnedTrophies ?? {};
-  return {
-    level: Number(data.trophyLevel ?? 0),
-    progress: Number(data.progress ?? 0),
-    platinum: earned.platinum ?? 0,
-    gold: earned.gold ?? 0,
-    silver: earned.silver ?? 0,
-    bronze: earned.bronze ?? 0
-  };
-}
-async function recentlyPlayed(limit = 10) {
-  const url = new URL(GRAPH);
-  url.searchParams.set("operationName", "getUserGameList");
-  url.searchParams.set(
-    "variables",
-    JSON.stringify({ limit, categories: "ps4_game,ps5_native_game" })
-  );
-  url.searchParams.set(
-    "extensions",
-    JSON.stringify({
-      persistedQuery: {
-        version: 1,
-        sha256Hash: "e780a6d8b921ef0c59ec01ea5c5255671272ca0d819edb61320914cf7a78b3ae"
-      }
-    })
-  );
-  const data = await read(url.toString());
-  const games = data.data?.gameLibraryTitlesRetrieve?.games ?? [];
-  return games.map((game) => ({
-    name: game.name ?? "an unnamed game",
-    platform: game.platform ?? null,
-    lastPlayed: game.lastPlayedDateTime ?? null
-  }));
-}
-async function playstation() {
-  const [now, who, cabinet] = await Promise.all([
-    presence(),
-    player().catch(() => null),
-    trophies().catch(() => null)
-  ]);
-  return { presence: now, player: who, trophies: cabinet };
-}
-
-// server/tools/playstation.ts
-function when2(iso) {
-  if (!iso) return "at some point";
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return "at some point";
-  const minutes = Math.round((Date.now() - then) / 6e4);
-  if (minutes < 2) return "just now";
-  if (minutes < 60) return `${minutes} minutes ago`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
-  const days = Math.round(hours / 24);
-  return `${days} day${days === 1 ? "" : "s"} ago`;
-}
-var playstationTools = [
-  {
-    name: "check_playstation",
-    description: "Look at the PlayStation: whether it is on, whether the user is signed in, and what game is running right now. Use this for anything about the console, the PS5, or what they are playing. It only looks \u2014 there is no way to turn the console on or start a game from here.",
-    category: "home",
-    parameters: {},
-    required: [],
-    run: async () => {
-      const local = await bridgeStatus().catch(() => null);
-      if (local?.online && local.state?.found) {
-        const awake = local.state.status === "AWAKE";
-        const name = local.state.name ? ` (${local.state.name})` : "";
-        const cloud = await presence().catch(() => null);
-        if (awake && cloud?.playing) {
-          return `The console${name} is on, playing ${cloud.playing}.`;
-        }
-        return awake ? `The console${name} is on, with nothing running that I can see.` : `The console${name} is in rest mode. I can switch it on if you want.`;
-      }
-      try {
-        const { presence: now, player: player2, trophies: trophies2 } = await playstation();
-        const who = player2 ? `Signed in as ${player2.onlineId}` : "Signed in";
-        const state = now.playing ? `${who}, playing ${now.playing}${now.platform ? ` on ${now.platform}` : ""} right now.` : now.online ? `${who} and online, but no game is running.` : `${who}. The console is off or signed out \u2014 last seen online ${when2(now.lastOnline)}.`;
-        const cabinet = trophies2 ? ` Trophy level ${trophies2.level}, with ${trophies2.platinum} platinums.` : "";
-        return state + cabinet;
-      } catch (error) {
-        if (error instanceof PsnError) return error.message;
-        throw error;
-      }
-    }
-  },
-  {
-    name: "recent_games",
-    description: "What the user has been playing lately on PlayStation, most recent first. Use it when they ask what they have been playing, when they last played something, or how a game fits into their week.",
-    category: "home",
-    parameters: {},
-    required: [],
-    run: async () => {
-      try {
-        const games = await recentlyPlayed(8);
-        if (games.length === 0) return "Nothing has been played recently.";
-        return games.map((game) => `${game.name} \u2014 last played ${when2(game.lastPlayed)}`).join("\n");
-      } catch (error) {
-        if (error instanceof PsnError) return error.message;
-        throw error;
-      }
-    }
-  }
-];
-
-// server/tools/recall.ts
-var NOISE3 = /* @__PURE__ */ new Set([
-  "the",
-  "a",
-  "an",
-  "and",
-  "or",
-  "but",
-  "if",
-  "of",
-  "to",
-  "in",
-  "on",
-  "at",
-  "for",
-  "with",
-  "about",
-  "i",
-  "you",
-  "we",
-  "it",
-  "is",
-  "was",
-  "are",
-  "were",
-  "be",
-  "been",
-  "do",
-  "did",
-  "does",
-  "what",
-  "when",
-  "where",
-  "who",
-  "how",
-  "my",
-  "me",
-  "your",
-  "that",
-  "this",
-  "said",
-  "say",
-  "tell",
-  "told",
-  "again"
-]);
-function terms(text) {
-  return text.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter((word) => word.length > 2 && !NOISE3.has(word));
-}
-function score(haystack, needles) {
-  const text = haystack.toLowerCase();
-  let hits = 0;
-  for (const needle of needles) {
-    if (text.includes(needle)) hits += 1;
-  }
-  return hits;
-}
-function stamp(iso) {
-  const at = new Date(iso);
-  if (Number.isNaN(at.getTime())) return "at some point";
-  return at.toLocaleDateString("en-GB", {
-    weekday: "short",
-    day: "numeric",
-    month: "short"
-  });
-}
-var recallTools = [
-  {
-    name: "search_memory",
-    description: 'Search everything the user has ever said to you, and everything you know about them, for a word or subject. Use it whenever they refer to something from an earlier conversation you cannot see any more \u2014 "what did we decide about", "the thing I mentioned last week", a name or a place you half recognise. Search before saying you do not remember.',
-    category: "research",
-    parameters: {
-      about: {
-        type: "string",
-        description: "The subject to look for \u2014 a name, place, or a few words of what was said. Not a full question."
-      }
-    },
-    required: ["about"],
-    run: async (args) => {
-      const about = String(args.about ?? "").trim();
-      const needles = terms(about);
-      if (needles.length === 0) return "That is too vague to search for.";
-      const [log, profile2] = await Promise.all([getMessages(), getProfile()]);
-      const known2 = profile2.entries.filter((entry) => !entry.supersededAt && score(entry.text, needles) > 0).map((entry) => `- ${entry.text}`);
-      const hits = log.map((message, index) => ({ message, index, hits: score(message.text, needles) })).filter((row) => row.hits > 0).sort(
-        (left, right) => right.hits === left.hits ? right.index - left.index : right.hits - left.hits
-      ).slice(0, 6).sort((left, right) => left.index - right.index);
-      if (known2.length === 0 && hits.length === 0) {
-        return `Nothing in the record mentions ${about}.`;
-      }
-      const lines = [];
-      if (known2.length > 0) {
-        lines.push(`What you already know about this:
-${known2.join("\n")}`);
-      }
-      if (hits.length > 0) {
-        lines.push("From earlier conversations:");
-        for (const { message, index } of hits) {
-          const answer = log[index + 1];
-          const who = message.speaker === "grace" ? "You said" : "They said";
-          lines.push(`- ${stamp(message.at)}, ${who}: "${message.text.slice(0, 300)}"`);
-          if (answer && answer.speaker !== message.speaker) {
-            lines.push(`  and the reply was: "${answer.text.slice(0, 300)}"`);
-          }
-        }
-      }
-      return lines.join("\n");
-    }
-  }
-];
-
-// server/tools/reminders.ts
-import { randomUUID as randomUUID11 } from "node:crypto";
-var store16 = new Document("reminders", () => []);
-async function outstanding() {
-  const all = await store16.read();
-  return all.filter((reminder) => !reminder.doneAt).sort((left, right) => {
-    if (!left.due) return 1;
-    if (!right.due) return -1;
-    return left.due.localeCompare(right.due);
-  });
-}
-function describe(reminder) {
-  if (!reminder.due) return reminder.text;
-  return `${reminder.text} (${new Date(reminder.due).toLocaleString("en-GB", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit"
-  })})`;
-}
-var reminderTools = [
-  {
-    name: "add_reminder",
-    description: "Add something to the user\u2019s list of things to remember or do. Use this whenever they ask to be reminded of something, or mention something they need to do later.",
-    category: "calendar",
-    parameters: {
-      text: {
-        type: "string",
-        description: "What to remember, in the user\u2019s own words where possible."
-      },
-      due: {
-        type: "string",
-        description: 'When it is wanted, as a full ISO 8601 timestamp. Omit entirely if no particular time was given. Work out real dates from phrases like "tomorrow morning" using the current date you were given.'
-      }
-    },
-    required: ["text"],
-    run: async (args) => {
-      const text = String(args.text ?? "").trim();
-      if (!text) return "Nothing was given to remember.";
-      const raw = args.due ? String(args.due) : "";
-      const parsed = raw ? new Date(raw) : null;
-      const valid2 = parsed && Number.isFinite(parsed.getTime()) ? parsed : null;
-      const reminder = {
-        id: randomUUID11(),
-        text,
-        due: valid2 ? valid2.toISOString() : null,
-        createdAt: (/* @__PURE__ */ new Date()).toISOString(),
-        doneAt: null
-      };
-      await store16.update((current) => [...current, reminder]);
-      return `Noted: ${describe(reminder)}`;
-    }
-  },
-  {
-    name: "list_reminders",
-    description: "List what the user still has outstanding. Use it when they ask what is on their list, what is outstanding, or what they have forgotten.",
-    category: "research",
-    parameters: {},
-    required: [],
-    run: async () => {
-      const open = await outstanding();
-      if (open.length === 0) return "Their list is empty.";
-      return `Outstanding:
-${open.map((item) => `- ${describe(item)}`).join("\n")}`;
-    }
-  },
-  {
-    name: "complete_reminder",
-    description: "Mark something on the list as done. Match on the wording the user used; if more than one thing could be meant, ask which rather than guessing.",
-    category: "calendar",
-    parameters: {
-      text: {
-        type: "string",
-        description: "Enough of the reminder\u2019s wording to identify it."
-      }
-    },
-    required: ["text"],
-    run: async (args) => {
-      const needle = String(args.text ?? "").trim().toLowerCase();
-      if (!needle) return "Which one?";
-      const open = await outstanding();
-      const matches2 = open.filter((item) => item.text.toLowerCase().includes(needle));
-      if (matches2.length === 0) return `Nothing on the list matches "${needle}".`;
-      if (matches2.length > 1) {
-        return `More than one matches: ${matches2.map((item) => item.text).join("; ")}. Ask which one they mean.`;
-      }
-      await store16.update(
-        (current) => current.map(
-          (item) => item.id === matches2[0].id ? { ...item, doneAt: (/* @__PURE__ */ new Date()).toISOString() } : item
-        )
-      );
-      return `Marked done: ${matches2[0].text}`;
-    }
-  }
-];
-
-// server/tools/self.ts
-var selfTools = [
-  {
-    name: "remember_this",
-    description: 'Commit something about the user to memory on purpose. Use it when they tell you something worth keeping \u2014 a preference, how they like things done, a fact about their life or work \u2014 and especially when they say "remember that". Do not use it for passing detail, for anything about the current conversation, or for anything they have told you not to keep.',
-    category: "research",
-    parameters: {
-      fact: {
-        type: "string",
-        description: 'One fact, written about the user in the third person, as a full sentence: "The user takes their coffee black". Not a note to self.'
-      },
-      kind: {
-        type: "string",
-        description: "What sort of thing it is.",
-        values: ["preference", "fact", "routine", "goal"]
-      }
-    },
-    required: ["fact"],
-    run: async (args) => {
-      const text = String(args.fact).trim();
-      if (text.length < 4) return "That is too thin to be worth keeping.";
-      const kind = String(args.kind ?? "fact");
-      const added = await remember([
-        {
-          // Said out loud, so it is a stated fact rather than something she
-          // inferred — which is a real distinction the profile keeps.
-          kind: ["preference", "fact", "routine", "goal"].includes(kind) ? kind : "fact",
-          text,
-          source: "stated"
-        }
-      ]);
-      return added.length > 0 ? "Kept. Say so in three or four words, not a sentence about memory." : "Already known \u2014 she has had that for a while. Do not announce it.";
-    }
-  },
-  {
-    name: "correct_memory",
-    description: "Mark something she has been believing as no longer true. Use it when the user corrects you, or says something has changed. Give the old belief roughly as she has been holding it. Nothing is thrown away \u2014 it is marked as overtaken, because that it used to be true still matters. If there is a new version of the fact, also call remember_this.",
-    category: "research",
-    parameters: {
-      old: {
-        type: "string",
-        description: "The belief that is no longer true, as she has been holding it."
-      }
-    },
-    required: ["old"],
-    run: async (args) => {
-      const found = await supersedeEntry(String(args.old));
-      return found ? "Corrected. Acknowledge briefly and move on; do not dwell on it." : "Nothing on file matched that closely enough to correct. Do not claim you changed anything \u2014 say what you do believe and let them put you right.";
-    }
-  },
-  {
-    name: "set_attention",
-    description: "Change how much of the user\u2019s attention you may take. Open is normal, Work is brisk with personal things held back, Focus is answers only and nothing volunteered, Away means they are not at the desk and you take messages. Use it when they say to leave them alone, that they are heads-down, that they are back, or that they are going out.",
-    category: "research",
-    parameters: {
-      mode: {
-        type: "string",
-        description: "Which one to move to.",
-        values: ["open", "work", "focus", "away"]
-      }
-    },
-    required: ["mode"],
-    run: async (args) => {
-      const mode = String(args.mode).toLowerCase();
-      if (!isMode(mode)) {
-        return `There is no "${mode}" mode. They are: open, work, focus, away.`;
-      }
-      await setMode(mode);
-      return `Now in ${MODES[mode].label}. ${MODES[mode].guidance} Confirm in a few words and start behaving that way in this very reply.`;
-    }
-  },
-  {
-    name: "make_room",
-    description: 'Build a new room in her interface, or change one that exists. A room is a name, a colour, the panels it shows and the pages it opens when the user goes there. Use it when they describe a mode or a space they want \u2014 "make me a room for the gym", "add the news to my morning". Saying the name of an existing room changes that one rather than making a second.',
-    category: "research",
-    parameters: {
-      name: { type: "string", description: "What the room is called, one or two words." },
-      panels: {
-        type: "string",
-        description: "Comma-separated, from: day, needs, weather, notes, situations, files, activity, connections, spend, github, workflows, deeds, faculties, attention, playstation, games."
-      },
-      opens: {
-        type: "string",
-        description: "Comma-separated web addresses to open on arrival. Optional."
-      },
-      accent: {
-        type: "string",
-        description: "The colour of the room.",
-        values: ["ice", "amber", "violet", "rose"]
-      },
-      brief: {
-        type: "string",
-        description: "What she should say or check on arrival, in the user\u2019s words. Optional."
-      }
-    },
-    required: ["name"],
-    run: async (args) => {
-      const name = String(args.name).trim().slice(0, 24);
-      if (!name) return "A room needs a name.";
-      const split = (value) => String(value ?? "").split(",").map((part) => part.trim()).filter(Boolean);
-      const existing = (await workspaces()).find(
-        (room) => room.name.toLowerCase() === name.toLowerCase()
-      );
-      const panels = split(args.panels);
-      const opens = split(args.opens);
-      const patch = {
-        ...existing ?? {},
-        ...existing ? { id: existing.id } : {},
-        name,
-        // An empty list from the model means "leave it alone" on an edit, and
-        // "show everything" on a new room — never "show nothing at all".
-        panels: panels.length > 0 ? panels : existing?.panels ?? [],
-        opens: opens.length > 0 ? opens : existing?.opens ?? [],
-        accent: args.accent ?? existing?.accent ?? "ice",
-        ...args.brief ? { brief: String(args.brief) } : {}
-      };
-      await saveWorkspace(patch);
-      return existing ? `${name} updated. It is in the rail already, so say so in a few words.` : `${name} is now a room in the rail. Tell them it is there and what is on it.`;
-    }
-  },
-  {
-    name: "notify_phone",
-    description: "Push a short notice to the user\u2019s phone. Use it only when something genuinely wants them and they are not in front of you \u2014 a build that failed, a timer that finished, something arriving that they asked to be told about. Never for a reply to something they just said, and never for anything that can wait until they next look.",
-    category: "research",
-    parameters: {
-      text: {
-        type: "string",
-        description: "The notice, under about fifteen words. It appears on a lock screen."
-      }
-    },
-    required: ["text"],
-    run: async (args) => {
-      const text = String(args.text).trim().slice(0, 200);
-      if (!text) return "There was nothing to send.";
-      const sent = await notify("Grace", text);
-      return sent > 0 ? `Sent to ${sent} device${sent === 1 ? "" : "s"}.` : "No phone is set up to receive notices yet, so nothing went anywhere. Tell them plainly.";
-    }
-  }
-];
-
-// server/tools/timers.ts
-import { randomUUID as randomUUID13 } from "node:crypto";
-
-// server/watch.ts
-import { createHash as createHash2, randomUUID as randomUUID12 } from "node:crypto";
-var store17 = new Document("watches", () => []);
-async function liveWatches() {
-  return (await store17.read()).filter((watch) => !watch.archivedAt);
-}
-async function startWatch(what, url, keyword) {
-  const clean = what.trim().slice(0, 100);
-  const address = url.trim();
-  if (!clean || !/^https?:\/\//i.test(address)) {
-    throw new Error("a watch needs something to watch and a full https address");
-  }
-  const watch = {
-    id: randomUUID12(),
-    what: clean,
-    url: address,
-    keyword: keyword?.trim() || void 0,
-    createdAt: (/* @__PURE__ */ new Date()).toISOString()
-  };
-  await store17.update((list) => [...list, watch]);
-  return watch;
-}
-async function stopWatch(what) {
-  const needle = what.toLowerCase().trim();
-  let found = false;
-  await store17.update(
-    (list) => list.map((watch) => {
-      if (watch.archivedAt || !watch.what.toLowerCase().includes(needle)) return watch;
-      found = true;
-      return { ...watch, archivedAt: (/* @__PURE__ */ new Date()).toISOString() };
-    })
-  );
-  return found;
-}
-function textOf(html) {
-  return html.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
-}
-async function observe(watch) {
-  try {
-    const response = await fetch(watch.url, {
-      headers: { "user-agent": "Mozilla/5.0 (Grace watch)" },
-      signal: AbortSignal.timeout(8e3)
-    });
-    if (!response.ok) return null;
-    const text = textOf(await response.text());
-    if (watch.keyword) {
-      return text.includes(watch.keyword.toLowerCase()) ? "present" : "absent";
-    }
-    return createHash2("sha256").update(text).digest("hex").slice(0, 16);
-  } catch {
-    return null;
-  }
-}
-async function checkWatches() {
-  const watches = await liveWatches();
-  if (watches.length === 0) return [];
-  const changes = [];
-  const now = (/* @__PURE__ */ new Date()).toISOString();
-  const readings = await Promise.all(
-    watches.map(async (watch) => ({ watch, reading: await observe(watch) }))
-  );
-  await store17.update(
-    (list) => list.map((stored) => {
-      const found = readings.find((r) => r.watch.id === stored.id);
-      if (!found || found.reading === null) return stored;
-      const { reading } = found;
-      if (stored.last !== void 0 && stored.last !== reading) {
-        changes.push({
-          id: stored.id,
-          what: stored.what,
-          url: stored.url,
-          detail: stored.keyword ? reading === "present" ? `"${stored.keyword}" now appears on the page for ${stored.what}` : `"${stored.keyword}" has gone from the page for ${stored.what}` : `${stored.what} changed`
-        });
-      }
-      return { ...stored, last: reading, lastCheckedAt: now };
-    })
-  );
-  return changes;
-}
-
-// server/tools/timers.ts
-var store18 = new Document("timers", () => []);
-var KEEP_AFTER_MS = 24 * 36e5;
-function prune(list) {
-  const cutoff = Date.now() - KEEP_AFTER_MS;
-  return list.filter((timer) => new Date(timer.at).getTime() > cutoff);
-}
-async function runningTimers() {
-  const now = Date.now();
-  return (await store18.read()).filter((timer) => !timer.firedAt && new Date(timer.at).getTime() > now - 6e4).sort((left, right) => left.at.localeCompare(right.at));
-}
-async function markFired(id) {
-  await store18.update(
-    (list) => prune(list).map(
-      (timer) => timer.id === id ? { ...timer, firedAt: (/* @__PURE__ */ new Date()).toISOString() } : timer
-    )
-  );
-}
-function parseDuration(said2) {
-  const text = said2.toLowerCase().replace(/\s+/g, " ").trim();
-  let total = 0;
-  const pattern = /(\d+(?:\.\d+)?)\s*(hours?|hrs?|h|minutes?|mins?|m|seconds?|secs?|s)(?![a-z])/g;
-  for (const [, amount, unit] of text.matchAll(pattern)) {
-    const value = Number(amount);
-    if (unit.startsWith("h")) total += value * 36e5;
-    else if (unit.startsWith("m")) total += value * 6e4;
-    else total += value * 1e3;
-  }
-  if (total === 0 && /^\d+$/.test(text)) total = Number(text) * 6e4;
-  return total > 0 && total <= 24 * 36e5 ? total : null;
-}
-var timerTools = [
-  {
-    name: "set_timer",
-    description: 'Start a countdown that rings when it ends \u2014 "20 minutes for the pasta", "an hour". For short, soon things. Anything tied to a date or a time of day is a reminder instead.',
-    category: "calendar",
-    parameters: {
-      duration: {
-        type: "string",
-        description: 'How long, as said: "20 minutes", "1h30m", "90 seconds".'
-      },
-      label: { type: "string", description: "What it is for, a word or two." }
-    },
-    required: ["duration"],
-    run: async (args) => {
-      const ms = parseDuration(String(args.duration ?? ""));
-      if (!ms) return "I could not make a length of time out of that.";
-      const timer = {
-        id: randomUUID13(),
-        label: String(args.label ?? "").trim() || "timer",
-        at: new Date(Date.now() + ms).toISOString(),
-        createdAt: (/* @__PURE__ */ new Date()).toISOString()
-      };
-      await store18.update((list) => [...prune(list), timer]);
-      const minutes = Math.round(ms / 6e4);
-      return `Timer set: ${timer.label}, ${minutes >= 1 ? `${minutes} minute${minutes === 1 ? "" : "s"}` : `${Math.round(ms / 1e3)} seconds`}.`;
-    }
-  },
-  {
-    name: "list_timers",
-    description: "What timers are running and how long each has left.",
-    category: "research",
-    parameters: {},
-    required: [],
-    run: async () => {
-      const running = await runningTimers();
-      if (running.length === 0) return "No timers running.";
-      const now = Date.now();
-      return running.map((timer) => {
-        const left = Math.max(0, Math.round((new Date(timer.at).getTime() - now) / 6e4));
-        return `- ${timer.label}: about ${left} minute${left === 1 ? "" : "s"} left`;
-      }).join("\n");
-    }
-  },
-  {
-    name: "start_watch",
-    description: 'Watch a web page and speak up when it changes \u2014 a price, availability, a status page, a release. Checked about once an hour while she is open somewhere. Far more reliable with a keyword: watching whether "in stock" appears beats watching a whole page, which half the web rewrites on every load. Ask for a keyword if one is not obvious.',
-    category: "research",
-    parameters: {
-      what: { type: "string", description: "What is being watched, in their words." },
-      url: { type: "string", description: "The full https address of the page." },
-      keyword: {
-        type: "string",
-        description: "A word or phrase whose appearance or disappearance matters."
-      }
-    },
-    required: ["what", "url"],
-    run: async (args) => {
-      const watch = await startWatch(
-        String(args.what),
-        String(args.url),
-        args.keyword ? String(args.keyword) : void 0
-      );
-      return `Watching ${watch.what}, checked every hour${watch.keyword ? ` for "${watch.keyword}"` : ""}. I will say when it moves.`;
-    }
-  },
-  {
-    name: "list_watches",
-    description: "What is being watched for changes right now.",
-    category: "research",
-    parameters: {},
-    required: [],
-    run: async () => {
-      const watches = await liveWatches();
-      if (watches.length === 0) return "Nothing being watched.";
-      return watches.map(
-        (watch) => `- ${watch.what}${watch.keyword ? ` (for "${watch.keyword}")` : ""}${watch.lastCheckedAt ? "" : " \u2014 not checked yet"}`
-      ).join("\n");
-    }
-  },
-  {
-    name: "stop_watch",
-    description: "Stop watching something. It is filed, not deleted.",
-    category: "research",
-    parameters: {
-      what: { type: "string", description: "Which watch to stop, by its wording." }
-    },
-    required: ["what"],
-    run: async (args) => {
-      const stopped = await stopWatch(String(args.what));
-      return stopped ? "Stopped watching it." : "Nothing being watched matches that.";
-    }
-  }
-];
-
-// server/tools/web.ts
-var webTools = [
-  {
-    name: "search_web",
-    description: "Look something up on the web. Use this whenever an answer depends on something current, specific, or outside what you already know \u2014 news, weather, prices, opening times, scores, recent events, anything that has changed since you were trained. Ask it a full question rather than keywords. Do not use it for things you already know.",
-    category: "research",
-    parameters: {
-      query: {
-        type: "string",
-        description: "The question to answer, in full. Include any detail from the conversation that narrows it \u2014 a place, a date, a name."
-      }
-    },
-    required: ["query"],
-    run: async (args) => {
-      const query = String(args.query ?? "").trim();
-      if (!query) return "No question was given to look up.";
-      const answer = await getProvider().complete({
-        system: "Answer the question from current web sources. Be brief and factual. Give the figures, names and dates that were asked for. If the sources disagree or are thin, say so rather than picking one.",
-        turns: [{ role: "user", text: query }],
-        search: true,
-        temperature: 0.2
-      });
-      return answer.trim() || "Nothing useful came back for that.";
-    }
-  }
-];
-
-// server/tools/work.ts
-function ago(iso) {
-  const hours = Math.round((Date.now() - new Date(iso).getTime()) / 36e5);
-  if (hours < 1) return "within the hour";
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.round(hours / 24)}d ago`;
-}
-var workTools = [
-  {
-    name: "check_github",
-    description: "Look at the user\u2019s GitHub: their open pull requests, reviews waiting on them, and issues assigned to them. Use it when they ask about their code, PRs, reviews, or what is waiting on them there.",
-    category: "research",
-    parameters: {},
-    required: [],
-    run: async () => {
-      try {
-        const view = await githubView();
-        const lines = [];
-        if (view.reviewsWanted.length > 0) {
-          lines.push(
-            `Reviews waiting on them: ${view.reviewsWanted.map((pr) => `${pr.title} (${pr.repo})`).join("; ")}`
-          );
-        }
-        if (view.prs.length > 0) {
-          lines.push(
-            `Their open PRs: ${view.prs.map((pr) => `${pr.title} (${pr.repo})`).join("; ")}`
-          );
-        }
-        if (view.issues.length > 0) {
-          lines.push(
-            `Assigned issues: ${view.issues.map((issue) => issue.title).join("; ")}`
-          );
-        }
-        return lines.length > 0 ? `Signed in as ${view.login}.
-${lines.join("\n")}
-
-Report this in a sentence or two, not as a list.` : `Signed in as ${view.login}. Nothing is waiting on them anywhere.`;
-      } catch (error) {
-        if (error instanceof GithubError) return error.message;
-        throw error;
-      }
-    }
-  },
-  {
-    name: "check_workflows",
-    description: "Look at the user\u2019s n8n: whether the workflows are healthy and what has failed lately. Use it when they ask about n8n, their workflows, or automation, and as part of a Work briefing.",
-    category: "research",
-    parameters: {},
-    required: [],
-    run: async () => {
-      try {
-        const view = await n8nView();
-        if (view.failures.length === 0) {
-          return `All healthy: ${view.active} active workflow${view.active === 1 ? "" : "s"}${view.inactive > 0 ? ` (${view.inactive} paused)` : ""}, ${view.recentTotal} recent runs, no failures.`;
-        }
-        const failed = view.failures.slice(0, 5).map((one) => `${one.workflow} (${ago(one.at)})`).join("; ");
-        return `${view.failures.length} failed execution${view.failures.length === 1 ? "" : "s"}: ${failed}. ${view.active} workflows active. Report the failures in a sentence; they can open n8n to dig in.`;
-      } catch (error) {
-        if (error instanceof N8nError) return error.message;
-        throw error;
-      }
-    }
-  },
-  {
-    name: "pause_workflow",
-    description: "Pause or resume one of the user\u2019s n8n workflows by name. Use it when they say to stop, pause, turn off, restart or turn back on a workflow \u2014 and offer it yourself when one is failing over and over, since every run of a broken workflow does the damage again. It cannot run a workflow: n8n offers no way to trigger one from outside, so say so if asked.",
-    category: "research",
-    parameters: {
-      name: { type: "string", description: "The workflow\u2019s name, as they said it." },
-      running: {
-        type: "boolean",
-        description: "True to resume it, false to pause it."
-      }
-    },
-    required: ["name", "running"],
-    run: async (args) => {
-      try {
-        const wanted = Boolean(args.running);
-        const { name, changed } = await setWorkflowActive(String(args.name), wanted);
-        if (!changed) {
-          return `${name} was already ${wanted ? "running" : "paused"}. Nothing to do.`;
-        }
-        return `${name} is ${wanted ? "running again" : "paused"}.`;
-      } catch (error) {
-        if (error instanceof N8nError) return error.message;
-        throw error;
-      }
-    }
-  },
-  {
-    name: "rerun_checks",
-    description: "Set the failed jobs of a repository\u2019s most recent red build running again. Use it when the user asks to re-run CI, the build, the checks, or the tests, or says a failure looks flaky. Only the failed jobs re-run.",
-    category: "research",
-    parameters: {
-      repo: {
-        type: "string",
-        description: "The repository, as owner/name if they said it that way, or just the name if it is one you have already seen in their work."
-      }
-    },
-    required: ["repo"],
-    run: async (args) => {
-      try {
-        const { repo, workflow, branch } = await rerunFailedChecks(String(args.repo));
-        return `Re-running the failed jobs of ${workflow} on ${branch} in ${repo}.`;
-      } catch (error) {
-        if (error instanceof GithubError) return error.message;
-        throw error;
-      }
-    }
-  }
-];
-
-// server/tools/index.ts
-var TOOLS = [
-  ...webTools,
-  ...machineTools,
-  ...reminderTools,
-  ...googleTools,
-  ...playstationTools,
-  ...consoleTools,
-  ...recallTools,
-  ...askTools,
-  ...openTools,
-  ...keepTools,
-  ...timerTools,
-  ...workTools,
-  ...selfTools,
-  ...lightTools
-];
-var AGREED = /^\s*(yes|yeah|yep|yup|ok(ay)?|sure|go ahead|do it|confirm(ed)?|send it|approved?|please do|go on|fine|absolutely|of course|make it so)\b/i;
-var AGREEMENT_FRESH_MS = 3 * 60 * 1e3;
-var confirmTool = {
-  name: "confirm_action",
-  description: "Run an action that was held for approval. Only call this after the user has clearly said yes to the specific thing you described. Pass the id you were given when the action was held.",
-  category: "research",
-  parameters: {
-    id: { type: "string", description: "The id from the hold message." }
-  },
-  required: ["id"],
-  run: async (args) => {
-    const id = String(args.id ?? "").trim();
-    const said2 = await lastUserSaid();
-    const entry = await take(id);
-    if (!entry) {
-      return `Nothing is held under "${id}" \u2014 it may have expired. Ask again if it still matters.`;
-    }
-    const agreed = said2 !== null && AGREED.test(said2.text) && new Date(said2.at).getTime() >= new Date(entry.at).getTime() && Date.now() - new Date(said2.at).getTime() < AGREEMENT_FRESH_MS;
-    if (!agreed) {
-      await restore(entry);
-      return `The user has not clearly said yes to that yet. Ask them plainly and wait for their answer. Do not call this again until they have.`;
-    }
-    const tool = findTool(entry.name);
-    if (!tool) return `The held action (${entry.name}) no longer exists.`;
-    const result = await tool.run(entry.args);
-    await noteDeed("acted", `${describe2(tool.name, result)} (confirmed by you)`).catch(() => {
-    });
-    return result;
-  }
-};
-TOOLS.push(confirmTool);
-function allTools() {
-  return TOOLS;
-}
-function findTool(name) {
-  return TOOLS.find((tool) => tool.name === name);
-}
-var LABELS = {
-  search_web: "Searched the web",
-  add_reminder: "Added to the list",
-  list_reminders: "Checked the list",
-  complete_reminder: "Marked something done",
-  check_mail: "Checked the mail",
-  read_mail: "Read an email",
-  draft_reply: "Wrote a draft",
-  check_diary: "Checked the diary",
-  add_to_diary: "Added to the diary",
-  check_playstation: "Looked at the PlayStation",
-  recent_games: "Checked recent games",
-  search_memory: "Went back through the record",
-  ask_choice: "Asked you something",
-  open_pages: "Opened a page",
-  open_workspace: "Switched workspace",
-  write_note: "Added to a note",
-  read_note: "Read a note back",
-  track_situation: "Logged a development",
-  list_situations: "Checked what is open",
-  resolve_situation: "Marked something settled",
-  set_timer: "Started a timer",
-  list_timers: "Checked the timers",
-  start_watch: "Started watching something",
-  list_watches: "Checked the watches",
-  stop_watch: "Stopped a watch",
-  search_files: "Looked through your documents",
-  read_document: "Read a document",
-  write_document: "Wrote a document",
-  set_lights: "Changed the lights",
-  dim_lights: "Dimmed the lights",
-  colour_lights: "Recoloured the lights",
-  list_lights: "Checked the lights",
-  check_github: "Checked GitHub",
-  check_workflows: "Checked the workflows",
-  file_mail: "Filed a message",
-  label_mail: "Labelled a message",
-  mark_mail: "Marked a message",
-  change_diary: "Moved something in the diary",
-  pause_workflow: "Changed a workflow",
-  rerun_checks: "Set the build running again",
-  open_on_laptop: "Put a page on the laptop",
-  lock_laptop: "Locked the laptop",
-  remember_this: "Kept something in mind",
-  correct_memory: "Corrected herself",
-  set_attention: "Changed how much she interrupts",
-  make_room: "Built a room",
-  notify_phone: "Reached your phone"
-};
-function label(name) {
-  return LABELS[name] ?? name.replace(/_/g, " ");
-}
-function describe2(name, result) {
-  const short = result.trim().split("\n")[0];
-  return short.length > 0 && short.length <= 60 && !short.includes("  ") ? `${label(name)} \u2014 ${short}` : label(name);
-}
-async function runTool(call4) {
-  const tool = findTool(call4.name);
-  if (!tool) {
-    return {
-      name: call4.name,
-      ok: false,
-      result: `There is no tool called ${call4.name}.`,
-      summary: `Tried to use a tool that doesn't exist (${call4.name})`
-    };
-  }
-  const missing = tool.required.filter(
-    (key) => call4.args[key] === void 0 || call4.args[key] === ""
-  );
-  if (missing.length > 0) {
-    return {
-      name: tool.name,
-      ok: false,
-      result: `Missing: ${missing.join(", ")}. Ask the user for it.`,
-      summary: `Needed more detail for ${tool.name}`
-    };
-  }
-  const destroys = tool.risky?.(call4.args) ?? tool.destructive ?? false;
-  if (tool.name !== confirmTool.name && (destroys || await requiresConfirmation(tool.category, destroys))) {
-    const receipt = await hold(tool.name, call4.args);
-    return {
-      name: tool.name,
-      ok: false,
-      result: `That needs the user's explicit go-ahead first. Describe exactly what you are about to do and ask them to confirm \u2014 then stop. Do not claim to have done it. If they say yes, call confirm_action with the id "${receipt.id}". It is held for five minutes.`,
-      summary: `Waiting on approval for ${tool.name}`
-    };
-  }
-  try {
-    const result = await tool.run(call4.args);
-    await noteDeed("acted", describe2(tool.name, result)).catch(() => {
-    });
-    return { name: tool.name, ok: true, result, summary: describe2(tool.name, result) };
-  } catch (error) {
-    const detail = error.message;
-    console.error(`[grace] tool ${tool.name} failed:`, detail);
-    return {
-      name: tool.name,
-      ok: false,
-      result: `That didn't work: ${detail}. Tell the user plainly.`,
-      summary: `${tool.name} failed`
-    };
-  }
-}
-var NEEDS = {
-  check_mail: "google",
-  read_mail: "google",
-  draft_reply: "google",
-  file_mail: "google",
-  label_mail: "google",
-  mark_mail: "google",
-  check_diary: "google",
-  add_to_diary: "google",
-  change_diary: "google",
-  check_github: "github",
-  rerun_checks: "github",
-  check_workflows: "n8n",
-  pause_workflow: "n8n",
-  check_playstation: "playstation",
-  recent_games: "playstation",
-  open_on_laptop: "room",
-  /*
-   * The machine tools need the bridge only when she is somewhere else.
-   *
-   * Running on the machine itself, they need nothing — so gating them on the
-   * bridge would hide her own hands from her, which is a very strange way for
-   * a local install to behave. `available.ts` reports the room as present when
-   * she is not deployed for exactly this reason.
-   */
-  list_folder: "room",
-  read_file: "room",
-  write_file: "room",
-  delete_file: "room",
-  run_command: "room",
-  lock_laptop: "room",
-  notify_phone: "phone",
-  set_lights: "lights",
-  dim_lights: "lights",
-  colour_lights: "lights",
-  list_lights: "lights",
-  check_lights: "lights",
-  set_scene: "lights",
-  adjust_scene: "lights",
-  restore_scene: "lights",
-  list_scenes: "lights"
-};
-function declarations(have) {
-  const usable = have ? TOOLS.filter((tool) => {
-    const needs = NEEDS[tool.name];
-    return !needs || have[needs];
-  }) : TOOLS;
-  return usable.map((tool) => {
-    const keys3 = Object.keys(tool.parameters);
-    if (keys3.length === 0) {
-      return { name: tool.name, description: tool.description };
-    }
-    return {
-      name: tool.name,
-      description: tool.description,
-      parameters: {
-        type: "OBJECT",
-        properties: Object.fromEntries(
-          Object.entries(tool.parameters).map(([key, spec]) => [
-            key,
-            {
-              type: spec.type.toUpperCase(),
-              description: spec.description,
-              ...spec.values ? { enum: spec.values } : {}
-            }
-          ])
-        ),
-        required: tool.required
-      }
-    };
-  });
-}
-
 // server/turn.ts
+init_ask();
+init_tools();
+init_open();
 var TOOLS_UNTIL_MS = 45e3;
 var NO_KEY_MESSAGE = "No Gemini API key is configured, so I have no voice to think with. Add GEMINI_API_KEY and restart me.";
 async function briefFor(via) {
@@ -5724,7 +6328,18 @@ function report2(timings, startedAt, deliberation) {
   );
 }
 
+// server/api.ts
+init_memory();
+init_calendar();
+init_gmail();
+init_oauth();
+
 // server/greeting.ts
+init_journal();
+init_memory();
+init_modes();
+init_reminders();
+init_store();
 var store19 = new Document("greeting", () => ({ at: null }));
 var EVERY_MS = 4 * 60 * 60 * 1e3;
 async function greet(compose2) {
@@ -5753,7 +6368,28 @@ ${soon}`,
   return { say: said2, message: await record2("grace", said2, "text") };
 }
 
+// server/api.ts
+init_journal();
+init_files();
+init_notes();
+init_situations();
+init_github();
+init_n8n();
+init_llm();
+init_ps5();
+
 // server/pulse.ts
+init_memory();
+init_calendar();
+init_gmail();
+init_oauth();
+init_journal();
+init_llm();
+init_modes();
+init_push();
+init_reminders();
+init_watch();
+init_store();
 var seen = new Document("pulse", () => ({ raised: {} }));
 var IMMINENT_MINUTES = 45;
 var FORGET_AFTER_MS = 36 * 60 * 60 * 1e3;
@@ -5912,6 +6548,14 @@ async function compose(concerns) {
   return said2.trim() || fallback(concerns);
 }
 
+// server/api.ts
+init_push();
+init_timers();
+init_watch();
+init_reminders();
+init_tools();
+init_lights();
+
 // shared/headers.ts
 var OUTPOST = "wss://35-228-41-171.nip.io";
 var POLICY = [
@@ -6030,6 +6674,9 @@ function trimTrailingSilence(input) {
 }
 
 // server/research.ts
+init_files();
+init_journal();
+init_llm();
 var STRANDS = 4;
 async function research(topic) {
   const asked = topic.trim().slice(0, 400);
@@ -6095,6 +6742,7 @@ ${one.found}`).join("\n\n")
 }
 
 // server/relay.ts
+init_store();
 import { randomBytes as randomBytes3, timingSafeEqual as timingSafeEqual4 } from "node:crypto";
 var store20 = new Document("relay", () => ({
   token: null,
@@ -6143,6 +6791,12 @@ function forSpeaking(reply) {
   return reply.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1").replace(/https?:\/\/\S+/g, "the link on screen").replace(/[*_`#]+/g, "").replace(/^\s*[-•]\s+/gm, "").replace(/\n{2,}/g, "\n").trim();
 }
 
+// server/api.ts
+init_chats();
+
+// server/voiceguard.ts
+init_store();
+
 // shared/voiceprint.ts
 var BANDS = 24;
 
@@ -6189,7 +6843,13 @@ async function forgetVoice() {
   return EMPTY;
 }
 
+// server/api.ts
+init_modes();
+init_memory();
+
 // server/weather.ts
+init_memory();
+init_llm();
 var cached5 = null;
 var FRESH_FOR_MS2 = 30 * 60 * 1e3;
 var PLACE = /\b(?:lives?|living|based|located|from|home)\b[^.]*?\bin\s+([A-Z][a-zA-Z .'-]{2,40})/;
@@ -6226,6 +6886,8 @@ async function weatherLine() {
 }
 
 // server/api.ts
+init_store();
+init_workspaces();
 function guard(handler) {
   return (req, res) => {
     handler(req, res).catch((error) => {
@@ -6643,12 +7305,12 @@ function createApi() {
         "'": "&#39;"
       })[character]
     );
-    const finish = (message) => res.status(200).send(
+    const finish2 = (message) => res.status(200).send(
       `<!doctype html><meta charset="utf-8"><title>Grace</title><body style="background:#07090c;color:#e2e8f0;font-family:system-ui;display:grid;place-items:center;height:100vh;margin:0;text-align:center"><div><p style="max-width:32rem;line-height:1.6">${escape(message)}</p><a href="/" style="color:#7dd3fc">Back to Grace</a></div>`
     );
     if (req.query.error) {
       console.error("[grace] google declined:", String(req.query.error));
-      finish("Google declined the connection. Nothing has changed.");
+      finish2("Google declined the connection. Nothing has changed.");
       return;
     }
     try {
@@ -6657,9 +7319,9 @@ function createApi() {
         String(req.query.state ?? "")
       );
       forgetAvailable();
-      finish(`Connected as ${email || "your Google account"}. You can close this.`);
+      finish2(`Connected as ${email || "your Google account"}. You can close this.`);
     } catch (error) {
-      finish(`Could not connect: ${error.message}`);
+      finish2(`Could not connect: ${error.message}`);
     }
   }));
   api.post("/google-disconnect", guard(async (_req, res) => {
