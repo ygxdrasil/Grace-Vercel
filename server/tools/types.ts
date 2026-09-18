@@ -31,6 +31,16 @@ export interface Tool {
    * allowed to be destructive at all — this exists so the guard can prove it.
    */
   destructive?: boolean;
+  /**
+   * Whether this particular call is the destructive kind.
+   *
+   * `destructive` is a property of the tool; this is a property of the
+   * request. One shell is both "list that folder" and "delete that folder",
+   * and a gate that cannot tell the two apart has to choose between asking
+   * about everything and asking about nothing. Both are wrong: the first
+   * trains the user to say yes without reading, which is worse than no gate.
+   */
+  risky?: (args: Record<string, unknown>) => boolean;
   run: (args: Record<string, unknown>) => Promise<string>;
 }
 

@@ -15,6 +15,15 @@ const DEFAULT_POLICIES: ActionPolicy[] = [
   {category: 'calendar', policy: 'never'},
   {category: 'home', policy: 'never'},
   {category: 'research', policy: 'never'},
+  /*
+   * Her hands on the machine itself.
+   *
+   * "Ask when risky" is the user's own line applied literally. Reading a file,
+   * listing a folder and running something that only looks are hers to get on
+   * with. Deleting, overwriting, and any command that can destroy something
+   * stop and ask — every time, whatever else is going on.
+   */
+  {category: 'machine', policy: 'high-risk'},
 ];
 
 const store = new Document<ActionPolicy[]>('policies', () => DEFAULT_POLICIES);
@@ -25,7 +34,21 @@ export function getPolicies(): Promise<ActionPolicy[]> {
 
 export async function policyFor(category: ActionCategory): Promise<ConfirmationPolicy> {
   const policies = await store.read();
-  return policies.find((entry) => entry.category === category)?.policy ?? 'always';
+  const stored = policies.find((entry) => entry.category === category);
+  if (stored) return stored.policy;
+
+  /*
+   * A category added after this user's policies were written.
+   *
+   * The stored list is a snapshot, so a category that did not exist when it
+   * was written is simply absent. Falling through to "always" would look like
+   * the safe reading and would in fact be a quiet fault: every listing of a
+   * folder would stop and ask, and the confirmations that genuinely matter
+   * would be lost in the noise of the ones that do not.
+   */
+  return (
+    DEFAULT_POLICIES.find((entry) => entry.category === category)?.policy ?? 'always'
+  );
 }
 
 /**

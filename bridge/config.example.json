@@ -1,6 +1,17 @@
 {
   "grace": "https://grace-vercel.vercel.app",
   "token": "paste the bridge token from Grace here",
+
+  "_roots": "The only folders she may read, write, or run anything in. Leave it out and it is your home folder. Anything outside this list is refused by the bridge itself, whatever she asks for.",
+  "roots": ["~"],
+
+  "_commandMs": "Longest a single command may run before it is stopped.",
+  "commandMs": 40000,
+
+  "_pollMs": "How often to ask for instructions when nothing is going on.",
   "pollMs": 15000,
+  "_busyPollMs": "And while a conversation is actually happening.",
+  "busyPollMs": 900,
+
   "ps5Ip": ""
 }

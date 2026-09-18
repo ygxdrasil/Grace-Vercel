@@ -19,13 +19,35 @@ import {Document} from './store/index';
  * unlike every other key she holds, which is never echoed back at all.
  */
 
-export type BridgeAction = 'wake' | 'sleep' | 'status' | 'open' | 'lock';
+export type BridgeAction =
+  | 'wake'
+  | 'sleep'
+  | 'status'
+  | 'open'
+  | 'lock'
+  /*
+   * Her hands on the machine, not only in the room.
+   *
+   * The same channel carries these, and that is exactly why they are safe to
+   * have at all: the laptop reaches out to her, so nothing on the home network
+   * is listening for anything, and an instruction only ever exists because the
+   * machine went and asked whether there was one.
+   */
+  | 'ls'
+  | 'read'
+  | 'write'
+  | 'remove'
+  | 'shell';
 
 export interface Command {
   id: string;
   action: BridgeAction;
-  /** What the action is about — the address to open, and nothing else so far. */
+  /** What the action is about: an address, a path, or a command line. */
   arg?: string;
+  /** What to write — the one action that carries content of its own. */
+  body?: string;
+  /** Permission to land on top of something that already exists. */
+  replace?: boolean;
   at: string;
   /** Set when the laptop has taken it, so it is never run twice. */
   claimedAt?: string;
@@ -112,7 +134,11 @@ export async function bridgeStatus(): Promise<{
 }
 
 /** Leaves an instruction for the laptop, and returns its id to wait on. */
-export async function enqueue(action: BridgeAction, arg?: string): Promise<string> {
+export async function enqueue(
+  action: BridgeAction,
+  arg?: string,
+  extra: {body?: string; replace?: boolean} = {},
+): Promise<string> {
   const id = randomUUID();
   const now = Date.now();
 
@@ -122,7 +148,14 @@ export async function enqueue(action: BridgeAction, arg?: string): Promise<strin
       // Anything nobody collected is not worth carrying, and a queue that only
       // grows is a console that suddenly does five things at once.
       ...current.queue.filter((command) => now - new Date(command.at).getTime() < STALE_MS),
-      {id, action, ...(arg ? {arg} : {}), at: new Date(now).toISOString()},
+      {
+        id,
+        action,
+        ...(arg ? {arg} : {}),
+        ...(extra.body !== undefined ? {body: extra.body} : {}),
+        ...(extra.replace ? {replace: true} : {}),
+        at: new Date(now).toISOString(),
+      },
     ],
   }));
 

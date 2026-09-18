@@ -11,6 +11,7 @@
  */
 
 import assert from 'node:assert/strict';
+import {spawn} from 'node:child_process';
 import {existsSync, readdirSync, readFileSync, rmSync} from 'node:fs';
 import type {AddressInfo} from 'node:net';
 import type {ChatEvent, ProfileEntry} from '../shared/types';
@@ -44,6 +45,8 @@ import {BANDS} from '../shared/voiceprint';
 import {trimTrailingSilence} from '../shared/trim';
 import {heardName, isPhantom, toldToSleep} from '../shared/wake';
 import {parseCommand, suggest} from '../shared/commands';
+import {looksDestructive} from '../server/tools/machine';
+import {requiresConfirmation, setPolicy} from '../server/actions';
 import {logKey, metaKey} from '../server/chats';
 import {forSpeaking, relayUrl} from '../server/relay';
 import {THINKING, effortFor} from '../shared/effort';
@@ -1774,14 +1777,58 @@ try {
     /protocol !== 'http:' && address\.protocol !== 'https:'/,
     'the bridge must open web addresses and nothing else',
   );
+  /*
+   * There is exactly one shell on that machine, and it is the one that was
+   * asked for.
+   *
+   * This used to forbid shells outright, which was right when the bridge only
+   * opened web pages: an address composed by a model and handed to a shell is
+   * an injection waiting to happen. The user has since asked for a terminal,
+   * so a blanket ban is no longer the rule — but the reasoning behind it is
+   * unchanged for everything else. Counting is what keeps both true. One is
+   * `run_command`, deliberate and gated; two means something else grew a
+   * shell quietly, which is precisely how the old class of bug returns.
+   */
+  const shells = bridgeCode.match(/shell: true/g) ?? [];
+  assert.equal(
+    shells.length,
+    1,
+    'only the terminal may use a shell — anything else must not have grown one',
+  );
+  assert.match(
+    bridgeCode,
+    /async function runCommand[\s\S]{0,600}shell: true/,
+    'and the one shell must be the terminal, not something that drifted into one',
+  );
   assert.doesNotMatch(
     bridgeCode,
     // Quoted, so the comment explaining why cmd is avoided does not itself
     // fail the check that cmd is avoided.
-    /shell: true|['"]cmd\.exe['"]/,
-    'nothing on the laptop may go through a shell',
+    /['"]cmd\.exe['"]/,
+    'opening a page must never go via cmd',
   );
-  ok('the bridge opens web addresses only, and never through a shell');
+  ok('the bridge opens web addresses without a shell, and has exactly one terminal');
+
+  // The boundary on the machine is the thing standing between a sentence and
+  // somebody's home directory, so it is proved against a real filesystem —
+  // real symlinks, real `..`, real absolute paths — rather than by reading it.
+  //
+  // Spawned rather than run inline, and asynchronously rather than with
+  // spawnSync: this suite is serving its own HTTP server on this same event
+  // loop, and blocking it for the couple of seconds those checks take drops
+  // the connections underneath it. The failure that produced was an
+  // ECONNRESET a thousand lines later, which is a genuinely horrible thing to
+  // debug and entirely self-inflicted.
+  const boundary = await new Promise<{code: number; out: string}>((settle) => {
+    const child = spawn('node', ['bridge/check.mjs']);
+    let out = '';
+    child.stdout.on('data', (chunk) => (out += chunk));
+    child.stderr.on('data', (chunk) => (out += chunk));
+    child.on('close', (code) => settle({code: code ?? 1, out}));
+  });
+  assert.equal(boundary.code, 0, `the bridge's own boundary checks failed:\n${boundary.out}`);
+  assert.match(boundary.out, /16 checks passed/, 'and all of them ran');
+  ok('paths outside the allowed folders are refused on the machine itself');
 
   // ---- she keeps listening while you are reading something else ----------
   // The detection loop ran on requestAnimationFrame, which every browser stops
@@ -2378,10 +2425,33 @@ try {
     assert.ok(names.includes(expected), `${expected} should exist`);
   }
   assert.ok(
-    !names.some((name) => /send|delete|remove|trash/i.test(name)),
-    'no tool may be named for sending or destroying',
+    !names.some((name) => /send/i.test(name)),
+    'no tool may be named for sending — that limit has no exceptions',
   );
-  ok('mail and diary tools exist, and none of them sends or destroys');
+  /*
+   * Destroying is a different case from sending, and the difference is the
+   * user's own.
+   *
+   * Sending is impossible: there is no tool, so there is nothing to talk her
+   * past. Destroying exists — they asked for their own machine — and is never
+   * silent. So the assertion is not "no such tool" but "no such tool that
+   * could run without being held", which is the promise that was actually
+   * made. A delete_file that quietly lost its marking would pass the old
+   * check by being renamed, and fails this one.
+   */
+  for (const tool of allTools()) {
+    if (!/delete|remove|trash|destroy/i.test(tool.name)) continue;
+    assert.equal(
+      tool.category,
+      'machine',
+      `${tool.name} destroys, so it belongs to the machine policy`,
+    );
+    assert.ok(
+      tool.destructive || tool.risky,
+      `${tool.name} destroys and must declare it, or the gate waves it through`,
+    );
+  }
+  ok('mail and diary tools exist, none sends, and nothing destroys unannounced');
 
   // ---- she cannot send mail, as a matter of code -------------------------
   // Google publishes no draft-only scope, so gmail.compose carries the ability
@@ -3315,6 +3385,103 @@ try {
   });
   assert.equal(stale.status, 401, 'the old token must stop working immediately');
   ok('replacing the token locks out every shortcut carrying the old one');
+
+  /*
+   * ---- the shell, and which commands stop to ask -------------------------
+   *
+   * The half of the machine gate that lives on this side. The other half —
+   * whether a path is allowed at all — is enforced on the user's own computer
+   * and proved there, by bridge/check.mjs, because a boundary checked where
+   * the request was written is not a boundary.
+   *
+   * What matters here is that the classifier is generous in the right
+   * direction. A confirmation nobody needed costs a second; a deletion nobody
+   * expected costs a day, so every case below that could destroy something
+   * must come back true, and the plainly harmless ones must not — a gate that
+   * asks about `ls` trains you to say yes without reading it.
+   */
+  for (const command of [
+    'rm -rf ~/notes',
+    'rm file.txt',
+    'mv a b',
+    'sudo apt install thing',
+    'dd if=/dev/zero of=/dev/sda',
+    'echo hi > notes.txt',
+    'git reset --hard',
+    'git push origin main --force',
+    'chmod 777 .',
+    'shutdown now',
+  ]) {
+    assert.equal(looksDestructive(command), true, `must stop and ask: ${command}`);
+  }
+  for (const command of [
+    'ls -la',
+    'cat notes.txt',
+    'git status',
+    'git log --oneline -20',
+    'npm test',
+    'grep -rn todo .',
+    'echo hi >> log.txt',
+    'node build.js 2>&1',
+    'df -h',
+  ]) {
+    assert.equal(looksDestructive(command), false, `must not ask: ${command}`);
+  }
+  ok('commands that can destroy something stop and ask, and plain ones do not');
+
+  // A tool is only as good as its category: if `run_command` were filed under
+  // anything the user has set to "act freely", the classifier above would be
+  // decoration. This asserts the wiring, not the intent.
+  const machine = allTools().filter((tool) =>
+    ['list_folder', 'read_file', 'write_file', 'delete_file', 'run_command'].includes(
+      tool.name,
+    ),
+  );
+  assert.equal(machine.length, 5, 'all five machine tools are registered');
+  for (const tool of machine) {
+    assert.equal(tool.category, 'machine', `${tool.name} is governed by the machine policy`);
+  }
+  assert.equal(
+    machine.find((tool) => tool.name === 'delete_file')?.destructive,
+    true,
+    'deleting always asks, whatever else is going on',
+  );
+  assert.equal(
+    machine.find((tool) => tool.name === 'write_file')?.risky?.({replace: true}),
+    true,
+    'overwriting asks',
+  );
+  assert.equal(
+    machine.find((tool) => tool.name === 'write_file')?.risky?.({}),
+    false,
+    'writing something new does not',
+  );
+  assert.equal(
+    await requiresConfirmation('machine', true),
+    true,
+    'the machine policy holds the risky ones',
+  );
+  assert.equal(
+    await requiresConfirmation('machine', false),
+    false,
+    'and lets her get on with the rest',
+  );
+  ok('reading is hers; deleting and overwriting are the user’s to allow');
+
+  /*
+   * And the promise survives the settings.
+   *
+   * "Can delete, but always asks" is not a default — it is the instruction. A
+   * gate that a dropdown can switch off is that promise only until somebody
+   * changes the dropdown, so this sets the machine policy to the most
+   * permissive value there is and proves a delete is still held.
+   */
+  await setPolicy('machine', 'never');
+  const held = await runTool({name: 'delete_file', args: {path: '~/anything'}});
+  assert.equal(held.ok, false, 'a delete is refused even when policy says act freely');
+  assert.match(held.result, /go-ahead/, 'and is held for the user to confirm');
+  await setPolicy('machine', 'high-risk');
+  ok('deleting asks even with the machine policy set to act freely');
 
   // ---- signing out actually closes the door ------------------------------
   await call('/logout', {method: 'POST'});

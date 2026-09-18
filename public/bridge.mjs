@@ -19,8 +19,10 @@
 import {spawn} from 'node:child_process';
 import dgram from 'node:dgram';
 import {existsSync, readFileSync} from 'node:fs';
+import {mkdir, readdir, readFile, realpath, stat, unlink, writeFile} from 'node:fs/promises';
+import {homedir} from 'node:os';
 import {fileURLToPath} from 'node:url';
-import {dirname, join} from 'node:path';
+import {dirname, join, resolve, sep} from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -55,15 +57,49 @@ function settings() {
      * How often to ask for instructions.
      *
      * Every check is a request to Grace and a read of her memory, both of
-     * which have monthly allowances on the free tiers she runs on. Fifteen
-     * seconds is frequent enough that a console which takes twenty seconds to
-     * boot feels immediate, and slow enough to be free.
+     * which have monthly allowances on the free tiers she runs on.
+     *
+     * This was fifteen seconds, which was right when the only question was
+     * whether a console was awake. It is the wrong number now: it is also how
+     * long the *first* thing she is asked to do sits waiting to be noticed,
+     * and fifteen seconds of nothing before a directory listing reads as
+     * broken rather than slow. Eight is the compromise — about ten thousand
+     * requests a day, which stays inside the free allowances with room, and
+     * short enough that the first answer arrives while you are still looking
+     * at the screen. Everything after it is immediate, because anything
+     * arriving puts the loop into the fast mode below.
      */
-    everyMs: Number(process.env.GRACE_BRIDGE_POLL_MS ?? file.pollMs ?? 15_000),
+    everyMs: Number(process.env.GRACE_BRIDGE_POLL_MS ?? file.pollMs ?? 8_000),
+    /**
+     * How often to look while a conversation is going on.
+     *
+     * Fifteen seconds is right for "is the console awake" and hopeless for
+     * "what is in this folder" — nobody waits a quarter of a minute per
+     * question. So the moment anything arrives the loop speeds up, and it
+     * slows back down when nothing has come for a couple of minutes. Fast
+     * only while it is being used costs almost nothing over a day.
+     */
+    busyMs: Number(process.env.GRACE_BRIDGE_BUSY_MS ?? file.busyPollMs ?? 900),
     /** Set this if discovery finds the wrong device, or none. */
     ip: process.env.PS5_IP ?? file.ps5Ip ?? '',
     /** Where playactor lives, if it is not in the usual place beside this file. */
     playactor: process.env.PLAYACTOR_CLI ?? file.playactor ?? '',
+    /*
+     * Which folders she may touch.
+     *
+     * Home by default, because "my files" means the user's files and not the
+     * operating system. It is a list rather than a switch so that it can be
+     * widened deliberately — an external drive, a projects folder elsewhere —
+     * and narrowed just as deliberately by someone who wants her nowhere near
+     * their home directory.
+     */
+    roots: (
+      process.env.GRACE_ROOTS?.split(',') ??
+      file.roots ??
+      [homedir()]
+    ).map((one) => resolve(String(one).trim().replace(/^~(?=$|\/)/, homedir()))),
+    /** Longest a single command may run before it is stopped. */
+    commandMs: Number(process.env.GRACE_COMMAND_MS ?? file.commandMs ?? 40_000),
   };
 }
 
@@ -347,7 +383,244 @@ async function settle(want, command) {
   };
 }
 
-async function carryOut(action, arg) {
+// ---- her hands on this machine -------------------------------------------
+
+/**
+ * The boundary, and the reason it lives here rather than only in Grace.
+ *
+ * Grace decides what to ask for. This decides what is allowed, and the two are
+ * deliberately not the same program: everything above this line arrived over
+ * the internet and was composed by a language model. A check that runs where
+ * the request was written is not a check. This one runs on the machine that
+ * owns the files, and it is the last word.
+ *
+ * Resolved rather than compared as text, and through the nearest ancestor that
+ * actually exists, because `~/notes/../../../etc/passwd` is a perfectly ordinary
+ * looking string and a symlink is a perfectly ordinary looking folder. Asking
+ * the filesystem where a path really goes is the only answer that holds.
+ */
+async function truly(path) {
+  let at = resolve(String(path).replace(/^~(?=$|\/)/, homedir()));
+  const missing = [];
+
+  for (;;) {
+    try {
+      return {real: join(await realpath(at), ...missing), existed: missing.length === 0};
+    } catch {
+      const up = dirname(at);
+      // The root of the filesystem does not exist as far as this can tell,
+      // which means the path was never going to resolve to anything.
+      if (up === at) return {real: resolve(String(path)), existed: false};
+      missing.unshift(at.slice(up.length + 1));
+      at = up;
+    }
+  }
+}
+
+async function allowed(path) {
+  const {real, existed} = await truly(path);
+
+  for (const root of config.roots) {
+    let base = root;
+    try {
+      base = await realpath(root);
+    } catch {
+      // A root that is not there cannot contain anything.
+      continue;
+    }
+    if (real === base || real.startsWith(base + sep)) return {ok: true, real, existed};
+  }
+
+  return {
+    ok: false,
+    real,
+    existed,
+    why:
+      `${real} is outside the folders this bridge is allowed to touch ` +
+      `(${config.roots.join(', ')}). Nothing was read or changed. The list is ` +
+      `"roots" in the bridge's config.json.`,
+  };
+}
+
+/** Enough of a file to be useful, and not enough to cost a fortune to read. */
+const MOST_CHARS = 60_000;
+/** Enough of a folder to see what is in it. */
+const MOST_ENTRIES = 300;
+
+function shortened(text, limit = MOST_CHARS) {
+  if (text.length <= limit) return text;
+  return (
+    text.slice(0, limit) +
+    `\n\n[...${text.length - limit} more characters, not shown]`
+  );
+}
+
+async function listFolder(path) {
+  const seen = await allowed(path);
+  if (!seen.ok) return {ok: false, detail: seen.why};
+
+  const entries = await readdir(seen.real, {withFileTypes: true});
+  const lines = [];
+
+  for (const entry of entries.slice(0, MOST_ENTRIES)) {
+    if (entry.isDirectory()) {
+      lines.push(`${entry.name}/`);
+      continue;
+    }
+    let size = '';
+    try {
+      const info = await stat(join(seen.real, entry.name));
+      size = `  ${info.size} bytes`;
+    } catch {
+      // A broken symlink or a file that vanished between the listing and the
+      // stat. Worth naming, not worth failing the whole listing over.
+      size = '  ?';
+    }
+    lines.push(`${entry.name}${size}`);
+  }
+
+  const more =
+    entries.length > MOST_ENTRIES
+      ? `\n[...${entries.length - MOST_ENTRIES} more]`
+      : '';
+
+  return {
+    ok: true,
+    detail: lines.length
+      ? `${seen.real}:\n${lines.join('\n')}${more}`
+      : `${seen.real} is empty.`,
+  };
+}
+
+async function readTextFile(path) {
+  const seen = await allowed(path);
+  if (!seen.ok) return {ok: false, detail: seen.why};
+
+  const info = await stat(seen.real);
+  if (info.isDirectory()) {
+    return {ok: false, detail: `${seen.real} is a folder, not a file.`};
+  }
+
+  const raw = await readFile(seen.real);
+  // A NUL byte in the first few kilobytes means this is not text, and handing
+  // a model a megabyte of mangled binary helps nobody and costs real money.
+  if (raw.subarray(0, 8000).includes(0)) {
+    return {
+      ok: false,
+      detail: `${seen.real} is a binary file (${info.size} bytes), not text.`,
+    };
+  }
+
+  return {ok: true, detail: `${seen.real}:\n\n${shortened(raw.toString('utf8'))}`};
+}
+
+async function writeTextFile(path, text, replace) {
+  const seen = await allowed(path);
+  if (!seen.ok) return {ok: false, detail: seen.why};
+
+  if (seen.existed && !replace) {
+    return {
+      ok: false,
+      detail:
+        `${seen.real} already exists and I was not told to replace it, so it ` +
+        `is untouched. Ask the user whether to overwrite it.`,
+    };
+  }
+
+  await mkdir(dirname(seen.real), {recursive: true});
+  await writeFile(seen.real, String(text ?? ''), 'utf8');
+  return {
+    ok: true,
+    detail: `${seen.existed ? 'Replaced' : 'Wrote'} ${seen.real} (${String(text ?? '').length} characters).`,
+  };
+}
+
+async function removeFile(path) {
+  const seen = await allowed(path);
+  if (!seen.ok) return {ok: false, detail: seen.why};
+  if (!seen.existed) return {ok: false, detail: `${seen.real} is not there.`};
+
+  const info = await stat(seen.real);
+  if (info.isDirectory()) {
+    return {
+      ok: false,
+      detail:
+        `${seen.real} is a folder. This deletes one file at a time on purpose ` +
+        `— a whole tree is not something to lose to a misheard sentence.`,
+    };
+  }
+
+  await unlink(seen.real);
+  return {ok: true, detail: `Deleted ${seen.real}.`};
+}
+
+/**
+ * The terminal.
+ *
+ * Run through the user's own shell, so what works when they type it works when
+ * she asks for it — aliases and PATH and all. Stopped after a fixed time,
+ * because a command that waits for input waits for ever and would otherwise
+ * take the bridge down with it, and read back with both streams together in
+ * the order they came, which is what they would have seen on screen.
+ */
+async function runCommand(command, folder) {
+  const where = await allowed(folder || config.roots[0]);
+  if (!where.ok) return {ok: false, detail: where.why};
+
+  return new Promise((done) => {
+    const child = spawn(command, {
+      cwd: where.real,
+      shell: true,
+      env: process.env,
+    });
+
+    let output = '';
+    let over = false;
+    const keep = (chunk) => {
+      if (output.length < MOST_CHARS * 2) output += chunk.toString();
+    };
+    child.stdout.on('data', keep);
+    child.stderr.on('data', keep);
+
+    // Read per call rather than once at startup, so the boundary check can
+    // shorten it without needing a second process.
+    const limitMs = Number(process.env.GRACE_COMMAND_MS ?? config.commandMs);
+    const timer = setTimeout(() => {
+      over = true;
+      child.kill('SIGKILL');
+    }, limitMs);
+
+    child.on('error', (error) => {
+      clearTimeout(timer);
+      done({ok: false, detail: `could not run it: ${error.message}`});
+    });
+
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      const text = shortened(output.trim()) || '(it printed nothing)';
+      if (over) {
+        return done({
+          ok: false,
+          detail:
+            `Stopped after ${Math.round(limitMs / 1000)} seconds — it ` +
+            `was still running. What it had printed by then:\n\n${text}`,
+        });
+      }
+      done({
+        ok: code === 0,
+        detail: code === 0 ? text : `It exited with code ${code}.\n\n${text}`,
+      });
+    });
+  });
+}
+
+async function carryOut(action, arg, command = {}) {
+  if (action === 'ls') return listFolder(arg ?? '');
+  if (action === 'read') return readTextFile(arg ?? '');
+  if (action === 'write') return writeTextFile(arg ?? '', command.body, command.replace);
+  if (action === 'remove') return removeFile(arg ?? '');
+  if (action === 'shell') return runCommand(arg ?? '', command.body);
+
   if (action === 'status') {
     const state = await discover();
     return {ok: state.found, detail: state.found ? `${state.status}` : 'no console answered'};
@@ -365,9 +638,30 @@ async function carryOut(action, arg) {
 
 let lastState = null;
 let quietSince = Date.now();
+/** When something last arrived, which decides how eagerly to look for more. */
+let busySince = 0;
+/** When the console was last looked for, so a fast loop is not a broadcast storm. */
+let lookedAt = 0;
+
+/** Fast for two minutes after anything happens, then back to sleepy. */
+const BUSY_FOR_MS = 2 * 60 * 1000;
+/** The console changes state rarely; asking the network every second is rude. */
+const REDISCOVER_MS = 30 * 1000;
 
 async function checkIn(results = []) {
-  const state = await discover();
+  /*
+   * The console hunt, unhooked from the poll rate.
+   *
+   * It is a UDP broadcast to the whole network, and it used to happen on every
+   * cycle because every cycle was fifteen seconds apart. Now a conversation
+   * drives the loop at about a second, and a broadcast per second for as long
+   * as someone is talking is a genuinely antisocial thing to do to a home
+   * network. A console's power state is not news often enough to need it.
+   */
+  const state =
+    Date.now() - lookedAt > REDISCOVER_MS || !lastState
+      ? ((lookedAt = Date.now()), await discover())
+      : lastState;
   lastState = state;
 
   const response = await fetch(`${config.grace}/api/bridge`, {
@@ -401,14 +695,19 @@ async function cycle() {
     return;
   }
 
+  busySince = Date.now();
+
   const results = [];
   for (const command of commands) {
     console.log(
       `[${new Date().toLocaleTimeString()}] ${command.action}` +
         (command.arg ? ` ${command.arg}` : ''),
     );
-    const outcome = await carryOut(command.action, command.arg);
-    console.log(`  ${outcome.ok ? 'done' : `failed: ${outcome.detail}`}`);
+    const outcome = await carryOut(command.action, command.arg, command);
+    // Only the first line, and never the file she just read: this is a log on
+    // somebody's laptop, not a place to spill the contents of their documents.
+    const said = (outcome.detail ?? '').split('\n')[0].slice(0, 160);
+    console.log(`  ${outcome.ok ? `done — ${said}` : `failed: ${said}`}`);
     results.push({id: command.id, ok: outcome.ok, detail: outcome.detail});
   }
 
@@ -417,6 +716,18 @@ async function cycle() {
   await checkIn(results);
   quietSince = Date.now();
 }
+
+/*
+ * The boundary is worth testing, so it has to be reachable without the loop.
+ *
+ * check.mjs imports this file to run the path and command cases against a real
+ * filesystem. Without this it would start polling a made-up address instead.
+ */
+export {carryOut, allowed, runCommand};
+
+if (process.env.GRACE_BRIDGE_CHECK) {
+  // Imported to be examined rather than run.
+} else {
 
 console.log(`Grace bridge — talking to ${config.grace}`);
 const first = await discover();
@@ -434,5 +745,8 @@ for (;;) {
     // bridge — it should simply try again in a moment.
     console.error(`  trouble: ${error.message}`);
   }
-  await new Promise((resolve) => setTimeout(resolve, config.everyMs));
+  const eager = Date.now() - busySince < BUSY_FOR_MS;
+  await new Promise((wait) => setTimeout(wait, eager ? config.busyMs : config.everyMs));
+}
+
 }

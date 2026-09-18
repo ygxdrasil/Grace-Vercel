@@ -45,6 +45,7 @@ const CATEGORY_LABEL: Record<ActionCategory, string> = {
   calendar: 'Calendar',
   home: 'Smart home',
   research: 'Web research',
+  machine: 'Your files & terminal',
 };
 
 function Section({title, children}: {title: string; children: ReactNode}) {

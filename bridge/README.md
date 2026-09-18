@@ -1,31 +1,71 @@
-# The laptop bridge
+# The bridge
 
-Grace runs on a server somewhere else. Your PlayStation only takes orders from
-something on your own Wi-Fi — waking one is a broadcast on the local network,
-and no amount of cloud gets around that.
+Grace runs on a server somewhere else. Your files are not there, your terminal
+is not there, and your PlayStation only takes orders from something on your own
+Wi-Fi.
 
-So this small program runs on the laptop that's already switched on in your
-room. It asks Grace every fifteen seconds whether she's left an instruction,
-does it, and tells her what happened.
+So this small program runs on the machine that's already switched on. It asks
+Grace whether she's left an instruction, does it, and tells her what happened.
 
 It only ever dials out. Nothing here listens on a port, so there's no router
 setting to change and nothing on your home network becomes reachable from
-outside.
+outside. An instruction exists only because your machine went and asked
+whether there was one.
 
 ## What she can actually do
 
 | | |
 |---|---|
-| Turn the PlayStation on | ✅ |
-| Put it into rest mode | ✅ |
-| Tell you if it's on, and what's running | ✅ |
-| Start a specific game | ❌ |
-| Press buttons | ❌ |
+| List a folder | ✅ |
+| Read a text file | ✅ |
+| Write a new file | ✅ |
+| Overwrite a file that exists | ✅ — asks first |
+| Delete a file | ✅ — asks first |
+| Run a command in your terminal | ✅ — asks first if it could destroy something |
+| Turn the PlayStation on, or put it to rest | ✅ |
+| Open a page on your screen, lock the machine | ✅ |
+| Start a specific game, press buttons | ❌ |
 
-The last two aren't a decision about what she's trusted with. A PS5 won't
-accept them from anything except a live Remote Play session — a video stream
-with a virtual controller attached — which is a different piece of software
-entirely. She'll say so rather than pretend she tried.
+The last one isn't about trust. A PS5 won't accept it from anything except a
+live Remote Play session, which is a different piece of software entirely.
+She'll say so rather than pretend she tried.
+
+## Where she can reach
+
+**Your home folder, and nothing else** — unless you say otherwise.
+
+Set `roots` in `config.json` to change it. It's a list, so you can add an
+external drive or a projects folder somewhere else, or narrow it to a single
+directory if you'd rather she were nowhere near the rest:
+
+```json
+"roots": ["~/Documents", "/Volumes/Work"]
+```
+
+This is enforced **here**, on your machine, not by Grace. Paths are resolved
+through symlinks and `..` before they're checked, so a path that merely looks
+like it's inside your home folder doesn't get in. That separation is
+deliberate: everything on her side of the wire was composed by a language
+model, and a check that runs where the request was written isn't a check.
+
+## What stops and asks
+
+Deleting, overwriting, and commands that could destroy something (`rm`, `mv`,
+`sudo`, `>`, force-pushes, and a long list besides) are held until you say yes
+in your own words. That's the rule you set — she can get on with anything she
+can undo, and stops for anything she can't.
+
+**Be straight with yourself about the limit.** The check on commands reads the
+command line, so it catches every ordinary way to lose a folder and it is not
+a proof. A script whose name gives nothing away, or a Python one-liner, can
+destroy something without matching any pattern. `roots` is the boundary that
+actually holds; the confirmation is a very good seatbelt, not a locked door.
+If that trade isn't one you want, narrow `roots` to a folder you don't mind
+losing.
+
+She also can't reach anything outside `roots`, so the bridge's own
+`config.json` — and the token in it — is only readable if you put `roots`
+somewhere that includes it.
 
 ## Setting it up
 

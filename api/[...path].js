@@ -409,7 +409,16 @@ var DEFAULT_POLICIES = [
   // covers cancelling and anything involving other people.
   { category: "calendar", policy: "never" },
   { category: "home", policy: "never" },
-  { category: "research", policy: "never" }
+  { category: "research", policy: "never" },
+  /*
+   * Her hands on the machine itself.
+   *
+   * "Ask when risky" is the user's own line applied literally. Reading a file,
+   * listing a folder and running something that only looks are hers to get on
+   * with. Deleting, overwriting, and any command that can destroy something
+   * stop and ask — every time, whatever else is going on.
+   */
+  { category: "machine", policy: "high-risk" }
 ];
 var store = new Document("policies", () => DEFAULT_POLICIES);
 function getPolicies() {
@@ -417,7 +426,9 @@ function getPolicies() {
 }
 async function policyFor(category) {
   const policies = await store.read();
-  return policies.find((entry) => entry.category === category)?.policy ?? "always";
+  const stored = policies.find((entry) => entry.category === category);
+  if (stored) return stored.policy;
+  return DEFAULT_POLICIES.find((entry) => entry.category === category)?.policy ?? "always";
 }
 async function setPolicy(category, policy) {
   const current = await store.read();
@@ -568,7 +579,7 @@ async function bridgeStatus() {
     state: current.state
   };
 }
-async function enqueue(action, arg) {
+async function enqueue(action, arg, extra = {}) {
   const id = randomUUID();
   const now = Date.now();
   await store2.update((current) => ({
@@ -577,7 +588,14 @@ async function enqueue(action, arg) {
       // Anything nobody collected is not worth carrying, and a queue that only
       // grows is a console that suddenly does five things at once.
       ...current.queue.filter((command) => now - new Date(command.at).getTime() < STALE_MS),
-      { id, action, ...arg ? { arg } : {}, at: new Date(now).toISOString() }
+      {
+        id,
+        action,
+        ...arg ? { arg } : {},
+        ...extra.body !== void 0 ? { body: extra.body } : {},
+        ...extra.replace ? { replace: true } : {},
+        at: new Date(now).toISOString()
+      }
     ]
   }));
   return id;
@@ -3317,6 +3335,137 @@ The list above is working material and must not appear in your reply in any form
   }
 ];
 
+// server/tools/machine.ts
+var NO_BRIDGE = "The bridge is not running on the user\u2019s machine, so I cannot reach their files or their shell at all. Say exactly that \u2014 the program has to be started on the computer itself \u2014 and do not imply anything happened.";
+var PATIENCE = {
+  shell: 45e3,
+  ls: 2e4,
+  read: 25e3,
+  write: 25e3,
+  remove: 25e3
+};
+async function ask(action, arg, extra = {}) {
+  const { online } = await bridgeStatus();
+  if (!online) return NO_BRIDGE;
+  const id = await enqueue(action, arg, extra);
+  const finished = await awaitResult(id, PATIENCE[action] ?? 12e3);
+  if (!finished) {
+    return "The machine took the instruction but has not reported back yet. Say it is still going rather than that it is done, and offer to check again.";
+  }
+  if (!finished.ok) {
+    return `That did not work: ${finished.detail || "the machine gave no reason"}.`;
+  }
+  return finished.detail || "Done.";
+}
+var DESTRUCTIVE = [
+  /\brm\b/,
+  /\brmdir\b/,
+  /\bunlink\b/,
+  /\bshred\b/,
+  /\btruncate\b/,
+  /\bdd\b/,
+  /\bmkfs/,
+  /\bfdisk\b/,
+  /\bdiskutil\b/,
+  /\bformat\b/,
+  /\bmv\b/,
+  /\bchmod\b/,
+  /\bchown\b/,
+  /\bkillall\b/,
+  /\bpkill\b/,
+  /\bshutdown\b/,
+  /\breboot\b/,
+  /\bhalt\b/,
+  /\bgit\s+(reset|clean|checkout\s+--|push\s+.*--force|push\s+.*-f\b)/,
+  /\b(npm|pnpm|yarn)\s+(publish|unpublish)\b/,
+  /\bdrop\s+(table|database)\b/i,
+  /\bsudo\b/,
+  /\bsu\b/,
+  /*
+   * Redirection that lands on top of a file.
+   *
+   * Not `>>`, which appends and loses nothing, and not `2>&1`, which points
+   * one stream at another and touches no file at all. The lookbehind is what
+   * makes the first of those work: without it the second angle bracket of
+   * `>>` is itself a `>` not followed by a `>`, so every append was read as
+   * an overwrite and asked about.
+   */
+  /(?<!>)>(?!>)(?!\s*&)/
+];
+function looksDestructive(command) {
+  return DESTRUCTIVE.some((pattern) => pattern.test(command));
+}
+var machineTools = [
+  {
+    name: "list_folder",
+    description: "List what is in a folder on the user\u2019s own computer. Paths may be absolute or start with ~ for their home folder. Use this before guessing at a path \u2014 she can see the machine, so she should look.",
+    parameters: {
+      path: { type: "string", description: "The folder, e.g. ~/Documents" }
+    },
+    required: ["path"],
+    category: "machine",
+    run: (args) => ask("ls", String(args.path))
+  },
+  {
+    name: "read_file",
+    description: "Read a text file on the user\u2019s own computer. Large files come back shortened, and binary files are refused rather than mangled.",
+    parameters: {
+      path: { type: "string", description: "The file, e.g. ~/notes/todo.md" }
+    },
+    required: ["path"],
+    category: "machine",
+    run: (args) => ask("read", String(args.path))
+  },
+  {
+    name: "write_file",
+    description: "Write a text file on the user\u2019s own computer. Creating a new file is free. Landing on top of a file that already exists needs replace=true, and that will stop and ask the user first.",
+    parameters: {
+      path: { type: "string", description: "The file to write" },
+      text: { type: "string", description: "The whole contents of the file" },
+      replace: {
+        type: "boolean",
+        description: "True to overwrite a file that already exists. Without it, an existing file is left alone and you are told so."
+      }
+    },
+    required: ["path", "text"],
+    category: "machine",
+    // Creating something is not destroying anything. Replacing something is.
+    risky: (args) => args.replace === true,
+    run: (args) => ask("write", String(args.path), {
+      body: String(args.text ?? ""),
+      replace: args.replace === true
+    })
+  },
+  {
+    name: "delete_file",
+    description: "Delete a file on the user\u2019s own computer. This always stops and asks them first \u2014 it is one of the three things they said must be confirmed.",
+    parameters: {
+      path: { type: "string", description: "The file to delete" }
+    },
+    required: ["path"],
+    category: "machine",
+    destructive: true,
+    run: (args) => ask("remove", String(args.path))
+  },
+  {
+    name: "run_command",
+    description: "Run a command in the terminal on the user\u2019s own computer and return what it printed. Anything that could destroy something \u2014 deleting, moving, overwriting, sudo \u2014 stops and asks them first. Prefer the plainest command that answers the question.",
+    parameters: {
+      command: { type: "string", description: "The command line to run" },
+      folder: {
+        type: "string",
+        description: "Which folder to run it in. Defaults to their home folder."
+      }
+    },
+    required: ["command"],
+    category: "machine",
+    risky: (args) => looksDestructive(String(args.command ?? "")),
+    run: (args) => ask("shell", String(args.command), {
+      body: args.folder ? String(args.folder) : void 0
+    })
+  }
+];
+
 // server/files.ts
 import { randomUUID as randomUUID7 } from "node:crypto";
 var MAX_CHARS = 4e4;
@@ -5151,6 +5300,7 @@ Report this in a sentence or two, not as a list.` : `Signed in as ${view.login}.
 // server/tools/index.ts
 var TOOLS = [
   ...webTools,
+  ...machineTools,
   ...reminderTools,
   ...googleTools,
   ...playstationTools,
@@ -5278,7 +5428,8 @@ async function runTool(call4) {
       summary: `Needed more detail for ${tool.name}`
     };
   }
-  if (tool.name !== confirmTool.name && await requiresConfirmation(tool.category, tool.destructive ?? false)) {
+  const destroys = tool.risky?.(call4.args) ?? tool.destructive ?? false;
+  if (tool.name !== confirmTool.name && (destroys || await requiresConfirmation(tool.category, destroys))) {
     const receipt = await hold(tool.name, call4.args);
     return {
       name: tool.name,
@@ -5320,6 +5471,13 @@ var NEEDS = {
   check_playstation: "playstation",
   recent_games: "playstation",
   open_on_laptop: "room",
+  // All of these are the bridge, so they are worth nothing without it — and
+  // worse than nothing, since she would offer them and then explain herself.
+  list_folder: "room",
+  read_file: "room",
+  write_file: "room",
+  delete_file: "room",
+  run_command: "room",
   lock_laptop: "room",
   notify_phone: "phone",
   set_lights: "lights",

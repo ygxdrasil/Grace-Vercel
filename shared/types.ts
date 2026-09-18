@@ -72,7 +72,9 @@ export type ActionCategory =
   | 'calendar'
   | 'home'
   | 'security'
-  | 'research';
+  | 'research'
+  /** The user's own computer: their files, and their shell. */
+  | 'machine';
 
 export type ConfirmationPolicy = 'always' | 'high-risk' | 'never';
 
