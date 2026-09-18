@@ -39,6 +39,14 @@ const MIN_SPEECH_MS = 700;
 /** No audio data at all by now means the capture is not really running. */
 const WATCHDOG_MS = 2800;
 
+/**
+ * How long a start may be in progress before a fresh press overrules it.
+ *
+ * Comfortably past the microphone's own patience for an unanswered permission
+ * prompt, so this only ever fires for something that has genuinely hung.
+ */
+const STUCK_AFTER_MS = 20_000;
+
 export type RecorderState = 'idle' | 'starting' | 'recording' | 'working';
 
 interface RecorderOptions {
@@ -80,12 +88,15 @@ export function useRecorder({onCaptured, deviceId}: RecorderOptions) {
   const spokeRef = useRef(false);
   /** True from the moment start() is called until the recorder is idle again. */
   const busyRef = useRef(false);
+  /** When it was set, so a guard that is never cleared cannot be permanent. */
+  const busySinceRef = useRef(0);
   /** Set when the watchdog fired, so its diagnosis is not written over. */
   const starvedRef = useRef(false);
 
   /** The only way back to idle, so the re-entrancy guard cannot be stranded. */
   const becomeIdle = useCallback(() => {
     busyRef.current = false;
+    busySinceRef.current = 0;
     setState('idle');
   }, []);
 
@@ -131,8 +142,20 @@ export function useRecorder({onCaptured, deviceId}: RecorderOptions) {
     // overwrite the lease, the audio context and the animation frame — leaving
     // the first stream open for the rest of the session with the browser's
     // recording light on and a level meter running forever.
-    if (busyRef.current) return;
+    //
+    // It is a guard and not a latch. Whatever it is waiting on can fail to
+    // come back — a permission prompt that is never answered, a promise that
+    // neither resolves nor rejects — and a guard that is never cleared is a
+    // button that is dead for the rest of the session, saying nothing. Past
+    // the point where any honest start could still be in progress, the press
+    // wins.
+    if (busyRef.current) {
+      const stuckFor = performance.now() - busySinceRef.current;
+      if (stuckFor < STUCK_AFTER_MS) return;
+      teardown();
+    }
     busyRef.current = true;
+    busySinceRef.current = performance.now();
 
     setError(null);
     setHeardSomething(false);

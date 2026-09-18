@@ -244,12 +244,27 @@ export default function App() {
     );
   }
 
+  /*
+   * Everything that can go wrong between a press and an answer, in the order
+   * you would want to hear it.
+   *
+   * The recorder's and the transcriber's complaints were missing from this
+   * list, and they are the two that matter most: between them they cover a
+   * blocked microphone, a muted one, an input with nothing routed into it, a
+   * clip too short to read, and a recording the server could not make words
+   * out of. Each one is written as a sentence telling you what to do about
+   * it. None of them reached the screen, so all five looked identical from
+   * the outside — a button that does nothing — and a diagnosis nobody can
+   * read is the same as no diagnosis at all.
+   */
   const notice =
     mode === 'offline'
       ? 'No Gemini API key found. Set GEMINI_API_KEY where Grace is running, then restart or redeploy her.'
-      // The live line's complaints included — a camera that would not open,
-      // a session that failed — or a button that does nothing is all you get.
-      : (grace.error ?? grace.live.trouble ?? grace.ambient.error);
+      : (grace.recorder.error ??
+        grace.misheard ??
+        grace.error ??
+        grace.live.trouble ??
+        grace.ambient.error);
 
   /*
    * Everything the panel reads from, worked out once.
@@ -642,6 +657,29 @@ export default function App() {
               }
               tone={!grace.micOn ? 'ice' : grace.ambient.ear === 'none' ? 'warn' : 'live'}
             />
+            {/* What the press itself did. The recorder reports its own state
+                honestly — a press that never opened the device never reaches
+                RECORDING — and SOUND answers the only question worth asking
+                when someone says she cannot hear them: is anything at all
+                arriving from this microphone? */}
+            <Row
+              label="MIC"
+              value={grace.recorder.state.toUpperCase()}
+              tone={
+                grace.recorder.error
+                  ? 'warn'
+                  : grace.recorder.state === 'idle'
+                    ? 'ice'
+                    : 'live'
+              }
+            />
+            {grace.recorder.state !== 'idle' && (
+              <Row
+                label="SOUND"
+                value={grace.recorder.heardSomething ? 'ARRIVING' : 'NONE YET'}
+                tone={grace.recorder.heardSomething ? 'live' : 'warn'}
+              />
+            )}
             <Row
               label="VOICE LOCK"
               value={grace.guard?.on ? grace.guard.strictness.toUpperCase() : 'OFF'}

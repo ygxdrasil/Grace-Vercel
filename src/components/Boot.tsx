@@ -1,4 +1,4 @@
-import {useEffect, useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 
 /**
  * The moment she comes up.
@@ -12,24 +12,38 @@ import {useEffect, useState} from 'react';
 export function Boot({onDone}: {onDone: () => void}) {
   const [leaving, setLeaving] = useState(false);
 
+  /*
+   * Held in a ref, and the timers set once.
+   *
+   * The caller passes a new function every render, so depending on it here
+   * meant the effect tore down and started again every time anything on the
+   * panel moved — and something on the panel moves every second. Both timers
+   * were restarted before either could fire, so the splash never left of its
+   * own accord: it stayed over the whole screen, at full opacity, swallowing
+   * every click. A button that cannot be pressed is indistinguishable from an
+   * assistant that cannot hear you.
+   */
+  const doneRef = useRef(onDone);
+  doneRef.current = onDone;
+
   useEffect(() => {
     const reduce =
       typeof window !== 'undefined' &&
       window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const hold = reduce ? 200 : 2100;
     const fade = window.setTimeout(() => setLeaving(true), hold);
-    const gone = window.setTimeout(onDone, hold + 500);
+    const gone = window.setTimeout(() => doneRef.current(), hold + 500);
     return () => {
       window.clearTimeout(fade);
       window.clearTimeout(gone);
     };
-  }, [onDone]);
+  }, []);
 
   return (
     <div
-      onClick={onDone}
+      onClick={() => doneRef.current()}
       className={`fixed inset-0 z-[80] grid place-items-center bg-void transition-opacity duration-500 ${
-        leaving ? 'opacity-0' : 'opacity-100'
+        leaving ? 'pointer-events-none opacity-0' : 'opacity-100'
       }`}>
       <div className="field pointer-events-none opacity-60" />
       <div className="text-center">
