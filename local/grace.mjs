@@ -29,6 +29,7 @@ import {spawn, spawnSync} from 'node:child_process';
 import {existsSync, readFileSync, writeFileSync, statSync, readdirSync} from 'node:fs';
 import {createInterface} from 'node:readline/promises';
 import {randomBytes} from 'node:crypto';
+import {homedir} from 'node:os';
 import {dirname, join, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
@@ -110,12 +111,87 @@ for (const key of [
  * back on says what to set and stops.
  */
 const interactive = Boolean(process.stdin.isTTY);
-const ask = interactive
-  ? createInterface({input: process.stdin, output: process.stdout})
-  : null;
 
-async function askFor(question, {fallback, orSet}) {
-  if (ask) return (await ask.question(question)).trim() || fallback || '';
+/**
+ * Made only when something is actually going to be asked.
+ *
+ * A readline interface takes stdin the moment it exists, and the hidden reader
+ * below needs stdin to itself. Since a second run answers everything from
+ * .env.local and asks nothing at all, the common case builds neither.
+ */
+let ask = null;
+function reader() {
+  if (!ask) ask = createInterface({input: process.stdin, output: process.stdout});
+  return ask;
+}
+
+/**
+ * A password, read without putting it on the screen.
+ *
+ * The first version of this let readline echo, and a freshly chosen password
+ * went into the terminal's scrollback — from where it can be read over a
+ * shoulder, scrolled back to, or pasted into a bug report along with
+ * everything else on screen. That is exactly how this one leaked.
+ *
+ * Written out by hand rather than through readline because readline's echo is
+ * not a per-keystroke thing that can be muted: it redraws the whole line, so
+ * an override that prints a dot per call prints one dot and then the entire
+ * password on the next redraw. Raw mode, one character at a time, is both
+ * simpler and the only version that is actually true.
+ */
+function askHidden(question) {
+  return new Promise((done) => {
+    const input = process.stdin;
+    process.stdout.write(question);
+
+    const wasRaw = input.isRaw;
+    input.setRawMode?.(true);
+    input.resume();
+    input.setEncoding('utf8');
+
+    let value = '';
+    const finish = (result) => {
+      input.removeListener('data', onKey);
+      input.setRawMode?.(wasRaw ?? false);
+      input.pause();
+      process.stdout.write('\n');
+      done(result);
+    };
+
+    const onKey = (chunk) => {
+      for (const key of chunk) {
+        // Enter, and end-of-input: both mean "that is the whole thing".
+        if (key === '\r' || key === '\n' || key === '') return finish(value);
+        // Ctrl+C has to keep working, and raw mode is where it stops doing so
+        // by itself — without this the only way out is closing the window.
+        if (key === '') {
+          finish('');
+          process.exit(130);
+        }
+        if (key === '' || key === '\b') {
+          if (value.length > 0) {
+            value = value.slice(0, -1);
+            process.stdout.write('\b \b');
+          }
+          continue;
+        }
+        // Arrow keys and the like arrive as escape sequences; a password is
+        // not a place to be clever about cursor movement, so they are ignored.
+        if (key < ' ') continue;
+        value += key;
+        process.stdout.write('*');
+      }
+    };
+
+    input.on('data', onKey);
+  });
+}
+
+async function askFor(question, {fallback, orSet, secret = false}) {
+  if (interactive) {
+    const answer = secret ? await askHidden(question) : await reader().question(question);
+    return answer.trim() || fallback || '';
+  }
   if (fallback) return fallback;
   fail(
     `I need to ask you something and there is no terminal to ask in.\n\n` +
@@ -133,7 +209,10 @@ step('Checking what she needs');
  * mail, a diary, and a shell.
  */
 if (!env.GRACE_PASSWORD) {
-  const chosen = await askFor('  Pick a password for Grace: ', {orSet: 'GRACE_PASSWORD'});
+  const chosen = await askFor('  Pick a password for Grace: ', {
+    orSet: 'GRACE_PASSWORD',
+    secret: true,
+  });
   if (chosen.length < 6) fail('That is too short to be worth having. Try again.');
   env.GRACE_PASSWORD = chosen;
 }
@@ -166,18 +245,76 @@ env.GCP_LOCATION ??= 'global';
  * being handed to Google's own library.
  */
 const keyFile = join(root, 'local', 'service-account.json');
+
+/**
+ * Where a freshly downloaded key actually is.
+ *
+ * Google names it after the project and a browser puts it in Downloads, so the
+ * step between downloading it and this script finding it is pure clerical work
+ * — and the kind people get wrong, because Windows hides the extension and
+ * saving from Notepad quietly appends `.txt`. Looking in the obvious place
+ * removes the step rather than explaining it.
+ *
+ * Only files that are a service-account key for this project are offered, and
+ * the check is the file's own contents rather than its name.
+ */
+function inDownloads(project) {
+  const downloads = join(homedir(), 'Downloads');
+  if (!existsSync(downloads)) return null;
+
+  try {
+    for (const name of readdirSync(downloads)) {
+      if (!name.toLowerCase().endsWith('.json')) continue;
+      const path = join(downloads, name);
+      try {
+        if (statSync(path).size > 16_000) continue;
+        const body = JSON.parse(readFileSync(path, 'utf8'));
+        if (body.type === 'service_account' && body.project_id === project) {
+          return {path, email: body.client_email};
+        }
+      } catch {
+        // Not JSON, not readable, not ours. Any of those means "not this one".
+      }
+    }
+  } catch {
+    // No Downloads folder worth reading. Fall through to asking.
+  }
+  return null;
+}
+
 if (!env.GCP_SERVICE_ACCOUNT_JSON) {
-  if (!existsSync(keyFile)) {
+  let found = existsSync(keyFile) ? keyFile : null;
+
+  if (!found) {
+    const downloaded = inDownloads(env.GCP_PROJECT_ID);
+    if (downloaded) {
+      say(`  Found a key for this project in Downloads: ${downloaded.path}`);
+      say(`    it belongs to ${downloaded.email}`);
+      const yes = await askFor('    Use it? [Y/n] ', {fallback: 'y'});
+      if (!/^n/i.test(yes)) {
+        writeFileSync(keyFile, readFileSync(downloaded.path), {mode: 0o600});
+        found = keyFile;
+        say(`  Copied it to ${keyFile}. You can delete the one in Downloads.`);
+      }
+    }
+  }
+
+  if (!found) {
     ask?.close();
     fail(
       `She needs the Google service-account key to think.\n\n` +
         `Save the JSON file you downloaded from Google Cloud as:\n\n` +
         `  ${keyFile}\n\n` +
-        `It is the same file you pasted into Vercel. Then run this again.\n` +
-        `Nothing reads it except Google's own library, and it never leaves this machine.`,
+        `If you have not got one on this machine, make a new one — a service\n` +
+        `account can hold several, so this does not disturb the one on Vercel:\n\n` +
+        `  https://console.cloud.google.com/iam-admin/serviceaccounts?project=${env.GCP_PROJECT_ID}\n` +
+        `  the account → Keys → Add key → Create new key → JSON\n\n` +
+        `Then run this again. Nothing reads it except Google's own library, and\n` +
+        `it never leaves this machine.`,
     );
   }
-  env.GCP_SERVICE_ACCOUNT_JSON = readFileSync(keyFile, 'utf8').trim();
+
+  env.GCP_SERVICE_ACCOUNT_JSON = readFileSync(found, 'utf8').trim();
   say('  Found the Google key.');
 }
 
