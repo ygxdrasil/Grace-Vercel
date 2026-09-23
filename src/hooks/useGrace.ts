@@ -595,7 +595,12 @@ export function useGrace() {
   });
 
   const ambient = useAmbient({
-    enabled: micOn,
+    // Only once she is unlocked. The saved "ear on" was restored at load, so
+    // on the lock screen — before any password — she opened the microphone,
+    // recorded whoever was talking, and posted it. The server refused it, so
+    // nothing was ever transcribed; a locked Grace still has no business
+    // listening at all.
+    enabled: micOn && (session === 'ok' || session === 'open'),
     deviceId,
     // Her own voice must never wake her, and the recorder must never be
     // fighting her for the microphone.

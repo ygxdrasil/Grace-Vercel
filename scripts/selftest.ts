@@ -310,6 +310,16 @@ try {
   }
   ok('her ears load as real files, which the policy allows');
 
+  // A locked Grace does not listen. The saved "ear on" was restored at load,
+  // so the lock screen opened the microphone and posted recordings before
+  // anyone had typed a password. Driven in Chromium to find it; pinned here.
+  assert.match(
+    readFileSync('src/hooks/useGrace.ts', 'utf8'),
+    /useAmbient\(\{[\s\S]{0,600}?enabled:\s*micOn && \(session === 'ok' \|\| session === 'open'\)/,
+    'the ear must stay shut until she is unlocked',
+  );
+  ok('she does not listen on the lock screen');
+
   // ---- the lock ----------------------------------------------------------
   assert.equal((await call('/state')).status, 401, 'locked before signing in');
   ok('closed to anyone without the password');
