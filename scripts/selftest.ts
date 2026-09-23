@@ -2739,6 +2739,17 @@ try {
   assert.doesNotMatch(thisAccount, /dim_lights/, 'without saying she can work them');
   ok('a power she has not got yet explains how to give it to her');
 
+  // Mail the same way. With nothing to say she invented a principle — "I do
+  // not log into your personal accounts or read your email" — for what was
+  // only a missing connection.
+  assert.match(thisAccount, /not connected yet[\s\S]*Connect Gmail and Calendar/);
+  assert.doesNotMatch(wholeSelf, /not connected yet, so you cannot see their mail/);
+  assert.doesNotMatch(thisAccount, /You never sign in to any website/, 'a missing tool is not a rule');
+  // And her computer: the tools come with the user's own rule for them.
+  assert.match(wholeSelf, /delete_file[^.]*always stops and asks/);
+  assert.doesNotMatch(thisAccount, /run_command/, 'no machine, no machine tools described');
+  ok('mail and her computer explain themselves, and deleting always asks');
+
   // ---- whose voice she answers to ----------------------------------------
   // The maths, proved against synthesised voices with known fundamentals and
   // known formants. A recording of a real person would be worse on every
