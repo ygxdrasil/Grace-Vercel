@@ -339,8 +339,21 @@ function run(command, args, extra = {}) {
   if (done.status !== 0) fail(`\`${command} ${args.join(' ')}\` failed.`);
 }
 
+/*
+ * Installed when missing, and again when a pull has changed what she needs.
+ *
+ * npm stamps node_modules/.package-lock.json on every install, so a lockfile
+ * newer than that stamp means `git pull` brought a dependency this machine
+ * does not have yet — and without this she would start, reach for it, and
+ * crash with a module-not-found that says nothing about pulling.
+ */
+const lockAt = (path) => (existsSync(path) ? statSync(path).mtimeMs : 0);
+const installedAt = lockAt(join(root, 'node_modules', '.package-lock.json'));
 if (!existsSync(join(root, 'node_modules'))) {
   step('Installing what she is built from (this takes a minute)');
+  run('npm', ['install']);
+} else if (lockAt(join(root, 'package-lock.json')) > installedAt && installedAt > 0) {
+  step('Something she depends on changed — updating');
   run('npm', ['install']);
 }
 
@@ -374,7 +387,14 @@ function newestUnder(directory) {
 
 const built = join(root, 'dist', 'index.html');
 const builtAt = existsSync(built) ? statSync(built).mtimeMs : 0;
-const sourceAt = Math.max(newestUnder(join(root, 'src')), newestUnder(join(root, 'shared')));
+// public/ too: her audio worklets live there, and a pull that changed only
+// one of them would otherwise keep serving the old copy from dist/.
+const sourceAt = Math.max(
+  newestUnder(join(root, 'src')),
+  newestUnder(join(root, 'shared')),
+  newestUnder(join(root, 'public')),
+  lockAt(join(root, 'index.html')),
+);
 
 if (sourceAt > builtAt) {
   step('Building her interface');

@@ -1,3 +1,4 @@
+import {knownCause} from './llm/plainly';
 import express, {type Express, type Request, type Response} from 'express';
 import type {
   ActionCategory,
@@ -691,11 +692,12 @@ export function createApi(): Express {
         const detail = (error as Error).message ?? 'unknown error';
         console.error('[grace] transcription failed:', detail);
 
-        const explained = /API[_ ]?KEY|not valid|UNAUTHENTICATED/i.test(detail)
-          ? 'My API key was rejected. Check GEMINI_API_KEY where I am running.'
-          : /quota|RESOURCE_EXHAUSTED|rate/i.test(detail)
-            ? 'I have hit the daily limit on my free allowance. It resets tomorrow.'
-            : 'I could not make out that recording. Try again, a little closer to the microphone.';
+        // Only a failure with no other known cause is blamed on the recording.
+        // Everything used to be — a missing model or a dead connection told you
+        // to move closer to the microphone.
+        const explained =
+          knownCause(detail) ??
+          'I could not make out that recording. Try again, a little closer to the microphone.';
 
         res.status(502).json({error: explained});
       }
@@ -1432,11 +1434,7 @@ export function createApi(): Express {
         const detail = (error as Error).message ?? 'unknown error';
         console.error('[grace] speech failed:', detail);
 
-        const explained = /API[_ ]?KEY|not valid|UNAUTHENTICATED/i.test(detail)
-          ? 'My API key was rejected. Check GEMINI_API_KEY where I am running.'
-          : /quota|RESOURCE_EXHAUSTED|rate/i.test(detail)
-            ? 'I have used up my speech allowance for now. It resets shortly.'
-            : 'I could not put that into words out loud.';
+        const explained = knownCause(detail) ?? 'I could not put that into words out loud.';
 
         // The raw provider message goes back too. This is the user's own
         // server behind their own password, and without it every diagnosis of

@@ -2152,7 +2152,12 @@ function googleConfigured() {
 function redirectUri() {
   if (process.env.GOOGLE_REDIRECT_URI) return process.env.GOOGLE_REDIRECT_URI;
   const host = process.env.VERCEL_PROJECT_PRODUCTION_URL;
-  return host ? `https://${host}/api/google-callback` : "http://localhost:3001/api/google-callback";
+  return host ? `https://${host}/api/google-callback` : (
+    // The port she is actually on. This was a fixed 3001, but the local
+    // launcher runs her on 7766 — so Google sent the browser back to a port
+    // nothing was listening on, and connecting could never succeed.
+    `http://localhost:${process.env.PORT ?? 3001}/api/google-callback`
+  );
 }
 function authorizeUrl() {
   const state = issueNonce("google-oauth");
@@ -6403,6 +6408,57 @@ var init_tools = __esm({
 // server/vercel-entry.ts
 import express2 from "express";
 
+// server/llm/plainly.ts
+function dig(text, depth = 0) {
+  const found = { message: text, status: "", code: 0 };
+  if (depth > 4) return found;
+  const start = text.indexOf("{");
+  if (start < 0) return found;
+  try {
+    const body = JSON.parse(text.slice(start));
+    const error = body.error ?? body;
+    const message = typeof error.message === "string" ? error.message : text;
+    const inner = message.includes("{") ? dig(message, depth + 1) : null;
+    return {
+      message: inner?.message ?? message,
+      status: inner?.status || (typeof error.status === "string" ? error.status : ""),
+      code: inner?.code || (typeof error.code === "number" ? error.code : 0)
+    };
+  } catch {
+    return found;
+  }
+}
+function knownCause(raw) {
+  const { message, status, code } = dig(raw);
+  const all = `${raw} ${message} ${status}`;
+  if (/API_KEY_INVALID|API key not valid|UNAUTHENTICATED|invalid_grant|PERMISSION_DENIED/i.test(all) || code === 401 || code === 403) {
+    return "Google refused the key she thinks with. Check the service-account file, or Config \u2192 Keys.";
+  }
+  if (/RESOURCE_EXHAUSTED|quota|rate limit/i.test(all) || code === 429) {
+    return "Google is rate-limiting her for a moment. Try again in a few seconds.";
+  }
+  if (code === 404 || /NOT_FOUND|was not found|does not exist/i.test(all)) {
+    const model = /models\/([\w.-]+)/.exec(all)?.[1] ?? /(gemini-[\w.-]+)/.exec(all)?.[1];
+    return model ? `The model "${model}" isn't available to her. It may be misnamed or not enabled in this region.` : "Something she asked Google for does not exist.";
+  }
+  if (/UNAVAILABLE|overloaded|503|502|INTERNAL/i.test(all) || code >= 500) {
+    return "Google's side is struggling right now. Try again in a moment.";
+  }
+  if (/fetch failed|ENOTFOUND|ECONNREFUSED|ECONNRESET|EAI_AGAIN|getaddrinfo|network/i.test(all)) {
+    return "She couldn't reach Google. Is the internet connection up?";
+  }
+  if (/DEADLINE|timed? ?out|aborted/i.test(all)) {
+    return "That took too long and was cut off.";
+  }
+  return null;
+}
+function plainly(raw) {
+  const known2 = knownCause(raw);
+  if (known2) return known2;
+  const flat = dig(raw).message.replace(/\s+/g, " ").trim();
+  return flat.length > 180 ? `${flat.slice(0, 177)}\u2026` : flat || "unknown error";
+}
+
 // server/api.ts
 init_actions();
 init_auth();
@@ -7046,7 +7102,7 @@ async function takeTurn({
     return {
       reply,
       message: message2,
-      error: `I couldn't finish that thought \u2014 ${detail}`,
+      error: `I couldn't finish that thought \u2014 ${plainly(detail)}`,
       acted,
       deliberation
     };
@@ -8018,7 +8074,7 @@ function createApi() {
       } catch (error) {
         const detail = error.message ?? "unknown error";
         console.error("[grace] transcription failed:", detail);
-        const explained = /API[_ ]?KEY|not valid|UNAUTHENTICATED/i.test(detail) ? "My API key was rejected. Check GEMINI_API_KEY where I am running." : /quota|RESOURCE_EXHAUSTED|rate/i.test(detail) ? "I have hit the daily limit on my free allowance. It resets tomorrow." : "I could not make out that recording. Try again, a little closer to the microphone.";
+        const explained = knownCause(detail) ?? "I could not make out that recording. Try again, a little closer to the microphone.";
         res.status(502).json({ error: explained });
       }
     })
@@ -8545,7 +8601,7 @@ function createApi() {
       } catch (error) {
         const detail = error.message ?? "unknown error";
         console.error("[grace] speech failed:", detail);
-        const explained = /API[_ ]?KEY|not valid|UNAUTHENTICATED/i.test(detail) ? "My API key was rejected. Check GEMINI_API_KEY where I am running." : /quota|RESOURCE_EXHAUSTED|rate/i.test(detail) ? "I have used up my speech allowance for now. It resets shortly." : "I could not put that into words out loud.";
+        const explained = knownCause(detail) ?? "I could not put that into words out loud.";
         res.status(502).json({ error: explained, detail: detail.slice(0, 500) });
       }
     })

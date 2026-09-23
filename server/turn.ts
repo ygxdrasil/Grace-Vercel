@@ -1,3 +1,4 @@
+import {plainly} from './llm/plainly';
 import {type Deliberation, effortFor} from '../shared/effort';
 import type {Choice, InputMode, Message} from '../shared/types';
 import {getPolicies} from './actions';
@@ -286,7 +287,7 @@ export async function takeTurn({
     return {
       reply,
       message,
-      error: `I couldn't finish that thought — ${detail}`,
+      error: `I couldn't finish that thought — ${plainly(detail)}`,
       acted,
       deliberation,
     };

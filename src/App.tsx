@@ -174,6 +174,24 @@ export default function App() {
   // Nothing of hers renders until the session is settled, so a lapsed cookie
   // can't flash her transcript on screen first. But an unreachable server used
   // to leave this as a blank glow forever, with nothing to explain it.
+  /*
+   * Escape closes whatever is on top, one layer per press.
+   *
+   * Nothing listened for it, so the settings drawer and the files panel could
+   * both be open at once, covering CAMERA and SCREEN, with the only way out a
+   * small CLOSE in a corner of each.
+   */
+  useEffect(() => {
+    const key = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      if (voiceLockOpen) setVoiceLockOpen(false);
+      else if (panelOpen) setPanelOpen(false);
+      else if (showFiles) setShowFiles(false);
+    };
+    window.addEventListener('keydown', key);
+    return () => window.removeEventListener('keydown', key);
+  }, [voiceLockOpen, panelOpen, showFiles]);
+
   if (session === null) {
     return (
       <div className="relative grid h-screen place-items-center overflow-hidden px-6">
@@ -376,6 +394,7 @@ export default function App() {
     {id: 'panel', label: 'Settings', hint: 'settings', run: () => setPanelOpen(true)},
   ];
 
+
   return (
     <div
       className="fixed inset-0 flex flex-col overflow-hidden bg-void"
@@ -445,7 +464,10 @@ export default function App() {
           ))}
           <button
             type="button"
-            onClick={() => setShowFiles((open) => !open)}
+            onClick={() => {
+              setPanelOpen(false);
+              setShowFiles((open) => !open);
+            }}
             className={`readout transition ${
               showFiles ? 'text-ice' : 'text-mist/40 hover:text-ice/70'
             }`}>
@@ -453,7 +475,10 @@ export default function App() {
           </button>
           <button
             type="button"
-            onClick={() => setPanelOpen(true)}
+            onClick={() => {
+              setShowFiles(false);
+              setPanelOpen(true);
+            }}
             className="readout text-mist/40 transition hover:text-ice/70">
             CONFIG
           </button>

@@ -508,4 +508,22 @@ await check('Google sends you back to the port she is actually on', async () => 
   }
 });
 
+await check('errors reach the screen as sentences, not JSON', async () => {
+  const {plainly, knownCause} = await import('../server/llm/plainly.ts');
+  // The shape Google actually throws: JSON whose message is more JSON.
+  const nested =
+    '{"error":{"message":"{\\n \\"error\\": {\\n \\"code\\": 400,\\n \\"message\\": ' +
+    '\\"API key not valid.\\",\\n \\"status\\": \\"INVALID_ARGUMENT\\"}}","code":400}}';
+  assert.match(plainly(nested), /refused the key/);
+  assert.doesNotMatch(plainly(nested), /[{}\\]/, 'no braces or escapes left');
+  // The one that was on your screen for a day.
+  assert.match(
+    plainly('{"error":{"code":404,"message":"Publisher Model `projects/p/locations/global/publishers/google/models/gemini-3.1-pro` was not found","status":"NOT_FOUND"}}'),
+    /"gemini-3\.1-pro" isn't available/,
+  );
+  assert.match(plainly('fetch failed'), /couldn't reach Google/);
+  // And a failed recording is only blamed on the recording when nothing else explains it.
+  assert.equal(knownCause('the audio was empty'), null);
+});
+
 console.log(`\n${passed} checks passed.\n`);
