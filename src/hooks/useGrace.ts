@@ -532,9 +532,15 @@ export function useGrace() {
    * listen every time somebody speaks would undo the point of deciding here.
    */
   const [guard, setGuard] = useState<GuardState | null>(null);
+  // Waits for the session. It used to run once on mount, before the password
+  // had been typed — got a 401, kept null, and never asked again. Null means
+  // no lock, so a voice lock you had switched on was silently off after
+  // every sign-in until the page was reloaded.
+  const signedIn = session === 'ok' || session === 'open';
   useEffect(() => {
+    if (!signedIn) return;
     void api.voiceGuard().then(setGuard).catch(() => {});
-  }, []);
+  }, [signedIn]);
 
   /*
    * The spoken conversation, when there is a machine to hold one open.

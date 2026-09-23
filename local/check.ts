@@ -494,4 +494,18 @@ await check('a folder outside the allowed ones is refused', async () => {
   assert.match(out.result, /outside the folders/);
 });
 
+await check('Google sends you back to the port she is actually on', async () => {
+  // The launcher runs her on 7766. The redirect was a fixed 3001, so Google
+  // returned the browser to a port nothing listened on and connecting failed.
+  const {redirectUri} = await import('../server/google/oauth.ts');
+  const before = process.env.PORT;
+  process.env.PORT = '7766';
+  try {
+    assert.equal(redirectUri(), 'http://localhost:7766/api/google-callback');
+  } finally {
+    if (before === undefined) delete process.env.PORT;
+    else process.env.PORT = before;
+  }
+});
+
 console.log(`\n${passed} checks passed.\n`);

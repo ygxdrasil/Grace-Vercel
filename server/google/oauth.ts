@@ -74,7 +74,10 @@ export function redirectUri(): string {
   const host = process.env.VERCEL_PROJECT_PRODUCTION_URL;
   return host
     ? `https://${host}/api/google-callback`
-    : 'http://localhost:3001/api/google-callback';
+    : // The port she is actually on. This was a fixed 3001, but the local
+      // launcher runs her on 7766 — so Google sent the browser back to a port
+      // nothing was listening on, and connecting could never succeed.
+      `http://localhost:${process.env.PORT ?? 3001}/api/google-callback`;
 }
 
 export function authorizeUrl(): string {

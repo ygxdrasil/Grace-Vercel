@@ -1,5 +1,6 @@
 import {useEffect, useState} from 'react';
-import {fetchKeys, saveKey, type KeyName, type KeyStatus} from '../lib/api';
+import {fetchKeys, googleStatus, saveKey, type KeyName, type KeyStatus} from '../lib/api';
+import type {GoogleStatus} from '../../shared/types.ts';
 
 const FIELDS: {name: KeyName; label: string; blurb: string; secret: boolean}[] = [
   {
@@ -76,8 +77,12 @@ export function Keys({onSaved}: {onSaved?: () => void}) {
   const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const [google, setGoogle] = useState<GoogleStatus | null>(null);
+  const [copied, setCopied] = useState(false);
+
   useEffect(() => {
     fetchKeys().then(setStatus).catch(() => {});
+    googleStatus().then(setGoogle).catch(() => {});
   }, []);
 
   const save = async (name: KeyName) => {
@@ -136,6 +141,36 @@ export function Keys({onSaved}: {onSaved?: () => void}) {
       })}
       {/* Right here, next to the credentials that make it possible. Burying it
           elsewhere means pasting two keys and then hunting for the button. */}
+      {/* The one value that has to be typed into Google's console by hand, and
+          the one people get wrong. The server always knew it; nothing showed it. */}
+      {google && !google.connected && (
+        <div className="rounded-lg border border-mist/15 bg-black/20 px-3 py-2">
+          <p className="text-[0.65rem] text-mist/60">
+            In Google Cloud → Credentials → your OAuth client, add this exactly
+            under <span className="text-mist/80">Authorised redirect URIs</span>:
+          </p>
+          <div className="mt-1.5 flex items-center gap-2">
+            <code className="min-w-0 flex-1 truncate text-[0.7rem] text-ice">{google.redirectUri}</code>
+            <button
+              type="button"
+              onClick={() => {
+                void navigator.clipboard?.writeText(google.redirectUri).then(() => {
+                  setCopied(true);
+                  window.setTimeout(() => setCopied(false), 1500);
+                });
+              }}
+              className="shrink-0 rounded border border-ice/40 px-2 py-0.5 text-[0.65rem] text-ice hover:bg-ice/15">
+              {copied ? 'Copied' : 'Copy'}
+            </button>
+          </div>
+        </div>
+      )}
+      {google?.connected && (
+        <p className="text-[0.65rem] text-mist/60">
+          Google connected{google.email ? ` as ${google.email}` : ''}.
+          {google.problem && <span className="text-rose-300"> {google.problem}</span>}
+        </p>
+      )}
       {status?.googleClientId.set && status?.googleClientSecret.set && (
         <a
           href="/api/google-start"

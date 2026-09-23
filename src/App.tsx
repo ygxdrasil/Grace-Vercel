@@ -120,14 +120,19 @@ export default function App() {
 
   useEffect(() => {
     const tick = window.setInterval(() => setNow(new Date()), 1000);
-    const load = () => void api.fetchDay().then((next) => next && setDay(next));
+    return () => window.clearInterval(tick);
+  }, []);
+
+  // After sign-in, not on mount: before the password it is a 401, and the
+  // panel then sat empty until the next two-minute refresh.
+  const signedIn = grace.session === 'ok' || grace.session === 'open';
+  useEffect(() => {
+    if (!signedIn) return;
+    const load = () => void api.fetchDay().then((next) => next && setDay(next)).catch(() => {});
     load();
     const refresh = window.setInterval(load, 120_000);
-    return () => {
-      window.clearInterval(tick);
-      window.clearInterval(refresh);
-    };
-  }, []);
+    return () => window.clearInterval(refresh);
+  }, [signedIn]);
 
   const {session, state, mode} = grace;
   const {opening} = grace;
