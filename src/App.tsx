@@ -406,7 +406,7 @@ export default function App() {
       <div className="vignette" />
 
       {/* ---- top rule ---- */}
-      <header className="relative z-20 flex shrink-0 items-center justify-between gap-4 border-b border-ice/15 px-4 py-2">
+      <header className="relative z-20 flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-1.5 border-b border-ice/15 px-4 py-2">
         <div className="flex min-w-0 items-center gap-4">
           <span
             className="whitespace-nowrap text-[0.78rem] tracking-[0.34em] text-ice"
@@ -433,7 +433,9 @@ export default function App() {
           </span>
         </div>
 
-        <div className="flex shrink-0 items-baseline gap-4">
+        {/* Its own row on a phone. Unwrapped, it lay over her name and pushed
+            the clock off the edge of the screen. */}
+        <div className="flex shrink-0 items-baseline gap-4 max-sm:w-full max-sm:justify-between max-sm:gap-2">
           <button
             type="button"
             onClick={() => setShowTalk((open) => !open)}
@@ -482,7 +484,7 @@ export default function App() {
             className="readout text-mist/40 transition hover:text-ice/70">
             CONFIG
           </button>
-          <div className="text-right">
+          <div className="text-right max-sm:hidden">
             <div className="text-lg leading-none tabular-nums text-ice">
               {now.toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit'})}
             </div>
