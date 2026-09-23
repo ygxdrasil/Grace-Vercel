@@ -43,51 +43,14 @@ export interface LiveHandlers {
 }
 
 /**
- * Turns whatever the microphone produces into what she expects.
+ * Turns whatever the microphone produces into what she expects: 16kHz PCM.
  *
- * Runs in an audio worklet rather than on the main thread: capture happens
- * every few milliseconds, and sharing a thread with React means the audio
- * stutters whenever anything renders. The worklet is written here as a string
- * because it must be a separate file to the browser but should not be a
- * separate file to a person reading this.
+ * Runs in an audio worklet (public/worklets/capture.js) rather than on the
+ * main thread, which would stutter whenever React rendered. A real file and
+ * not a blob URL, because her security policy refuses blob: scripts — the
+ * blob version failed before every call and she fell back to the slow path.
  */
-const CAPTURE = `
-class Capture extends AudioWorkletProcessor {
-  constructor() {
-    super();
-    this.buffer = [];
-    // Roughly 40ms of audio per message. Smaller means more messages than the
-    // socket wants; larger is audible as lag before she notices you speaking.
-    this.target = Math.round(sampleRate / 25);
-  }
-
-  process(inputs) {
-    const channel = inputs[0]?.[0];
-    if (!channel) return true;
-    for (let i = 0; i < channel.length; i += 1) this.buffer.push(channel[i]);
-
-    while (this.buffer.length >= this.target) {
-      const slice = this.buffer.splice(0, this.target);
-      // Straight-line resample to 16kHz. Not the most faithful method there
-      // is, and entirely good enough for speech — the model is listening for
-      // words, not mastering a record.
-      const ratio = sampleRate / ${LISTENS_AT};
-      const out = new Int16Array(Math.floor(slice.length / ratio));
-      for (let i = 0; i < out.length; i += 1) {
-        const sample = slice[Math.floor(i * ratio)] ?? 0;
-        // Clamped before scaling. Anything past 1 wraps around to the
-        // opposite extreme once it is an integer, which sounds like a burst
-        // of static exactly when someone raises their voice.
-        const clamped = Math.max(-1, Math.min(1, sample));
-        out[i] = clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff;
-      }
-      this.port.postMessage(out.buffer, [out.buffer]);
-    }
-    return true;
-  }
-}
-registerProcessor('capture', Capture);
-`;
+const CAPTURE_URL = '/worklets/capture.js';
 
 function toBase64(bytes: ArrayBuffer): string {
   const view = new Uint8Array(bytes);
@@ -137,12 +100,7 @@ export class LiveVoice {
     if (audio.state === 'suspended') await audio.resume();
     this.audio = audio;
 
-    const worklet = URL.createObjectURL(new Blob([CAPTURE], {type: 'text/javascript'}));
-    try {
-      await audio.audioWorklet.addModule(worklet);
-    } finally {
-      URL.revokeObjectURL(worklet);
-    }
+    await audio.audioWorklet.addModule(CAPTURE_URL);
 
     const socket = new WebSocket(`${url}?token=${encodeURIComponent(token)}`);
     this.socket = socket;
@@ -157,7 +115,9 @@ export class LiveVoice {
     });
 
     this.source = audio.createMediaStreamSource(stream);
-    this.capture = new AudioWorkletNode(audio, 'capture');
+    this.capture = new AudioWorkletNode(audio, 'capture', {
+      processorOptions: {rate: LISTENS_AT},
+    });
     this.capture.port.onmessage = (event) => {
       if (socket.readyState !== WebSocket.OPEN) return;
       socket.send(

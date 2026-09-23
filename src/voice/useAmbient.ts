@@ -34,70 +34,14 @@ import {heardName, isPhantom, toldToSleep} from '../../shared/wake';
  */
 
 /**
- * The ear itself, as source text.
+ * Where the ear lives: public/worklets/ears.js.
  *
- * Kept as a string and handed over as a blob rather than shipped as its own
- * file, because a worklet module is fetched by URL at runtime and a separate
- * asset is one more thing to get wrong in a build, a deploy, or a cache.
- *
- * All it does is measure loudness and post it back about twenty times a second.
- * Every decision stays on the main thread where the rest of this file can see
- * it; the audio thread is only there because it keeps running.
+ * It was a string handed over as a blob URL, which her own security policy
+ * refuses — worklet modules count as scripts, and script-src does not allow
+ * blob:. It failed to load every time, the watchdog fell back to the frame
+ * clock, and she went deaf whenever the tab lost focus.
  */
-const EARS = `
-class Ears extends AudioWorkletProcessor {
-  constructor() {
-    super();
-    this.sum = 0;
-    this.count = 0;
-    this.frames = 0;
-    this.held = [];
-  }
-
-  process(inputs) {
-    const channel = inputs[0] && inputs[0][0];
-    if (channel) {
-      let sum = 0;
-      for (let i = 0; i < channel.length; i++) sum += channel[i] * channel[i];
-      this.sum += sum;
-      this.count += channel.length;
-      this.frames += channel.length;
-      this.held.push(channel.slice());
-    }
-
-    // Roughly every 50ms. Blocks are 128 frames, which would be 375 messages a
-    // second — enough to make the main thread the bottleneck it was not.
-    if (this.frames >= sampleRate * 0.05) {
-      // The audio itself travels with the reading. It is the only way to have
-      // the moment *before* someone started speaking: by the time loudness has
-      // crossed a threshold, the first syllable is already in the past, and a
-      // recorder started at that instant has missed it. Missing the first
-      // syllable of "Grace, put the lights on" is missing the word that
-      // decides whether she answers at all.
-      let total = 0;
-      for (const block of this.held) total += block.length;
-      const audio = new Float32Array(total);
-      let at = 0;
-      for (const block of this.held) {
-        audio.set(block, at);
-        at += block.length;
-      }
-      this.held = [];
-
-      this.port.postMessage(
-        {rms: this.count > 0 ? Math.sqrt(this.sum / this.count) : 0, audio},
-        [audio.buffer],
-      );
-      this.sum = 0;
-      this.count = 0;
-      this.frames = 0;
-    }
-
-    return true;
-  }
-}
-registerProcessor('grace-ears', Ears);
-`;
+const EARS_URL = '/worklets/ears.js';
 
 const CALIBRATION_MS = 600;
 /**
@@ -698,12 +642,7 @@ export function useAmbient({
      * which keeps the graph alive and puts not one sample into the speakers.
      */
     try {
-      const url = URL.createObjectURL(new Blob([EARS], {type: 'text/javascript'}));
-      try {
-        await context.audioWorklet.addModule(url);
-      } finally {
-        URL.revokeObjectURL(url);
-      }
+      await context.audioWorklet.addModule(EARS_URL);
 
       const ears = new AudioWorkletNode(context, 'grace-ears');
       earsRef.current = ears;

@@ -275,6 +275,41 @@ try {
   }
   ok('the policy permits the voice it ships with, in both copies');
 
+  /*
+   * Worklets are scripts, and the policy allows no blob: scripts.
+   *
+   * Both of her audio worklets were once handed over as blob URLs. Neither
+   * ever loaded. Her background ear fell back to the frame clock (deaf the
+   * moment the tab lost focus) and every live call failed before it began and
+   * fell back to recording — slow, but working, so nobody saw it fail. The HUD
+   * said EAR — FRAMES the whole time.
+   */
+  {
+    const {readFileSync, readdirSync} = await import('node:fs');
+    const {join} = await import('node:path');
+    const scripts = /script-src ([^;]*)/.exec(policy)?.[1] ?? '';
+    const walk = (dir: string): string[] =>
+      readdirSync(dir, {withFileTypes: true}).flatMap((entry) =>
+        entry.isDirectory() ? walk(join(dir, entry.name)) : [join(dir, entry.name)],
+      );
+    for (const file of walk('src').filter((name) => /\.tsx?$/.test(name))) {
+      const text = readFileSync(file, 'utf8');
+      if (scripts.includes('blob:')) break;
+      assert.ok(
+        !/addModule\(\s*(url|worklet|URL\.createObjectURL)/.test(text) &&
+          !/type:\s*'text\/javascript'/.test(text),
+        `${file} loads a script from a blob, which the policy refuses`,
+      );
+    }
+    for (const worklet of ['ears', 'capture']) {
+      assert.ok(
+        readdirSync('public/worklets').includes(`${worklet}.js`),
+        `public/worklets/${worklet}.js is missing — she cannot hear without it`,
+      );
+    }
+  }
+  ok('her ears load as real files, which the policy allows');
+
   // ---- the lock ----------------------------------------------------------
   assert.equal((await call('/state')).status, 401, 'locked before signing in');
   ok('closed to anyone without the password');
@@ -1880,7 +1915,7 @@ try {
   const ambient = readFileSync('src/voice/useAmbient.ts', 'utf8');
   assert.match(ambient, /audioWorklet\.addModule/, 'listening must run on the audio thread');
   assert.match(
-    ambient,
+    readFileSync('public/worklets/ears.js', 'utf8'),
     /registerProcessor\('grace-ears'/,
     'the worklet itself has to be there, not merely referenced',
   );
