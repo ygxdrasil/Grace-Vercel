@@ -526,4 +526,42 @@ await check('errors reach the screen as sentences, not JSON', async () => {
   assert.equal(knownCause('the audio was empty'), null);
 });
 
+await check('the page and the server never both look at once', async () => {
+  // Both run pulse(), and whichever sees an email first claims it. Only the
+  // page can say it aloud, so while a visible page is looking the server's
+  // loop stands back — at two minutes apart it would otherwise always win.
+  const {pageLooked, serverShouldLook} = await import('../server/heartbeat.ts');
+  pageLooked();
+  assert.equal(serverShouldLook(), false, 'a page looked just now: leave it to the page');
+  assert.equal(serverShouldLook(Date.now() + 4 * 60_000), false);
+  assert.equal(serverShouldLook(Date.now() + 5 * 60_000), true, 'page gone quiet: take over');
+});
+
+await check('mail is checked constantly, web pages only hourly', async () => {
+  const {createServer} = await import('node:http');
+  let body = 'in stock: no';
+  let fetches = 0;
+  const site = createServer((_req, res) => {
+    fetches += 1;
+    res.end(`<p>${body}</p>`);
+  });
+  await new Promise<void>((ready) => site.listen(0, '127.0.0.1', ready));
+  const port = (site.address() as {port: number}).port;
+  try {
+    const {startWatch, stopWatch, checkWatches} = await import('../server/watch.ts');
+    await startWatch('the restock test', `http://127.0.0.1:${port}/`);
+    assert.deepEqual(await checkWatches(), [], 'first reading is recorded silently');
+    body = 'in stock: yes';
+    const soon = await checkWatches(Date.now() + 2 * 60_000);
+    assert.deepEqual(soon, [], 'two minutes later the site is not fetched again');
+    assert.equal(fetches, 1);
+    const later = await checkWatches(Date.now() + 56 * 60_000);
+    assert.equal(later.length, 1, 'an hour on, the change is seen');
+    assert.match(later[0].detail, /restock test changed/);
+    await stopWatch('the restock test');
+  } finally {
+    site.close();
+  }
+});
+
 console.log(`\n${passed} checks passed.\n`);

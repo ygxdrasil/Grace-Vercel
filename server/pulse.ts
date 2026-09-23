@@ -238,7 +238,7 @@ export interface PulseResult {
  * common case and the reason this can run every few minutes on a ten dollar
  * budget.
  */
-export async function pulse(): Promise<PulseResult> {
+export async function pulse({fromPage = false}: {fromPage?: boolean} = {}): Promise<PulseResult> {
   const fresh = await unraised(await gather());
   if (fresh.length === 0) return {concerns: [], say: null, held: null};
 
@@ -261,9 +261,16 @@ export async function pulse(): Promise<PulseResult> {
   //
   // One notification, not one per item: everything found this hour goes out
   // together or not at all.
+  //
+  // Not for what a visible page is about to say aloud. She checks every couple
+  // of minutes now, and a buzz in your pocket for every email she has just
+  // told you about, at your own desk, is how a phone gets put face down.
+  const spokenHere = new Set(fromPage ? speakable : []);
   const worthABuzz = sorted.filter(
     (concern) =>
-      concern.urgency !== 'whenever' && (!overnight(now) || concern.urgency === 'now'),
+      !spokenHere.has(concern) &&
+      concern.urgency !== 'whenever' &&
+      (!overnight(now) || concern.urgency === 'now'),
   );
   if (worthABuzz.length > 0) {
     await notify('Grace', worthABuzz.map((concern) => concern.text).join(' · ')).catch(

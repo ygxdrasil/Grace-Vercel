@@ -1,3 +1,4 @@
+import {pageLooked} from './heartbeat';
 import {knownCause} from './llm/plainly';
 import express, {type Express, type Request, type Response} from 'express';
 import type {
@@ -1265,11 +1266,14 @@ export function createApi(): Express {
   api.post(
     '/pulse',
     guard(async (_req, res) => {
+      // A visible page is looking, and can speak; the server's own loop
+      // stands back while it does. See heartbeat.ts.
+      pageLooked();
       if (!isConfigured()) {
         res.json({concerns: [], say: null, held: null});
         return;
       }
-      res.json(await pulse());
+      res.json(await pulse({fromPage: true}));
     }),
   );
 

@@ -16,8 +16,12 @@ import * as api from '../lib/api.ts';
  * the worst case here is a wasted round trip rather than a repeated remark.
  */
 
-/** Once an hour, which is what the user asked for. */
-const EVERY_MS = 60 * 60 * 1000;
+/**
+ * Every two minutes. It was hourly; the user asked for her to check
+ * constantly. A look with nothing new costs no model call at all, and the
+ * server's own loop stands back while this page is the one looking.
+ */
+const EVERY_MS = 2 * 60 * 1000;
 
 /**
  * Nothing at all for the first stretch after opening.

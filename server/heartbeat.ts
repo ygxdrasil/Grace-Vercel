@@ -24,14 +24,38 @@ import {pulse} from './pulse';
  */
 
 /**
- * How often she looks, and why it is not more often.
+ * How often she looks: constantly, because it costs nothing to.
  *
- * Every look reads the diary and the inbox; most find nothing and cost
- * nothing, because the model is only asked when there is something new to say.
- * Hourly is frequent enough that a meeting is never missed by more than that,
- * and rare enough that a day of silence is genuinely free.
+ * Every look reads the diary, the inbox and the list — free API reads — and the
+ * model is only asked when something is new, for one short sentence. So the
+ * interval buys responsiveness and nothing else: an email that arrived a
+ * minute ago is mentioned within two, not within the hour. Page watches, which
+ * fetch whole websites, throttle themselves to hourly in watch.ts.
  */
-const EVERY_MS = Number(process.env.GRACE_PULSE_MS) || 60 * 60 * 1000;
+const EVERY_MS = Number(process.env.GRACE_PULSE_MS) || 2 * 60 * 1000;
+
+/**
+ * How recently the page must have looked for the server to leave it to it.
+ *
+ * The open page and this loop both run pulse(), and whichever sees something
+ * first claims it. The page can say it aloud; this can only write it down and
+ * buzz a phone. So while a visible page is looking, this stands back — at two
+ * minutes apart the server would otherwise win nearly every time, and she
+ * would go quiet in the very room you were sitting in.
+ */
+const PAGE_FRESH_MS = 5 * 60 * 1000;
+
+let pageLookedAt = 0;
+
+/** Called by the /pulse route: a visible page is looking for itself. */
+export function pageLooked(): void {
+  pageLookedAt = Date.now();
+}
+
+/** Whether the server should look, given when the page last did. */
+export function serverShouldLook(now = Date.now()): boolean {
+  return now - pageLookedAt >= PAGE_FRESH_MS;
+}
 
 /**
  * A pause before the first one.
@@ -45,6 +69,7 @@ const SETTLE_MS = 60 * 1000;
 let beating: NodeJS.Timeout | null = null;
 
 async function look(): Promise<void> {
+  if (!serverShouldLook()) return;
   try {
     const found = await pulse();
     if (found.concerns.length === 0) return;

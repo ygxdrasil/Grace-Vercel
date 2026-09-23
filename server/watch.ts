@@ -122,8 +122,21 @@ export interface WatchChange {
  * compare it against yet, and announcing "it is the same as the value I just
  * invented" would be nonsense.
  */
-export async function checkWatches(): Promise<WatchChange[]> {
-  const watches = await liveWatches();
+/**
+ * How often one watch is fetched, however often she looks around.
+ *
+ * Mail and the diary are checked every couple of minutes because reading them
+ * is free. A watch fetches someone else's whole web page, and doing that every
+ * two minutes is rude to the site and pointless for the kind of thing people
+ * watch — a restock, a price, a results page.
+ */
+const WATCH_EVERY_MS = 55 * 60 * 1000;
+
+export async function checkWatches(at = Date.now()): Promise<WatchChange[]> {
+  const watches = (await liveWatches()).filter(
+    (watch) =>
+      !watch.lastCheckedAt || at - new Date(watch.lastCheckedAt).getTime() >= WATCH_EVERY_MS,
+  );
   if (watches.length === 0) return [];
 
   const changes: WatchChange[] = [];

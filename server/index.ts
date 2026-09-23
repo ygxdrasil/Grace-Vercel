@@ -55,7 +55,7 @@ app.listen(config.port, () => {
    * tab was open. Here it runs for as long as she does.
    */
   if (startHeartbeat()) {
-    console.log('[grace] looking around on her own, hourly');
+    console.log('[grace] checking mail, diary and reminders every couple of minutes');
   }
 
   if (!process.env.GRACE_SECRET) {

@@ -440,481 +440,148 @@ var init_store = __esm({
   }
 });
 
-// server/actions.ts
-function getPolicies() {
-  return store.read();
+// server/journal.ts
+import { randomUUID } from "node:crypto";
+async function recentDeeds(limit = 25) {
+  const all = await store.read();
+  return all.slice(-limit).reverse();
 }
-async function policyFor(category) {
-  const policies = await store.read();
-  const stored = policies.find((entry) => entry.category === category);
-  if (stored) return stored.policy;
-  return DEFAULT_POLICIES.find((entry) => entry.category === category)?.policy ?? "always";
+async function noteDeed(kind, text, unprompted = false) {
+  const clean = text.trim().slice(0, 300);
+  if (!clean) return;
+  const entry = {
+    id: randomUUID(),
+    at: (/* @__PURE__ */ new Date()).toISOString(),
+    kind,
+    text: clean,
+    ...unprompted ? { unprompted: true } : {}
+  };
+  await store.update((current) => [...current, entry].slice(-LIMIT));
 }
-async function setPolicy(category, policy) {
-  const current = await store.read();
-  const existing = current.find((entry) => entry.category === category);
-  if (!existing) {
-    return { ok: false, reason: `unknown action category "${category}"` };
+var LIMIT, store;
+var init_journal = __esm({
+  "server/journal.ts"() {
+    init_store();
+    LIMIT = 120;
+    store = new Document("journal", () => []);
   }
-  if (existing.locked) {
-    return {
-      ok: false,
-      reason: `"${category}" is a hard limit you set and cannot be relaxed here`
-    };
+});
+
+// server/push.ts
+import webpush from "web-push";
+async function keys2() {
+  const saved = await keyStore.read();
+  if (saved) return saved;
+  const fresh2 = webpush.generateVAPIDKeys();
+  await keyStore.write(fresh2);
+  return fresh2;
+}
+async function publicKey() {
+  return (await keys2()).publicKey;
+}
+async function subscribe(raw) {
+  const candidate = raw;
+  const endpoint = candidate?.endpoint;
+  const p256dh = candidate?.keys?.p256dh;
+  const auth = candidate?.keys?.auth;
+  if (typeof endpoint !== "string" || !p256dh || !auth) {
+    return { ok: false, error: "that is not a usable subscription" };
   }
-  await store.write(
-    current.map(
-      (entry) => entry.category === category ? { ...entry, policy } : entry
-    )
-  );
+  await subscriptions.update((current) => {
+    const others = current.filter((entry) => entry.endpoint !== endpoint);
+    return [
+      ...others,
+      { endpoint, keys: { p256dh, auth }, addedAt: (/* @__PURE__ */ new Date()).toISOString() }
+    ];
+  });
   return { ok: true };
 }
-async function requiresConfirmation(category, highRisk = false) {
-  const policy = await policyFor(category);
-  if (policy === "always") return true;
-  if (policy === "never") return false;
-  return highRisk;
+async function devices() {
+  return (await subscriptions.read()).filter((entry) => !entry.goneAt).length;
 }
-var DEFAULT_POLICIES, store;
-var init_actions = __esm({
-  "server/actions.ts"() {
-    init_store();
-    DEFAULT_POLICIES = [
-      { category: "communication", policy: "always", locked: true },
-      { category: "purchase", policy: "always", locked: true },
-      { category: "security", policy: "always" },
-      // The user's chosen line: she gets on with things she can undo, and only
-      // sending and spending stop her. Nothing here can delete, so "high-risk"
-      // covers cancelling and anything involving other people.
-      { category: "calendar", policy: "never" },
-      { category: "home", policy: "never" },
-      { category: "research", policy: "never" },
-      /*
-       * Her hands on the machine itself.
-       *
-       * "Ask when risky" is the user's own line applied literally. Reading a file,
-       * listing a folder and running something that only looks are hers to get on
-       * with. Deleting, overwriting, and any command that can destroy something
-       * stop and ask — every time, whatever else is going on.
-       */
-      { category: "machine", policy: "high-risk" }
-    ];
-    store = new Document("policies", () => DEFAULT_POLICIES);
-  }
-});
-
-// server/auth.ts
-import { createHmac, timingSafeEqual as timingSafeEqual2 } from "node:crypto";
-function signingKey() {
-  return config.secret ?? config.password;
-}
-function sign(payload) {
-  return createHmac("sha256", signingKey()).update(payload).digest("hex");
-}
-function issueNonce(purpose, validForMs = 10 * 6e4) {
-  const expires = Date.now() + validForMs;
-  const payload = `${purpose}.${expires}`;
-  return `${expires}.${sign(payload)}`;
-}
-function checkNonce(purpose, token2) {
-  const [expires, signature] = token2.split(".");
-  if (!expires || !signature) return false;
-  if (Number(expires) < Date.now()) return false;
-  const expected = sign(`${purpose}.${expires}`);
-  const left = Buffer.from(expected);
-  const right = Buffer.from(signature);
-  return left.length === right.length && timingSafeEqual2(left, right);
-}
-function readCookie(req) {
-  const header = req.headers.cookie;
-  if (!header) return null;
-  for (const part of header.split(";")) {
-    const [name, ...rest] = part.trim().split("=");
-    if (name === COOKIE) return decodeURIComponent(rest.join("="));
-  }
-  return null;
-}
-function valid(token2) {
-  if (!token2) return false;
-  const [payload, signature] = token2.split(".");
-  if (!payload || !signature) return false;
-  if (!matches(signature, sign(payload))) return false;
-  const expires = Number(payload);
-  return Number.isFinite(expires) && expires > Date.now();
-}
-function issueSession(res) {
-  const expires = Date.now() + SESSION_DAYS * 864e5;
-  const token2 = `${expires}.${sign(String(expires))}`;
-  const attributes = [
-    `${COOKIE}=${encodeURIComponent(token2)}`,
-    "HttpOnly",
-    "Path=/",
-    "SameSite=Lax",
-    `Max-Age=${SESSION_DAYS * 86400}`
-  ];
-  if (config.deployed) attributes.push("Secure");
-  res.setHeader("Set-Cookie", attributes.join("; "));
-}
-function clearSession(res) {
-  res.setHeader(
-    "Set-Cookie",
-    `${COOKIE}=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0`
-  );
-}
-function authStatus(req) {
-  if (config.deployed && !config.password) return "misconfigured";
-  if (!config.password) return "open";
-  return valid(readCookie(req)) ? "ok" : "required";
-}
-function requireAuth(req, res, next) {
-  const status = authStatus(req);
-  if (status === "ok" || status === "open") {
-    next();
-    return;
-  }
-  if (status === "misconfigured") {
-    res.status(503).json({ error: MISCONFIGURED_MESSAGE });
-    return;
-  }
-  res.status(401).json({ error: "password required" });
-}
-function pauseAfterFailure() {
-  return new Promise((resolve) => setTimeout(resolve, 600));
-}
-function checkPassword(candidate) {
-  return config.password.length > 0 && matches(candidate, config.password);
-}
-var COOKIE, SESSION_DAYS, MISCONFIGURED_MESSAGE;
-var init_auth = __esm({
-  "server/auth.ts"() {
-    init_config();
-    init_crypto();
-    COOKIE = "grace_session";
-    SESSION_DAYS = 30;
-    MISCONFIGURED_MESSAGE = "Grace is deployed without a password, so she is refusing to answer. Set GRACE_PASSWORD in the hosting environment and redeploy.";
-  }
-});
-
-// server/bridge.ts
-import { randomBytes as randomBytes2, randomUUID, timingSafeEqual as timingSafeEqual3 } from "node:crypto";
-async function bridgeToken() {
-  const current = await store2.read();
-  if (current.token) return current.token;
-  const token2 = randomBytes2(24).toString("base64url");
-  await store2.write({ ...current, token: token2 });
-  return token2;
-}
-async function rollBridgeToken() {
-  const token2 = randomBytes2(24).toString("base64url");
-  await store2.update((current) => ({ ...current, token: token2 }));
-  return token2;
-}
-async function tokenMatches(offered) {
-  const real = await bridgeToken();
-  const left = Buffer.from(offered);
-  const right = Buffer.from(real);
-  if (left.length !== right.length) return false;
-  return timingSafeEqual3(left, right);
-}
-async function bridgeStatus() {
-  const current = await store2.read();
-  const seen2 = current.seenAt ? new Date(current.seenAt).getTime() : 0;
-  return {
-    online: Date.now() - seen2 < ABSENT_MS,
-    seenAt: current.seenAt,
-    state: current.state
-  };
-}
-async function enqueue(action, arg, extra = {}) {
-  const id = randomUUID();
-  const now = Date.now();
-  await store2.update((current) => ({
-    ...current,
-    queue: [
-      // Anything nobody collected is not worth carrying, and a queue that only
-      // grows is a console that suddenly does five things at once.
-      ...current.queue.filter((command) => now - new Date(command.at).getTime() < STALE_MS),
-      {
-        id,
-        action,
-        ...arg ? { arg } : {},
-        ...extra.body !== void 0 ? { body: extra.body } : {},
-        ...extra.replace ? { replace: true } : {},
-        at: new Date(now).toISOString()
-      }
-    ]
-  }));
-  return id;
-}
-async function awaitResult(id, patienceMs = 12e3) {
-  const until = Date.now() + patienceMs;
-  while (Date.now() < until) {
-    const current = await store2.read();
-    const found = current.queue.find((command) => command.id === id);
-    if (found?.doneAt) return found;
-    await new Promise((resolve) => setTimeout(resolve, 1200));
-  }
-  return null;
-}
-async function claim(token2, state) {
-  if (!await tokenMatches(token2)) return { ok: false, commands: [] };
-  const now = (/* @__PURE__ */ new Date()).toISOString();
-  let taken = [];
-  await store2.update((current) => {
-    taken = current.queue.filter((command) => !command.claimedAt && !command.doneAt);
-    return {
-      ...current,
-      seenAt: now,
-      state: state ?? current.state,
-      queue: current.queue.map(
-        (command) => taken.some((one) => one.id === command.id) ? { ...command, claimedAt: now } : command
-      )
-    };
-  });
-  return { ok: true, commands: taken };
-}
-async function report(token2, results) {
-  if (!await tokenMatches(token2)) return false;
-  const now = (/* @__PURE__ */ new Date()).toISOString();
-  await store2.update((current) => ({
-    ...current,
-    seenAt: now,
-    queue: current.queue.map((command) => {
-      const result = results.find((one) => one.id === command.id);
-      return result ? { ...command, doneAt: now, ok: result.ok, detail: result.detail } : command;
-    })
-  }));
-  return true;
-}
-var store2, STALE_MS, ABSENT_MS;
-var init_bridge = __esm({
-  "server/bridge.ts"() {
-    init_store();
-    store2 = new Document("bridge", () => ({
-      token: null,
-      queue: [],
-      state: null,
-      seenAt: null
-    }));
-    STALE_MS = 2 * 60 * 1e3;
-    ABSENT_MS = 90 * 1e3;
-  }
-});
-
-// server/budget.ts
-var budget_exports = {};
-__export(budget_exports, {
-  OverBudget: () => OverBudget,
-  afterwardsCap: () => afterwardsCap,
-  audioPriceOf: () => audioPriceOf,
-  creditsExpired: () => creditsExpired,
-  poolExpiry: () => poolExpiry,
-  poolSize: () => poolSize,
-  priceOf: () => priceOf,
-  record: () => record,
-  recordAudio: () => recordAudio,
-  recordOutside: () => recordOutside,
-  requireBudget: () => requireBudget,
-  spend: () => spend,
-  standing: () => standing
-});
-function priceOf(model) {
-  return RATES[model] ?? null;
-}
-function audioPriceOf(model) {
-  return AUDIO_RATES[model] ?? null;
-}
-function poolExpiry() {
-  const set = process.env.GRACE_CREDITS_EXPIRE;
-  const parsed = set ? new Date(set) : /* @__PURE__ */ new Date("2026-12-16T00:00:00Z");
-  return Number.isNaN(parsed.getTime()) ? /* @__PURE__ */ new Date("2026-12-16T00:00:00Z") : parsed;
-}
-function poolSize() {
-  const set = Number(process.env.GRACE_CREDIT_POOL);
-  return Number.isFinite(set) && set > 0 ? set : 300;
-}
-function afterwardsCap() {
-  const set = Number(process.env.GRACE_MONTHLY_CAP);
-  return Number.isFinite(set) && set > 0 ? set : 10;
-}
-function creditsExpired(now = /* @__PURE__ */ new Date()) {
-  return now >= poolExpiry();
-}
-function currentMonth() {
-  return (/* @__PURE__ */ new Date()).toISOString().slice(0, 7);
-}
-async function spend() {
-  if (!cached) cached = await store3.read();
-  if (cached.month !== currentMonth()) {
-    cached = {
-      month: currentMonth(),
-      dollars: 0,
-      requests: 0,
-      pool: cached.pool ?? 0,
-      card: 0,
-      stoppedAt: null
-    };
-    await store3.write(cached);
-  }
-  return cached;
-}
-async function standing(now = /* @__PURE__ */ new Date()) {
-  const current = await spend();
-  if (creditsExpired(now)) {
-    const limit2 = afterwardsCap();
-    const charged = current.card ?? 0;
-    return {
-      against: "card",
-      spent: charged,
-      limit: limit2,
-      remaining: Math.max(0, limit2 - charged),
-      elapsed: null
-    };
-  }
-  const limit = poolSize();
-  const expiry = poolExpiry().getTime();
-  const opened = expiry - 90 * 24 * 60 * 60 * 1e3;
-  const through = (now.getTime() - opened) / (expiry - opened);
-  return {
-    against: "pool",
-    spent: current.pool,
-    limit,
-    remaining: Math.max(0, limit - current.pool),
-    elapsed: Math.max(0, Math.min(1, through))
-  };
-}
-async function requireBudget() {
-  const now = await standing();
-  if (now.remaining <= 0) throw new OverBudget(now);
-}
-async function record(model, inputTokens, outputTokens, cachedTokens = 0) {
-  const rate = RATES[model] ?? FALLBACK;
-  const fresh2 = Math.max(0, inputTokens - cachedTokens);
-  const cost = (fresh2 * rate.in + cachedTokens * rate.in * 0.25 + outputTokens * rate.out) / 1e6;
-  await charge(model, cost);
-}
-async function recordAudio(model, inputSeconds, outputSeconds) {
-  const rate = AUDIO_RATES[model] ?? AUDIO_FALLBACK;
-  const safe = (n) => Number.isFinite(n) && n > 0 ? Math.ceil(n) : 0;
-  const cost = (safe(inputSeconds) * rate.inPerMin + safe(outputSeconds) * rate.outPerMin) / 60;
-  await charge(model, cost);
-}
-async function recordOutside(what, dollars) {
-  if (!Number.isFinite(dollars) || dollars <= 0) return;
-  const current = await spend();
-  cached = {
-    ...current,
-    dollars: current.dollars + dollars,
-    card: (current.card ?? 0) + dollars,
-    requests: current.requests + 1,
-    byModel: { ...current.byModel, [what]: (current.byModel?.[what] ?? 0) + dollars }
-  };
-  await store3.write(cached);
-}
-async function charge(model, cost) {
-  const current = await spend();
-  const onPool = !creditsExpired();
-  const next = {
-    ...current,
-    dollars: current.dollars + cost,
-    // The pool only draws down while it is actually paying. After expiry the
-    // spending is real money and belongs to the month, not to the credit.
-    pool: (current.pool ?? 0) + (onPool ? cost : 0),
-    card: (current.card ?? 0) + (onPool ? 0 : cost),
-    requests: current.requests + 1,
-    byModel: {
-      ...current.byModel,
-      [model]: (current.byModel?.[model] ?? 0) + cost
-    },
-    stoppedAt: current.stoppedAt
-  };
-  const spentNow = onPool ? next.pool : next.card;
-  const limitNow = onPool ? poolSize() : afterwardsCap();
-  if (spentNow >= limitNow) next.stoppedAt = current.stoppedAt ?? (/* @__PURE__ */ new Date()).toISOString();
-  cached = next;
-  await store3.write(next);
-}
-var RATES, AUDIO_RATES, FALLBACK, AUDIO_FALLBACK, store3, cached, OverBudget;
-var init_budget = __esm({
-  "server/budget.ts"() {
-    init_store();
-    RATES = {
-      "gemini-3.8-flash": { in: 0.75, out: 3.75 },
-      "gemini-3.1-pro-preview": { in: 2, out: 12 },
-      "gemini-3.5-flash-lite": { in: 0.1, out: 0.4 },
-      "gemini-3.1-flash-tts-preview": { in: 0.5, out: 10 },
-      // The outgoing line. Kept priced until it shuts down on 20 October, because
-      // an unpriced model is charged at the fallback below, and being wrong about
-      // her spending in the fortnight before a migration is exactly when it
-      // matters most to be right.
-      "gemini-2.5-flash": { in: 0.3, out: 2.5 },
-      "gemini-2.5-flash-lite": { in: 0.1, out: 0.4 },
-      "gemini-2.5-flash-preview-tts": { in: 0.5, out: 10 }
-    };
-    AUDIO_RATES = {
-      "gemini-3.8-live": { inPerMin: 5e-3, outPerMin: 0.018 }
-    };
-    FALLBACK = { in: 4, out: 18 };
-    AUDIO_FALLBACK = { inPerMin: 0.02, outPerMin: 0.05 };
-    store3 = new Document("spend", () => ({
-      month: currentMonth(),
-      dollars: 0,
-      requests: 0,
-      pool: 0,
-      card: 0,
-      stoppedAt: null
-    }));
-    cached = null;
-    OverBudget = class extends Error {
-      constructor(standing2) {
-        super(
-          standing2.against === "pool" ? `I have used the whole $${standing2.limit.toFixed(0)} of Google credit \u2014 about $${standing2.spent.toFixed(2)} of it. I have stopped rather than letting it run onto your card. Raise GRACE_CREDIT_POOL if there is more credit than I know about.` : `I have spent about $${standing2.spent.toFixed(2)} this month against a $${standing2.limit.toFixed(0)} limit, and the Google credit is gone, so this would be your own money. I will start again next month, or you can raise the cap.`
+async function notify(title, body) {
+  const all = await subscriptions.read();
+  const live2 = all.filter((entry) => !entry.goneAt);
+  if (live2.length === 0) return 0;
+  const { publicKey: pub, privateKey } = await keys2();
+  webpush.setVapidDetails(CONTACT, pub, privateKey);
+  const payload = JSON.stringify({ title, body });
+  const gone = [];
+  let sent = 0;
+  await Promise.all(
+    live2.map(async (entry) => {
+      try {
+        await webpush.sendNotification(
+          { endpoint: entry.endpoint, keys: entry.keys },
+          payload,
+          { TTL: 900 }
         );
-        this.standing = standing2;
-        this.name = "OverBudget";
+        sent += 1;
+      } catch (error) {
+        const status = error.statusCode;
+        if (status === 404 || status === 410) gone.push(entry.endpoint);
+        else console.error("[grace] push failed:", error.message);
       }
-    };
+    })
+  );
+  if (gone.length > 0) {
+    const at = (/* @__PURE__ */ new Date()).toISOString();
+    await subscriptions.update(
+      (current) => current.map(
+        (entry) => gone.includes(entry.endpoint) ? { ...entry, goneAt: at } : entry
+      )
+    );
+  }
+  return sent;
+}
+var keyStore, subscriptions, CONTACT;
+var init_push = __esm({
+  "server/push.ts"() {
+    init_store();
+    keyStore = new Document("push-keys", () => null);
+    subscriptions = new Document("push-subs", () => []);
+    CONTACT = "mailto:grace@localhost";
   }
 });
 
 // server/keys.ts
 async function loadKeys() {
-  if (!cached2) cached2 = await store4.read();
-  return cached2;
+  if (!cached) cached = await store2.read();
+  return cached;
 }
 async function setKey(name, value) {
-  const current = await store4.read();
+  const current = await store2.read();
   const trimmed = value.trim();
   const next = { ...current, [name]: trimmed || void 0 };
-  await store4.write(next);
-  cached2 = next;
+  await store2.write(next);
+  cached = next;
 }
 function geminiKey() {
-  return cached2?.gemini || config.apiKey;
+  return cached?.gemini || config.apiKey;
 }
 function goveeKey() {
-  return cached2?.govee ?? "";
+  return cached?.govee ?? "";
 }
 function psnToken() {
-  return cached2?.psn || process.env.PSN_NPSSO || "";
+  return cached?.psn || process.env.PSN_NPSSO || "";
 }
 function githubToken() {
-  return cached2?.github || process.env.GITHUB_TOKEN || "";
+  return cached?.github || process.env.GITHUB_TOKEN || "";
 }
 function n8nAccess() {
   return {
-    key: cached2?.n8n || process.env.N8N_API_KEY || "",
-    url: (cached2?.n8nUrl || process.env.N8N_URL || "").replace(/\/+$/, "")
+    key: cached?.n8n || process.env.N8N_API_KEY || "",
+    url: (cached?.n8nUrl || process.env.N8N_URL || "").replace(/\/+$/, "")
   };
 }
 function chosenVoice() {
-  return cached2?.voice || "";
+  return cached?.voice || "";
 }
 function googleClient() {
   return {
-    id: cached2?.googleClientId || process.env.GOOGLE_CLIENT_ID || "",
-    secret: cached2?.googleClientSecret || process.env.GOOGLE_CLIENT_SECRET || "",
-    owner: cached2?.ownerEmail || process.env.GRACE_OWNER_EMAIL || ""
+    id: cached?.googleClientId || process.env.GOOGLE_CLIENT_ID || "",
+    secret: cached?.googleClientSecret || process.env.GOOGLE_CLIENT_SECRET || "",
+    owner: cached?.ownerEmail || process.env.GRACE_OWNER_EMAIL || ""
   };
 }
 function tail(value) {
@@ -975,13 +642,189 @@ async function keyStatus() {
     }
   };
 }
-var store4, cached2;
+var store2, cached;
 var init_keys = __esm({
   "server/keys.ts"() {
     init_config();
     init_store();
-    store4 = new Document("keys", () => ({}));
+    store2 = new Document("keys", () => ({}));
+    cached = null;
+  }
+});
+
+// server/budget.ts
+var budget_exports = {};
+__export(budget_exports, {
+  OverBudget: () => OverBudget,
+  afterwardsCap: () => afterwardsCap,
+  audioPriceOf: () => audioPriceOf,
+  creditsExpired: () => creditsExpired,
+  poolExpiry: () => poolExpiry,
+  poolSize: () => poolSize,
+  priceOf: () => priceOf,
+  record: () => record,
+  recordAudio: () => recordAudio,
+  recordOutside: () => recordOutside,
+  requireBudget: () => requireBudget,
+  spend: () => spend,
+  standing: () => standing
+});
+function priceOf(model) {
+  return RATES[model] ?? null;
+}
+function audioPriceOf(model) {
+  return AUDIO_RATES[model] ?? null;
+}
+function poolExpiry() {
+  const set = process.env.GRACE_CREDITS_EXPIRE;
+  const parsed = set ? new Date(set) : /* @__PURE__ */ new Date("2026-12-16T00:00:00Z");
+  return Number.isNaN(parsed.getTime()) ? /* @__PURE__ */ new Date("2026-12-16T00:00:00Z") : parsed;
+}
+function poolSize() {
+  const set = Number(process.env.GRACE_CREDIT_POOL);
+  return Number.isFinite(set) && set > 0 ? set : 300;
+}
+function afterwardsCap() {
+  const set = Number(process.env.GRACE_MONTHLY_CAP);
+  return Number.isFinite(set) && set > 0 ? set : 10;
+}
+function creditsExpired(now = /* @__PURE__ */ new Date()) {
+  return now >= poolExpiry();
+}
+function currentMonth() {
+  return (/* @__PURE__ */ new Date()).toISOString().slice(0, 7);
+}
+async function spend() {
+  if (!cached2) cached2 = await store3.read();
+  if (cached2.month !== currentMonth()) {
+    cached2 = {
+      month: currentMonth(),
+      dollars: 0,
+      requests: 0,
+      pool: cached2.pool ?? 0,
+      card: 0,
+      stoppedAt: null
+    };
+    await store3.write(cached2);
+  }
+  return cached2;
+}
+async function standing(now = /* @__PURE__ */ new Date()) {
+  const current = await spend();
+  if (creditsExpired(now)) {
+    const limit2 = afterwardsCap();
+    const charged = current.card ?? 0;
+    return {
+      against: "card",
+      spent: charged,
+      limit: limit2,
+      remaining: Math.max(0, limit2 - charged),
+      elapsed: null
+    };
+  }
+  const limit = poolSize();
+  const expiry = poolExpiry().getTime();
+  const opened = expiry - 90 * 24 * 60 * 60 * 1e3;
+  const through = (now.getTime() - opened) / (expiry - opened);
+  return {
+    against: "pool",
+    spent: current.pool,
+    limit,
+    remaining: Math.max(0, limit - current.pool),
+    elapsed: Math.max(0, Math.min(1, through))
+  };
+}
+async function requireBudget() {
+  const now = await standing();
+  if (now.remaining <= 0) throw new OverBudget(now);
+}
+async function record(model, inputTokens, outputTokens, cachedTokens = 0) {
+  const rate = RATES[model] ?? FALLBACK;
+  const fresh2 = Math.max(0, inputTokens - cachedTokens);
+  const cost = (fresh2 * rate.in + cachedTokens * rate.in * 0.25 + outputTokens * rate.out) / 1e6;
+  await charge(model, cost);
+}
+async function recordAudio(model, inputSeconds, outputSeconds) {
+  const rate = AUDIO_RATES[model] ?? AUDIO_FALLBACK;
+  const safe = (n) => Number.isFinite(n) && n > 0 ? Math.ceil(n) : 0;
+  const cost = (safe(inputSeconds) * rate.inPerMin + safe(outputSeconds) * rate.outPerMin) / 60;
+  await charge(model, cost);
+}
+async function recordOutside(what, dollars) {
+  if (!Number.isFinite(dollars) || dollars <= 0) return;
+  const current = await spend();
+  cached2 = {
+    ...current,
+    dollars: current.dollars + dollars,
+    card: (current.card ?? 0) + dollars,
+    requests: current.requests + 1,
+    byModel: { ...current.byModel, [what]: (current.byModel?.[what] ?? 0) + dollars }
+  };
+  await store3.write(cached2);
+}
+async function charge(model, cost) {
+  const current = await spend();
+  const onPool = !creditsExpired();
+  const next = {
+    ...current,
+    dollars: current.dollars + cost,
+    // The pool only draws down while it is actually paying. After expiry the
+    // spending is real money and belongs to the month, not to the credit.
+    pool: (current.pool ?? 0) + (onPool ? cost : 0),
+    card: (current.card ?? 0) + (onPool ? 0 : cost),
+    requests: current.requests + 1,
+    byModel: {
+      ...current.byModel,
+      [model]: (current.byModel?.[model] ?? 0) + cost
+    },
+    stoppedAt: current.stoppedAt
+  };
+  const spentNow = onPool ? next.pool : next.card;
+  const limitNow = onPool ? poolSize() : afterwardsCap();
+  if (spentNow >= limitNow) next.stoppedAt = current.stoppedAt ?? (/* @__PURE__ */ new Date()).toISOString();
+  cached2 = next;
+  await store3.write(next);
+}
+var RATES, AUDIO_RATES, FALLBACK, AUDIO_FALLBACK, store3, cached2, OverBudget;
+var init_budget = __esm({
+  "server/budget.ts"() {
+    init_store();
+    RATES = {
+      "gemini-3.8-flash": { in: 0.75, out: 3.75 },
+      "gemini-3.1-pro-preview": { in: 2, out: 12 },
+      "gemini-3.5-flash-lite": { in: 0.1, out: 0.4 },
+      "gemini-3.1-flash-tts-preview": { in: 0.5, out: 10 },
+      // The outgoing line. Kept priced until it shuts down on 20 October, because
+      // an unpriced model is charged at the fallback below, and being wrong about
+      // her spending in the fortnight before a migration is exactly when it
+      // matters most to be right.
+      "gemini-2.5-flash": { in: 0.3, out: 2.5 },
+      "gemini-2.5-flash-lite": { in: 0.1, out: 0.4 },
+      "gemini-2.5-flash-preview-tts": { in: 0.5, out: 10 }
+    };
+    AUDIO_RATES = {
+      "gemini-3.8-live": { inPerMin: 5e-3, outPerMin: 0.018 }
+    };
+    FALLBACK = { in: 4, out: 18 };
+    AUDIO_FALLBACK = { inPerMin: 0.02, outPerMin: 0.05 };
+    store3 = new Document("spend", () => ({
+      month: currentMonth(),
+      dollars: 0,
+      requests: 0,
+      pool: 0,
+      card: 0,
+      stoppedAt: null
+    }));
     cached2 = null;
+    OverBudget = class extends Error {
+      constructor(standing2) {
+        super(
+          standing2.against === "pool" ? `I have used the whole $${standing2.limit.toFixed(0)} of Google credit \u2014 about $${standing2.spent.toFixed(2)} of it. I have stopped rather than letting it run onto your card. Raise GRACE_CREDIT_POOL if there is more credit than I know about.` : `I have spent about $${standing2.spent.toFixed(2)} this month against a $${standing2.limit.toFixed(0)} limit, and the Google credit is gone, so this would be your own money. I will start again next month, or you can raise the cap.`
+        );
+        this.standing = standing2;
+        this.name = "OverBudget";
+      }
+    };
   }
 });
 
@@ -1454,37 +1297,37 @@ function metaKey(id) {
   return id === FIRST ? "meta" : `meta-${id}`;
 }
 async function allChats() {
-  const { list } = await store5.read();
+  const { list } = await store4.read();
   return list.filter((chat) => !chat.archivedAt).sort((left, right) => right.lastAt.localeCompare(left.lastAt));
 }
 async function currentChat() {
-  const { list, current } = await store5.read();
+  const { list, current } = await store4.read();
   const live2 = list.find((chat) => chat.id === current && !chat.archivedAt);
   return live2 ? live2.id : FIRST;
 }
 async function openChat(id) {
-  const now = await store5.read();
+  const now = await store4.read();
   if (!now.list.some((chat) => chat.id === id && !chat.archivedAt)) return now.current;
-  await store5.write({ ...now, current: id });
+  await store4.write({ ...now, current: id });
   return id;
 }
 async function newChat() {
-  const now = await store5.read();
+  const now = await store4.read();
   const chat = {
     id: randomUUID2().slice(0, 8),
     title: "New conversation",
     at: (/* @__PURE__ */ new Date()).toISOString(),
     lastAt: (/* @__PURE__ */ new Date()).toISOString()
   };
-  await store5.write({ list: [...now.list, chat], current: chat.id });
+  await store4.write({ list: [...now.list, chat], current: chat.id });
   return chat;
 }
 async function titleFrom(id, firstWords) {
-  const now = await store5.read();
+  const now = await store4.read();
   const chat = now.list.find((one) => one.id === id);
   if (!chat || chat.title !== "New conversation") return;
   const title = firstWords.replace(/\s+/g, " ").trim().replace(/^(grace[,\s]+)/i, "").slice(0, 48);
-  await store5.write({
+  await store4.write({
     ...now,
     list: now.list.map(
       (one) => one.id === id ? { ...one, title: title || one.title } : one
@@ -1492,10 +1335,10 @@ async function titleFrom(id, firstWords) {
   });
 }
 async function rename2(id, title) {
-  const now = await store5.read();
+  const now = await store4.read();
   const clean = title.trim().slice(0, 60);
   if (clean) {
-    await store5.write({
+    await store4.write({
       ...now,
       list: now.list.map((one) => one.id === id ? { ...one, title: clean } : one)
     });
@@ -1503,10 +1346,10 @@ async function rename2(id, title) {
   return allChats();
 }
 async function touch(id) {
-  const now = await store5.read();
+  const now = await store4.read();
   const chat = now.list.find((one) => one.id === id);
   if (!chat) return;
-  await store5.write({
+  await store4.write({
     ...now,
     list: now.list.map(
       (one) => one.id === id ? { ...one, lastAt: (/* @__PURE__ */ new Date()).toISOString() } : one
@@ -1514,21 +1357,21 @@ async function touch(id) {
   });
 }
 async function archiveChat(id) {
-  const now = await store5.read();
+  const now = await store4.read();
   if (id === FIRST) return allChats();
   const list = now.list.map(
     (one) => one.id === id ? { ...one, archivedAt: (/* @__PURE__ */ new Date()).toISOString() } : one
   );
   const current = now.current === id ? FIRST : now.current;
-  await store5.write({ list, current });
+  await store4.write({ list, current });
   return allChats();
 }
-var FIRST, store5;
+var FIRST, store4;
 var init_chats = __esm({
   "server/chats.ts"() {
     init_store();
     FIRST = "main";
-    store5 = new Document("chats", () => ({
+    store4 = new Document("chats", () => ({
       list: [
         {
           id: FIRST,
@@ -1751,6 +1594,883 @@ var init_memory = __esm({
   }
 });
 
+// server/auth.ts
+import { createHmac, timingSafeEqual as timingSafeEqual2 } from "node:crypto";
+function signingKey() {
+  return config.secret ?? config.password;
+}
+function sign(payload) {
+  return createHmac("sha256", signingKey()).update(payload).digest("hex");
+}
+function issueNonce(purpose, validForMs = 10 * 6e4) {
+  const expires = Date.now() + validForMs;
+  const payload = `${purpose}.${expires}`;
+  return `${expires}.${sign(payload)}`;
+}
+function checkNonce(purpose, token2) {
+  const [expires, signature] = token2.split(".");
+  if (!expires || !signature) return false;
+  if (Number(expires) < Date.now()) return false;
+  const expected = sign(`${purpose}.${expires}`);
+  const left = Buffer.from(expected);
+  const right = Buffer.from(signature);
+  return left.length === right.length && timingSafeEqual2(left, right);
+}
+function readCookie(req) {
+  const header = req.headers.cookie;
+  if (!header) return null;
+  for (const part of header.split(";")) {
+    const [name, ...rest] = part.trim().split("=");
+    if (name === COOKIE) return decodeURIComponent(rest.join("="));
+  }
+  return null;
+}
+function valid(token2) {
+  if (!token2) return false;
+  const [payload, signature] = token2.split(".");
+  if (!payload || !signature) return false;
+  if (!matches(signature, sign(payload))) return false;
+  const expires = Number(payload);
+  return Number.isFinite(expires) && expires > Date.now();
+}
+function issueSession(res) {
+  const expires = Date.now() + SESSION_DAYS * 864e5;
+  const token2 = `${expires}.${sign(String(expires))}`;
+  const attributes = [
+    `${COOKIE}=${encodeURIComponent(token2)}`,
+    "HttpOnly",
+    "Path=/",
+    "SameSite=Lax",
+    `Max-Age=${SESSION_DAYS * 86400}`
+  ];
+  if (config.deployed) attributes.push("Secure");
+  res.setHeader("Set-Cookie", attributes.join("; "));
+}
+function clearSession(res) {
+  res.setHeader(
+    "Set-Cookie",
+    `${COOKIE}=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0`
+  );
+}
+function authStatus(req) {
+  if (config.deployed && !config.password) return "misconfigured";
+  if (!config.password) return "open";
+  return valid(readCookie(req)) ? "ok" : "required";
+}
+function requireAuth(req, res, next) {
+  const status = authStatus(req);
+  if (status === "ok" || status === "open") {
+    next();
+    return;
+  }
+  if (status === "misconfigured") {
+    res.status(503).json({ error: MISCONFIGURED_MESSAGE });
+    return;
+  }
+  res.status(401).json({ error: "password required" });
+}
+function pauseAfterFailure() {
+  return new Promise((resolve) => setTimeout(resolve, 600));
+}
+function checkPassword(candidate) {
+  return config.password.length > 0 && matches(candidate, config.password);
+}
+var COOKIE, SESSION_DAYS, MISCONFIGURED_MESSAGE;
+var init_auth = __esm({
+  "server/auth.ts"() {
+    init_config();
+    init_crypto();
+    COOKIE = "grace_session";
+    SESSION_DAYS = 30;
+    MISCONFIGURED_MESSAGE = "Grace is deployed without a password, so she is refusing to answer. Set GRACE_PASSWORD in the hosting environment and redeploy.";
+  }
+});
+
+// server/google/oauth.ts
+function googleConfigured() {
+  const client = googleClient();
+  return Boolean(client.id && client.secret);
+}
+function redirectUri() {
+  if (process.env.GOOGLE_REDIRECT_URI) return process.env.GOOGLE_REDIRECT_URI;
+  const host = process.env.VERCEL_PROJECT_PRODUCTION_URL;
+  return host ? `https://${host}/api/google-callback` : (
+    // The port she is actually on. This was a fixed 3001, but the local
+    // launcher runs her on 7766 — so Google sent the browser back to a port
+    // nothing was listening on, and connecting could never succeed.
+    `http://localhost:${process.env.PORT ?? 3001}/api/google-callback`
+  );
+}
+function authorizeUrl() {
+  const state = issueNonce("google-oauth");
+  const params = new URLSearchParams({
+    client_id: googleClient().id,
+    redirect_uri: redirectUri(),
+    response_type: "code",
+    scope: SCOPES.join(" "),
+    // Without offline there is no refresh token at all, and without consent
+    // Google returns one only on the very first authorisation — which makes
+    // every subsequent attempt look like it worked while leaving nothing to
+    // reconnect with tomorrow.
+    access_type: "offline",
+    prompt: "consent",
+    include_granted_scopes: "true",
+    state
+  });
+  return `${AUTH_URL}?${params.toString()}`;
+}
+async function postToken(body) {
+  const response = await fetch(TOKEN_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams(body).toString()
+  });
+  return await response.json();
+}
+function emailFromIdToken(idToken) {
+  if (!idToken) return "";
+  try {
+    const payload = idToken.split(".")[1];
+    const json = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    return json.email ?? "";
+  } catch {
+    return "";
+  }
+}
+async function completeSignIn(code, state) {
+  if (!checkNonce("google-oauth", state)) {
+    throw new GoogleError("That sign-in link had expired. Start again.");
+  }
+  const token2 = await postToken({
+    code,
+    client_id: googleClient().id,
+    client_secret: googleClient().secret,
+    redirect_uri: redirectUri(),
+    grant_type: "authorization_code"
+  });
+  if (token2.error || !token2.refresh_token) {
+    throw new GoogleError(
+      token2.error_description ?? token2.error ?? "Google returned no refresh token. Remove Grace at myaccount.google.com/permissions and try again."
+    );
+  }
+  const email = emailFromIdToken(token2.id_token);
+  const owner = googleClient().owner;
+  if (owner && email && email.toLowerCase() !== owner.toLowerCase()) {
+    throw new GoogleError(
+      `This is Grace's owner's account only. Signed in as ${email}, expected ${owner}.`
+    );
+  }
+  await store5.write({
+    refreshToken: token2.refresh_token,
+    email,
+    scopes: (token2.scope ?? "").split(" ").filter(Boolean),
+    connectedAt: (/* @__PURE__ */ new Date()).toISOString()
+  });
+  return { email };
+}
+async function connection() {
+  return store5.read();
+}
+async function missingScopes() {
+  const saved = await store5.read();
+  if (!saved) return [];
+  return SCOPES.filter(
+    (scope) => scope.includes("/auth/") && !saved.scopes.includes(scope)
+  );
+}
+async function disconnect() {
+  accessTokens.clear();
+  await store5.write(null);
+}
+async function accessToken() {
+  const saved = await store5.read();
+  if (!saved) throw new GoogleError("Google is not connected yet.", true);
+  if (saved.brokenReason) throw new GoogleError(saved.brokenReason, true);
+  const cached6 = accessTokens.get(saved.refreshToken);
+  if (cached6 && cached6.expiresAt > Date.now() + 6e4) return cached6.token;
+  const token2 = await postToken({
+    client_id: googleClient().id,
+    client_secret: googleClient().secret,
+    refresh_token: saved.refreshToken,
+    grant_type: "refresh_token"
+  });
+  if (token2.error === "invalid_grant") {
+    const reason = "Google has disconnected Grace \u2014 usually a changed password or a revoked permission. Reconnect to put it back.";
+    await store5.write({ ...saved, brokenReason: reason });
+    throw new GoogleError(reason, true);
+  }
+  if (token2.error || !token2.access_token) {
+    throw new GoogleError(token2.error_description ?? "Google refused the token.");
+  }
+  accessTokens.set(saved.refreshToken, {
+    token: token2.access_token,
+    expiresAt: Date.now() + (token2.expires_in ?? 3600) * 1e3
+  });
+  return token2.access_token;
+}
+async function googleFetch(url, init = {}) {
+  const token2 = await accessToken();
+  const response = await fetch(url, {
+    ...init,
+    headers: {
+      ...init.headers ?? {},
+      Authorization: `Bearer ${token2}`,
+      "Content-Type": "application/json"
+    }
+  });
+  if (response.status === 401) {
+    throw new GoogleError("Google rejected that request. Try reconnecting.", true);
+  }
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new GoogleError(
+      `Google returned ${response.status}: ${detail.slice(0, 200)}`
+    );
+  }
+  return response.json();
+}
+var AUTH_URL, TOKEN_URL, SCOPES, store5, accessTokens, GoogleError;
+var init_oauth = __esm({
+  "server/google/oauth.ts"() {
+    init_auth();
+    init_keys();
+    init_store();
+    AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
+    TOKEN_URL = "https://oauth2.googleapis.com/token";
+    SCOPES = [
+      "https://www.googleapis.com/auth/gmail.readonly",
+      "https://www.googleapis.com/auth/gmail.compose",
+      "https://www.googleapis.com/auth/gmail.modify",
+      "https://www.googleapis.com/auth/calendar.events",
+      "openid",
+      "email"
+    ];
+    store5 = new Document("google", () => null);
+    accessTokens = /* @__PURE__ */ new Map();
+    GoogleError = class extends Error {
+      constructor(message, needsReconnect = false) {
+        super(message);
+        this.needsReconnect = needsReconnect;
+        this.name = "GoogleError";
+      }
+    };
+  }
+});
+
+// server/google/calendar.ts
+function shape(event) {
+  const allDay = Boolean(event.start?.date);
+  return {
+    id: event.id,
+    summary: event.summary ?? "(no title)",
+    location: event.location ?? "",
+    start: event.start?.dateTime ?? event.start?.date ?? "",
+    end: event.end?.dateTime ?? event.end?.date ?? "",
+    allDay,
+    attendees: (event.attendees ?? []).map((attendee) => attendee.email ?? "").filter(Boolean)
+  };
+}
+async function upcoming(hours = 24, limit = 20) {
+  const from = /* @__PURE__ */ new Date();
+  const to = new Date(from.getTime() + hours * 36e5);
+  const params = new URLSearchParams({
+    timeMin: from.toISOString(),
+    timeMax: to.toISOString(),
+    singleEvents: "true",
+    orderBy: "startTime",
+    maxResults: String(limit)
+  });
+  const response = await googleFetch(`${BASE}?${params.toString()}`);
+  return (response.items ?? []).map(shape);
+}
+async function addAppointment(options) {
+  const zone = options.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC";
+  const created = await googleFetch(`${BASE}?sendUpdates=none`, {
+    method: "POST",
+    body: JSON.stringify({
+      summary: options.summary,
+      location: options.location,
+      description: options.description,
+      start: { dateTime: options.start, timeZone: zone },
+      end: { dateTime: options.end, timeZone: zone }
+    })
+  });
+  return shape(created);
+}
+async function changeAppointment(id, patch) {
+  const zone = patch.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC";
+  const body = {};
+  if (patch.summary) body.summary = patch.summary;
+  if (patch.location) body.location = patch.location;
+  if (patch.start) body.start = { dateTime: patch.start, timeZone: zone };
+  if (patch.end) body.end = { dateTime: patch.end, timeZone: zone };
+  if (Object.keys(body).length === 0) {
+    throw new Error("nothing to change");
+  }
+  const updated = await googleFetch(
+    `${BASE}/${encodeURIComponent(id)}?sendUpdates=none`,
+    { method: "PATCH", body: JSON.stringify(body) }
+  );
+  return shape(updated);
+}
+var BASE;
+var init_calendar = __esm({
+  "server/google/calendar.ts"() {
+    init_oauth();
+    BASE = "https://www.googleapis.com/calendar/v3/calendars/primary/events";
+  }
+});
+
+// server/google/gmail.ts
+function headerMap(headers) {
+  return Object.fromEntries(
+    (headers ?? []).map((header) => [header.name.toLowerCase(), header.value])
+  );
+}
+function findText(part) {
+  if (!part) return "";
+  if (part.mimeType === "text/plain" && !part.filename && part.body?.data) {
+    return Buffer.from(part.body.data, "base64url").toString("utf8");
+  }
+  for (const child of part.parts ?? []) {
+    const found = findText(child);
+    if (found) return found;
+  }
+  if (part.mimeType === "text/html" && !part.filename && part.body?.data) {
+    return Buffer.from(part.body.data, "base64url").toString("utf8").replace(/<style[\s\S]*?<\/style>/gi, "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  }
+  return "";
+}
+async function recentMail(query = "in:inbox", limit = 10) {
+  const list = await googleFetch(
+    `${BASE2}/messages?maxResults=${limit}&q=${encodeURIComponent(query)}`
+  );
+  const ids = (list.messages ?? []).slice(0, limit);
+  if (ids.length === 0) return [];
+  const messages = await Promise.all(
+    ids.map(
+      (message) => googleFetch(
+        `${BASE2}/messages/${message.id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date&metadataHeaders=List-Unsubscribe&metadataHeaders=Precedence`
+      ).catch(() => null)
+    )
+  );
+  return messages.filter(Boolean).map((raw) => {
+    const message = raw;
+    const headers = headerMap(message.payload?.headers);
+    return {
+      id: message.id,
+      threadId: message.threadId,
+      from: headers.from ?? "unknown sender",
+      subject: headers.subject ?? "(no subject)",
+      // Server-authoritative and trivially sortable, unlike the Date header.
+      date: new Date(Number(message.internalDate ?? 0)).toISOString(),
+      snippet: message.snippet ?? "",
+      unread: (message.labelIds ?? []).includes("UNREAD"),
+      bulk: Boolean(headers["list-unsubscribe"]) || /^(bulk|list|auto_reply)$/i.test(headers.precedence ?? "") || (message.labelIds ?? []).some(
+        (id) => ["CATEGORY_PROMOTIONS", "CATEGORY_SOCIAL", "CATEGORY_FORUMS"].includes(id)
+      )
+    };
+  });
+}
+async function readMail(id) {
+  const message = await googleFetch(`${BASE2}/messages/${id}?format=full`);
+  const headers = headerMap(message.payload?.headers);
+  return {
+    id: message.id,
+    threadId: message.threadId,
+    from: headers.from ?? "unknown sender",
+    subject: headers.subject ?? "(no subject)",
+    date: new Date(Number(message.internalDate ?? 0)).toISOString(),
+    snippet: message.snippet ?? "",
+    unread: (message.labelIds ?? []).includes("UNREAD"),
+    // Opening one deliberately means it is wanted regardless of what it is.
+    bulk: false,
+    body: findText(message.payload) || (message.snippet ?? "")
+  };
+}
+async function modify(id, change) {
+  const addLabelIds = change.add ?? [];
+  const removeLabelIds = change.remove ?? [];
+  const banned = [...addLabelIds, ...removeLabelIds].find(
+    (label2) => FORBIDDEN.includes(label2.toUpperCase())
+  );
+  if (banned) throw new Error(`${banned} is not hers to touch`);
+  await googleFetch(`${BASE2}/messages/${id}/modify`, {
+    method: "POST",
+    body: JSON.stringify({ addLabelIds, removeLabelIds })
+  });
+}
+async function fileMail(id) {
+  await modify(id, { remove: ["INBOX"] });
+}
+async function markRead(id) {
+  await modify(id, { remove: ["UNREAD"] });
+}
+async function markUnread(id) {
+  await modify(id, { add: ["UNREAD", "INBOX"] });
+}
+async function star(id) {
+  await modify(id, { add: ["STARRED"] });
+}
+async function labelMail(id, name) {
+  const wanted = name.trim();
+  if (!wanted) throw new Error("a label needs a name");
+  if (FORBIDDEN.includes(wanted.toUpperCase())) {
+    throw new Error(`${wanted} is not hers to touch`);
+  }
+  const existing = await googleFetch(`${BASE2}/labels`);
+  const found = (existing.labels ?? []).find(
+    (label2) => label2.name.toLowerCase() === wanted.toLowerCase()
+  );
+  const labelId = found?.id ?? (await googleFetch(`${BASE2}/labels`, {
+    method: "POST",
+    body: JSON.stringify({
+      name: wanted,
+      labelListVisibility: "labelShow",
+      messageListVisibility: "show"
+    })
+  })).id;
+  await modify(id, { add: [labelId] });
+  return found ? wanted : `${wanted} (new label)`;
+}
+async function draftReply(options) {
+  const mime = [
+    `To: ${options.to}`,
+    `Subject: ${encodeHeader(options.subject)}`,
+    'Content-Type: text/plain; charset="UTF-8"',
+    "",
+    options.body
+  ].join("\r\n");
+  const draft = await googleFetch(`${BASE2}/drafts`, {
+    method: "POST",
+    body: JSON.stringify({
+      message: {
+        raw: Buffer.from(mime, "utf8").toString("base64url"),
+        ...options.threadId ? { threadId: options.threadId } : {}
+      }
+    })
+  });
+  return { id: draft.id };
+}
+function encodeHeader(value) {
+  if (/^[\x00-\x7F]*$/.test(value)) return value;
+  return `=?UTF-8?B?${Buffer.from(value, "utf8").toString("base64")}?=`;
+}
+var BASE2, FORBIDDEN;
+var init_gmail = __esm({
+  "server/google/gmail.ts"() {
+    init_oauth();
+    BASE2 = "https://gmail.googleapis.com/gmail/v1/users/me";
+    FORBIDDEN = ["TRASH", "SPAM"];
+  }
+});
+
+// server/modes.ts
+function getMode() {
+  return store6.read();
+}
+function isMode(value) {
+  return typeof value === "string" && Object.hasOwn(MODES, value);
+}
+async function setMode(mode) {
+  const current = await store6.read();
+  if (current.mode === mode) return current;
+  const next = { mode, since: (/* @__PURE__ */ new Date()).toISOString() };
+  await store6.write(next);
+  return next;
+}
+var MODES, DEFAULT, store6;
+var init_modes = __esm({
+  "server/modes.ts"() {
+    init_store();
+    MODES = {
+      open: {
+        label: "Open",
+        blurb: "Normal. She speaks up when it\u2019s worth it.",
+        guidance: "No special constraints. Answer as you normally would, and raise anything genuinely worth raising."
+      },
+      work: {
+        label: "Work",
+        blurb: "Brisk and on-task. Personal matters wait.",
+        guidance: "The user is working. Be brisk and concrete \u2014 lead with the answer, cut the preamble entirely. Keep replies to a sentence or two unless asked for more. Hold anything personal or non-urgent until they are out of Work mode, and say you are holding it rather than dropping it."
+      },
+      focus: {
+        label: "Focus",
+        blurb: "Answers only. Nothing volunteered.",
+        guidance: "The user is concentrating and every word costs them. Answer exactly what was asked, in as few words as will do \u2014 often a fragment rather than a sentence. Volunteer nothing at all: no observations, no suggestions, no follow-up questions. If something is genuinely urgent, say only that it is urgent and what it is, in under ten words."
+      },
+      away: {
+        label: "Away",
+        blurb: "She takes messages and holds them.",
+        guidance: "The user is away from their desk and may be listening rather than reading. Assume everything is being spoken aloud: short sentences, no detail they cannot hold in their head. Take note of anything that arrives and tell them it is waiting rather than working through it now."
+      }
+    };
+    DEFAULT = { mode: "open", since: (/* @__PURE__ */ new Date(0)).toISOString() };
+    store6 = new Document("mode", () => DEFAULT);
+  }
+});
+
+// server/tools/reminders.ts
+import { randomUUID as randomUUID4 } from "node:crypto";
+async function outstanding() {
+  const all = await store7.read();
+  return all.filter((reminder) => !reminder.doneAt).sort((left, right) => {
+    if (!left.due) return 1;
+    if (!right.due) return -1;
+    return left.due.localeCompare(right.due);
+  });
+}
+function describe(reminder) {
+  if (!reminder.due) return reminder.text;
+  return `${reminder.text} (${new Date(reminder.due).toLocaleString("en-GB", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit"
+  })})`;
+}
+var store7, reminderTools;
+var init_reminders = __esm({
+  "server/tools/reminders.ts"() {
+    init_store();
+    store7 = new Document("reminders", () => []);
+    reminderTools = [
+      {
+        name: "add_reminder",
+        description: "Add something to the user\u2019s list of things to remember or do. Use this whenever they ask to be reminded of something, or mention something they need to do later.",
+        category: "calendar",
+        parameters: {
+          text: {
+            type: "string",
+            description: "What to remember, in the user\u2019s own words where possible."
+          },
+          due: {
+            type: "string",
+            description: 'When it is wanted, as a full ISO 8601 timestamp. Omit entirely if no particular time was given. Work out real dates from phrases like "tomorrow morning" using the current date you were given.'
+          }
+        },
+        required: ["text"],
+        run: async (args) => {
+          const text = String(args.text ?? "").trim();
+          if (!text) return "Nothing was given to remember.";
+          const raw = args.due ? String(args.due) : "";
+          const parsed = raw ? new Date(raw) : null;
+          const valid2 = parsed && Number.isFinite(parsed.getTime()) ? parsed : null;
+          const reminder = {
+            id: randomUUID4(),
+            text,
+            due: valid2 ? valid2.toISOString() : null,
+            createdAt: (/* @__PURE__ */ new Date()).toISOString(),
+            doneAt: null
+          };
+          await store7.update((current) => [...current, reminder]);
+          return `Noted: ${describe(reminder)}`;
+        }
+      },
+      {
+        name: "list_reminders",
+        description: "List what the user still has outstanding. Use it when they ask what is on their list, what is outstanding, or what they have forgotten.",
+        category: "research",
+        parameters: {},
+        required: [],
+        run: async () => {
+          const open = await outstanding();
+          if (open.length === 0) return "Their list is empty.";
+          return `Outstanding:
+${open.map((item) => `- ${describe(item)}`).join("\n")}`;
+        }
+      },
+      {
+        name: "complete_reminder",
+        description: "Mark something on the list as done. Match on the wording the user used; if more than one thing could be meant, ask which rather than guessing.",
+        category: "calendar",
+        parameters: {
+          text: {
+            type: "string",
+            description: "Enough of the reminder\u2019s wording to identify it."
+          }
+        },
+        required: ["text"],
+        run: async (args) => {
+          const needle = String(args.text ?? "").trim().toLowerCase();
+          if (!needle) return "Which one?";
+          const open = await outstanding();
+          const matches2 = open.filter((item) => item.text.toLowerCase().includes(needle));
+          if (matches2.length === 0) return `Nothing on the list matches "${needle}".`;
+          if (matches2.length > 1) {
+            return `More than one matches: ${matches2.map((item) => item.text).join("; ")}. Ask which one they mean.`;
+          }
+          await store7.update(
+            (current) => current.map(
+              (item) => item.id === matches2[0].id ? { ...item, doneAt: (/* @__PURE__ */ new Date()).toISOString() } : item
+            )
+          );
+          return `Marked done: ${matches2[0].text}`;
+        }
+      }
+    ];
+  }
+});
+
+// server/watch.ts
+import { createHash as createHash2, randomUUID as randomUUID5 } from "node:crypto";
+async function liveWatches() {
+  return (await store8.read()).filter((watch) => !watch.archivedAt);
+}
+async function startWatch(what, url, keyword) {
+  const clean = what.trim().slice(0, 100);
+  const address = url.trim();
+  if (!clean || !/^https?:\/\//i.test(address)) {
+    throw new Error("a watch needs something to watch and a full https address");
+  }
+  const watch = {
+    id: randomUUID5(),
+    what: clean,
+    url: address,
+    keyword: keyword?.trim() || void 0,
+    createdAt: (/* @__PURE__ */ new Date()).toISOString()
+  };
+  await store8.update((list) => [...list, watch]);
+  return watch;
+}
+async function stopWatch(what) {
+  const needle = what.toLowerCase().trim();
+  let found = false;
+  await store8.update(
+    (list) => list.map((watch) => {
+      if (watch.archivedAt || !watch.what.toLowerCase().includes(needle)) return watch;
+      found = true;
+      return { ...watch, archivedAt: (/* @__PURE__ */ new Date()).toISOString() };
+    })
+  );
+  return found;
+}
+function textOf(html) {
+  return html.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
+}
+async function observe(watch) {
+  try {
+    const response = await fetch(watch.url, {
+      headers: { "user-agent": "Mozilla/5.0 (Grace watch)" },
+      signal: AbortSignal.timeout(8e3)
+    });
+    if (!response.ok) return null;
+    const text = textOf(await response.text());
+    if (watch.keyword) {
+      return text.includes(watch.keyword.toLowerCase()) ? "present" : "absent";
+    }
+    return createHash2("sha256").update(text).digest("hex").slice(0, 16);
+  } catch {
+    return null;
+  }
+}
+async function checkWatches(at = Date.now()) {
+  const watches = (await liveWatches()).filter(
+    (watch) => !watch.lastCheckedAt || at - new Date(watch.lastCheckedAt).getTime() >= WATCH_EVERY_MS
+  );
+  if (watches.length === 0) return [];
+  const changes = [];
+  const now = (/* @__PURE__ */ new Date()).toISOString();
+  const readings = await Promise.all(
+    watches.map(async (watch) => ({ watch, reading: await observe(watch) }))
+  );
+  await store8.update(
+    (list) => list.map((stored) => {
+      const found = readings.find((r) => r.watch.id === stored.id);
+      if (!found || found.reading === null) return stored;
+      const { reading } = found;
+      if (stored.last !== void 0 && stored.last !== reading) {
+        changes.push({
+          id: stored.id,
+          what: stored.what,
+          url: stored.url,
+          detail: stored.keyword ? reading === "present" ? `"${stored.keyword}" now appears on the page for ${stored.what}` : `"${stored.keyword}" has gone from the page for ${stored.what}` : `${stored.what} changed`
+        });
+      }
+      return { ...stored, last: reading, lastCheckedAt: now };
+    })
+  );
+  return changes;
+}
+var store8, WATCH_EVERY_MS;
+var init_watch = __esm({
+  "server/watch.ts"() {
+    init_store();
+    store8 = new Document("watches", () => []);
+    WATCH_EVERY_MS = 55 * 60 * 1e3;
+  }
+});
+
+// server/actions.ts
+function getPolicies() {
+  return store9.read();
+}
+async function policyFor(category) {
+  const policies = await store9.read();
+  const stored = policies.find((entry) => entry.category === category);
+  if (stored) return stored.policy;
+  return DEFAULT_POLICIES.find((entry) => entry.category === category)?.policy ?? "always";
+}
+async function setPolicy(category, policy) {
+  const current = await store9.read();
+  const existing = current.find((entry) => entry.category === category);
+  if (!existing) {
+    return { ok: false, reason: `unknown action category "${category}"` };
+  }
+  if (existing.locked) {
+    return {
+      ok: false,
+      reason: `"${category}" is a hard limit you set and cannot be relaxed here`
+    };
+  }
+  await store9.write(
+    current.map(
+      (entry) => entry.category === category ? { ...entry, policy } : entry
+    )
+  );
+  return { ok: true };
+}
+async function requiresConfirmation(category, highRisk = false) {
+  const policy = await policyFor(category);
+  if (policy === "always") return true;
+  if (policy === "never") return false;
+  return highRisk;
+}
+var DEFAULT_POLICIES, store9;
+var init_actions = __esm({
+  "server/actions.ts"() {
+    init_store();
+    DEFAULT_POLICIES = [
+      { category: "communication", policy: "always", locked: true },
+      { category: "purchase", policy: "always", locked: true },
+      { category: "security", policy: "always" },
+      // The user's chosen line: she gets on with things she can undo, and only
+      // sending and spending stop her. Nothing here can delete, so "high-risk"
+      // covers cancelling and anything involving other people.
+      { category: "calendar", policy: "never" },
+      { category: "home", policy: "never" },
+      { category: "research", policy: "never" },
+      /*
+       * Her hands on the machine itself.
+       *
+       * "Ask when risky" is the user's own line applied literally. Reading a file,
+       * listing a folder and running something that only looks are hers to get on
+       * with. Deleting, overwriting, and any command that can destroy something
+       * stop and ask — every time, whatever else is going on.
+       */
+      { category: "machine", policy: "high-risk" }
+    ];
+    store9 = new Document("policies", () => DEFAULT_POLICIES);
+  }
+});
+
+// server/bridge.ts
+import { randomBytes as randomBytes2, randomUUID as randomUUID6, timingSafeEqual as timingSafeEqual3 } from "node:crypto";
+async function bridgeToken() {
+  const current = await store10.read();
+  if (current.token) return current.token;
+  const token2 = randomBytes2(24).toString("base64url");
+  await store10.write({ ...current, token: token2 });
+  return token2;
+}
+async function rollBridgeToken() {
+  const token2 = randomBytes2(24).toString("base64url");
+  await store10.update((current) => ({ ...current, token: token2 }));
+  return token2;
+}
+async function tokenMatches(offered) {
+  const real = await bridgeToken();
+  const left = Buffer.from(offered);
+  const right = Buffer.from(real);
+  if (left.length !== right.length) return false;
+  return timingSafeEqual3(left, right);
+}
+async function bridgeStatus() {
+  const current = await store10.read();
+  const seen2 = current.seenAt ? new Date(current.seenAt).getTime() : 0;
+  return {
+    online: Date.now() - seen2 < ABSENT_MS,
+    seenAt: current.seenAt,
+    state: current.state
+  };
+}
+async function enqueue(action, arg, extra = {}) {
+  const id = randomUUID6();
+  const now = Date.now();
+  await store10.update((current) => ({
+    ...current,
+    queue: [
+      // Anything nobody collected is not worth carrying, and a queue that only
+      // grows is a console that suddenly does five things at once.
+      ...current.queue.filter((command) => now - new Date(command.at).getTime() < STALE_MS),
+      {
+        id,
+        action,
+        ...arg ? { arg } : {},
+        ...extra.body !== void 0 ? { body: extra.body } : {},
+        ...extra.replace ? { replace: true } : {},
+        at: new Date(now).toISOString()
+      }
+    ]
+  }));
+  return id;
+}
+async function awaitResult(id, patienceMs = 12e3) {
+  const until = Date.now() + patienceMs;
+  while (Date.now() < until) {
+    const current = await store10.read();
+    const found = current.queue.find((command) => command.id === id);
+    if (found?.doneAt) return found;
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+  }
+  return null;
+}
+async function claim(token2, state) {
+  if (!await tokenMatches(token2)) return { ok: false, commands: [] };
+  const now = (/* @__PURE__ */ new Date()).toISOString();
+  let taken = [];
+  await store10.update((current) => {
+    taken = current.queue.filter((command) => !command.claimedAt && !command.doneAt);
+    return {
+      ...current,
+      seenAt: now,
+      state: state ?? current.state,
+      queue: current.queue.map(
+        (command) => taken.some((one) => one.id === command.id) ? { ...command, claimedAt: now } : command
+      )
+    };
+  });
+  return { ok: true, commands: taken };
+}
+async function report(token2, results) {
+  if (!await tokenMatches(token2)) return false;
+  const now = (/* @__PURE__ */ new Date()).toISOString();
+  await store10.update((current) => ({
+    ...current,
+    seenAt: now,
+    queue: current.queue.map((command) => {
+      const result = results.find((one) => one.id === command.id);
+      return result ? { ...command, doneAt: now, ok: result.ok, detail: result.detail } : command;
+    })
+  }));
+  return true;
+}
+var store10, STALE_MS, ABSENT_MS;
+var init_bridge = __esm({
+  "server/bridge.ts"() {
+    init_store();
+    store10 = new Document("bridge", () => ({
+      token: null,
+      queue: [],
+      state: null,
+      seenAt: null
+    }));
+    STALE_MS = 2 * 60 * 1e3;
+    ABSENT_MS = 90 * 1e3;
+  }
+});
+
 // server/github.ts
 async function call(path3, method = "GET") {
   const token2 = githubToken();
@@ -1784,7 +2504,7 @@ async function call(path3, method = "GET") {
   const body = await response.text();
   return body ? JSON.parse(body) : {};
 }
-function shape(items) {
+function shape2(items) {
   return items.slice(0, 8).map((item) => ({
     title: item.title,
     repo: item.repository_url.split("/repos/")[1] ?? "",
@@ -1807,9 +2527,9 @@ async function githubView() {
   ]);
   return {
     login,
-    prs: shape(prs.items),
-    reviewsWanted: shape(reviews.items),
-    issues: shape(issues.items)
+    prs: shape2(prs.items),
+    reviewsWanted: shape2(reviews.items),
+    issues: shape2(issues.items)
   };
 }
 async function rerunFailedChecks(repoSaid) {
@@ -1860,7 +2580,7 @@ var init_github = __esm({
 });
 
 // server/lights.ts
-import { randomUUID as randomUUID4 } from "node:crypto";
+import { randomUUID as randomUUID7 } from "node:crypto";
 async function call2(path3, body) {
   const key = goveeKey();
   if (!key) {
@@ -1869,7 +2589,7 @@ async function call2(path3, body) {
       true
     );
   }
-  const response = await fetch(`${BASE}${path3}`, {
+  const response = await fetch(`${BASE3}${path3}`, {
     method: body ? "POST" : "GET",
     headers: { "Govee-API-Key": key, "Content-Type": "application/json" },
     ...body ? { body: JSON.stringify(body) } : {},
@@ -1921,7 +2641,7 @@ async function pick(said2) {
 }
 async function stateOf(light) {
   const reported = await call2("/device/state", {
-    requestId: randomUUID4(),
+    requestId: randomUUID7(),
     payload: { sku: light.sku, device: light.device }
   });
   const found = /* @__PURE__ */ new Map();
@@ -1943,7 +2663,7 @@ async function stateOf(light) {
 }
 async function pace(device) {
   const since = Date.now() - (commandedAt.get(device) ?? 0);
-  if (since < SETTLE_MS) await sleep(SETTLE_MS - since);
+  if (since < SETTLE_MS2) await sleep(SETTLE_MS2 - since);
   commandedAt.set(device, Date.now());
 }
 function close(a, b, by) {
@@ -1976,7 +2696,7 @@ async function apply(light, capabilities) {
   const send2 = async (capability) => {
     await pace(light.device);
     await call2("/device/control", {
-      requestId: randomUUID4(),
+      requestId: randomUUID7(),
       payload: { sku: light.sku, device: light.device, capability }
     });
   };
@@ -2097,7 +2817,7 @@ async function survey(said2) {
 function lightsConfigured() {
   return Boolean(goveeKey());
 }
-var LightError, BASE, known, KNOWN_FOR_MS, UNKNOWN, sleep, SETTLE_MS, commandedAt, CONFIRM_AFTER_MS, PLAINLY, control, COLOURS;
+var LightError, BASE3, known, KNOWN_FOR_MS, UNKNOWN, sleep, SETTLE_MS2, commandedAt, CONFIRM_AFTER_MS, PLAINLY, control, COLOURS;
 var init_lights = __esm({
   "server/lights.ts"() {
     init_keys();
@@ -2107,12 +2827,12 @@ var init_lights = __esm({
         this.needsKey = needsKey;
       }
     };
-    BASE = "https://openapi.api.govee.com/router/api/v1";
+    BASE3 = "https://openapi.api.govee.com/router/api/v1";
     known = null;
     KNOWN_FOR_MS = 6e4;
     UNKNOWN = { on: null, brightness: null, colour: null, online: null };
     sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-    SETTLE_MS = 900;
+    SETTLE_MS2 = 900;
     commandedAt = /* @__PURE__ */ new Map();
     CONFIRM_AFTER_MS = 500;
     PLAINLY = {
@@ -2140,177 +2860,6 @@ var init_lights = __esm({
       warm: [255, 180, 110],
       cool: [200, 225, 255],
       gold: [255, 200, 70]
-    };
-  }
-});
-
-// server/google/oauth.ts
-function googleConfigured() {
-  const client = googleClient();
-  return Boolean(client.id && client.secret);
-}
-function redirectUri() {
-  if (process.env.GOOGLE_REDIRECT_URI) return process.env.GOOGLE_REDIRECT_URI;
-  const host = process.env.VERCEL_PROJECT_PRODUCTION_URL;
-  return host ? `https://${host}/api/google-callback` : (
-    // The port she is actually on. This was a fixed 3001, but the local
-    // launcher runs her on 7766 — so Google sent the browser back to a port
-    // nothing was listening on, and connecting could never succeed.
-    `http://localhost:${process.env.PORT ?? 3001}/api/google-callback`
-  );
-}
-function authorizeUrl() {
-  const state = issueNonce("google-oauth");
-  const params = new URLSearchParams({
-    client_id: googleClient().id,
-    redirect_uri: redirectUri(),
-    response_type: "code",
-    scope: SCOPES.join(" "),
-    // Without offline there is no refresh token at all, and without consent
-    // Google returns one only on the very first authorisation — which makes
-    // every subsequent attempt look like it worked while leaving nothing to
-    // reconnect with tomorrow.
-    access_type: "offline",
-    prompt: "consent",
-    include_granted_scopes: "true",
-    state
-  });
-  return `${AUTH_URL}?${params.toString()}`;
-}
-async function postToken(body) {
-  const response = await fetch(TOKEN_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams(body).toString()
-  });
-  return await response.json();
-}
-function emailFromIdToken(idToken) {
-  if (!idToken) return "";
-  try {
-    const payload = idToken.split(".")[1];
-    const json = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
-    return json.email ?? "";
-  } catch {
-    return "";
-  }
-}
-async function completeSignIn(code, state) {
-  if (!checkNonce("google-oauth", state)) {
-    throw new GoogleError("That sign-in link had expired. Start again.");
-  }
-  const token2 = await postToken({
-    code,
-    client_id: googleClient().id,
-    client_secret: googleClient().secret,
-    redirect_uri: redirectUri(),
-    grant_type: "authorization_code"
-  });
-  if (token2.error || !token2.refresh_token) {
-    throw new GoogleError(
-      token2.error_description ?? token2.error ?? "Google returned no refresh token. Remove Grace at myaccount.google.com/permissions and try again."
-    );
-  }
-  const email = emailFromIdToken(token2.id_token);
-  const owner = googleClient().owner;
-  if (owner && email && email.toLowerCase() !== owner.toLowerCase()) {
-    throw new GoogleError(
-      `This is Grace's owner's account only. Signed in as ${email}, expected ${owner}.`
-    );
-  }
-  await store6.write({
-    refreshToken: token2.refresh_token,
-    email,
-    scopes: (token2.scope ?? "").split(" ").filter(Boolean),
-    connectedAt: (/* @__PURE__ */ new Date()).toISOString()
-  });
-  return { email };
-}
-async function connection() {
-  return store6.read();
-}
-async function missingScopes() {
-  const saved = await store6.read();
-  if (!saved) return [];
-  return SCOPES.filter(
-    (scope) => scope.includes("/auth/") && !saved.scopes.includes(scope)
-  );
-}
-async function disconnect() {
-  accessTokens.clear();
-  await store6.write(null);
-}
-async function accessToken() {
-  const saved = await store6.read();
-  if (!saved) throw new GoogleError("Google is not connected yet.", true);
-  if (saved.brokenReason) throw new GoogleError(saved.brokenReason, true);
-  const cached6 = accessTokens.get(saved.refreshToken);
-  if (cached6 && cached6.expiresAt > Date.now() + 6e4) return cached6.token;
-  const token2 = await postToken({
-    client_id: googleClient().id,
-    client_secret: googleClient().secret,
-    refresh_token: saved.refreshToken,
-    grant_type: "refresh_token"
-  });
-  if (token2.error === "invalid_grant") {
-    const reason = "Google has disconnected Grace \u2014 usually a changed password or a revoked permission. Reconnect to put it back.";
-    await store6.write({ ...saved, brokenReason: reason });
-    throw new GoogleError(reason, true);
-  }
-  if (token2.error || !token2.access_token) {
-    throw new GoogleError(token2.error_description ?? "Google refused the token.");
-  }
-  accessTokens.set(saved.refreshToken, {
-    token: token2.access_token,
-    expiresAt: Date.now() + (token2.expires_in ?? 3600) * 1e3
-  });
-  return token2.access_token;
-}
-async function googleFetch(url, init = {}) {
-  const token2 = await accessToken();
-  const response = await fetch(url, {
-    ...init,
-    headers: {
-      ...init.headers ?? {},
-      Authorization: `Bearer ${token2}`,
-      "Content-Type": "application/json"
-    }
-  });
-  if (response.status === 401) {
-    throw new GoogleError("Google rejected that request. Try reconnecting.", true);
-  }
-  if (!response.ok) {
-    const detail = await response.text();
-    throw new GoogleError(
-      `Google returned ${response.status}: ${detail.slice(0, 200)}`
-    );
-  }
-  return response.json();
-}
-var AUTH_URL, TOKEN_URL, SCOPES, store6, accessTokens, GoogleError;
-var init_oauth = __esm({
-  "server/google/oauth.ts"() {
-    init_auth();
-    init_keys();
-    init_store();
-    AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
-    TOKEN_URL = "https://oauth2.googleapis.com/token";
-    SCOPES = [
-      "https://www.googleapis.com/auth/gmail.readonly",
-      "https://www.googleapis.com/auth/gmail.compose",
-      "https://www.googleapis.com/auth/gmail.modify",
-      "https://www.googleapis.com/auth/calendar.events",
-      "openid",
-      "email"
-    ];
-    store6 = new Document("google", () => null);
-    accessTokens = /* @__PURE__ */ new Map();
-    GoogleError = class extends Error {
-      constructor(message, needsReconnect = false) {
-        super(message);
-        this.needsReconnect = needsReconnect;
-        this.name = "GoogleError";
-      }
     };
   }
 });
@@ -2393,336 +2942,6 @@ var init_n8n = __esm({
   }
 });
 
-// server/push.ts
-import webpush from "web-push";
-async function keys2() {
-  const saved = await keyStore.read();
-  if (saved) return saved;
-  const fresh2 = webpush.generateVAPIDKeys();
-  await keyStore.write(fresh2);
-  return fresh2;
-}
-async function publicKey() {
-  return (await keys2()).publicKey;
-}
-async function subscribe(raw) {
-  const candidate = raw;
-  const endpoint = candidate?.endpoint;
-  const p256dh = candidate?.keys?.p256dh;
-  const auth = candidate?.keys?.auth;
-  if (typeof endpoint !== "string" || !p256dh || !auth) {
-    return { ok: false, error: "that is not a usable subscription" };
-  }
-  await subscriptions.update((current) => {
-    const others = current.filter((entry) => entry.endpoint !== endpoint);
-    return [
-      ...others,
-      { endpoint, keys: { p256dh, auth }, addedAt: (/* @__PURE__ */ new Date()).toISOString() }
-    ];
-  });
-  return { ok: true };
-}
-async function devices() {
-  return (await subscriptions.read()).filter((entry) => !entry.goneAt).length;
-}
-async function notify(title, body) {
-  const all = await subscriptions.read();
-  const live2 = all.filter((entry) => !entry.goneAt);
-  if (live2.length === 0) return 0;
-  const { publicKey: pub, privateKey } = await keys2();
-  webpush.setVapidDetails(CONTACT, pub, privateKey);
-  const payload = JSON.stringify({ title, body });
-  const gone = [];
-  let sent = 0;
-  await Promise.all(
-    live2.map(async (entry) => {
-      try {
-        await webpush.sendNotification(
-          { endpoint: entry.endpoint, keys: entry.keys },
-          payload,
-          { TTL: 900 }
-        );
-        sent += 1;
-      } catch (error) {
-        const status = error.statusCode;
-        if (status === 404 || status === 410) gone.push(entry.endpoint);
-        else console.error("[grace] push failed:", error.message);
-      }
-    })
-  );
-  if (gone.length > 0) {
-    const at = (/* @__PURE__ */ new Date()).toISOString();
-    await subscriptions.update(
-      (current) => current.map(
-        (entry) => gone.includes(entry.endpoint) ? { ...entry, goneAt: at } : entry
-      )
-    );
-  }
-  return sent;
-}
-var keyStore, subscriptions, CONTACT;
-var init_push = __esm({
-  "server/push.ts"() {
-    init_store();
-    keyStore = new Document("push-keys", () => null);
-    subscriptions = new Document("push-subs", () => []);
-    CONTACT = "mailto:grace@localhost";
-  }
-});
-
-// server/google/calendar.ts
-function shape2(event) {
-  const allDay = Boolean(event.start?.date);
-  return {
-    id: event.id,
-    summary: event.summary ?? "(no title)",
-    location: event.location ?? "",
-    start: event.start?.dateTime ?? event.start?.date ?? "",
-    end: event.end?.dateTime ?? event.end?.date ?? "",
-    allDay,
-    attendees: (event.attendees ?? []).map((attendee) => attendee.email ?? "").filter(Boolean)
-  };
-}
-async function upcoming(hours = 24, limit = 20) {
-  const from = /* @__PURE__ */ new Date();
-  const to = new Date(from.getTime() + hours * 36e5);
-  const params = new URLSearchParams({
-    timeMin: from.toISOString(),
-    timeMax: to.toISOString(),
-    singleEvents: "true",
-    orderBy: "startTime",
-    maxResults: String(limit)
-  });
-  const response = await googleFetch(`${BASE2}?${params.toString()}`);
-  return (response.items ?? []).map(shape2);
-}
-async function addAppointment(options) {
-  const zone = options.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC";
-  const created = await googleFetch(`${BASE2}?sendUpdates=none`, {
-    method: "POST",
-    body: JSON.stringify({
-      summary: options.summary,
-      location: options.location,
-      description: options.description,
-      start: { dateTime: options.start, timeZone: zone },
-      end: { dateTime: options.end, timeZone: zone }
-    })
-  });
-  return shape2(created);
-}
-async function changeAppointment(id, patch) {
-  const zone = patch.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC";
-  const body = {};
-  if (patch.summary) body.summary = patch.summary;
-  if (patch.location) body.location = patch.location;
-  if (patch.start) body.start = { dateTime: patch.start, timeZone: zone };
-  if (patch.end) body.end = { dateTime: patch.end, timeZone: zone };
-  if (Object.keys(body).length === 0) {
-    throw new Error("nothing to change");
-  }
-  const updated = await googleFetch(
-    `${BASE2}/${encodeURIComponent(id)}?sendUpdates=none`,
-    { method: "PATCH", body: JSON.stringify(body) }
-  );
-  return shape2(updated);
-}
-var BASE2;
-var init_calendar = __esm({
-  "server/google/calendar.ts"() {
-    init_oauth();
-    BASE2 = "https://www.googleapis.com/calendar/v3/calendars/primary/events";
-  }
-});
-
-// server/google/gmail.ts
-function headerMap(headers) {
-  return Object.fromEntries(
-    (headers ?? []).map((header) => [header.name.toLowerCase(), header.value])
-  );
-}
-function findText(part) {
-  if (!part) return "";
-  if (part.mimeType === "text/plain" && !part.filename && part.body?.data) {
-    return Buffer.from(part.body.data, "base64url").toString("utf8");
-  }
-  for (const child of part.parts ?? []) {
-    const found = findText(child);
-    if (found) return found;
-  }
-  if (part.mimeType === "text/html" && !part.filename && part.body?.data) {
-    return Buffer.from(part.body.data, "base64url").toString("utf8").replace(/<style[\s\S]*?<\/style>/gi, "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-  }
-  return "";
-}
-async function recentMail(query = "in:inbox", limit = 10) {
-  const list = await googleFetch(
-    `${BASE3}/messages?maxResults=${limit}&q=${encodeURIComponent(query)}`
-  );
-  const ids = (list.messages ?? []).slice(0, limit);
-  if (ids.length === 0) return [];
-  const messages = await Promise.all(
-    ids.map(
-      (message) => googleFetch(
-        `${BASE3}/messages/${message.id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date&metadataHeaders=List-Unsubscribe&metadataHeaders=Precedence`
-      ).catch(() => null)
-    )
-  );
-  return messages.filter(Boolean).map((raw) => {
-    const message = raw;
-    const headers = headerMap(message.payload?.headers);
-    return {
-      id: message.id,
-      threadId: message.threadId,
-      from: headers.from ?? "unknown sender",
-      subject: headers.subject ?? "(no subject)",
-      // Server-authoritative and trivially sortable, unlike the Date header.
-      date: new Date(Number(message.internalDate ?? 0)).toISOString(),
-      snippet: message.snippet ?? "",
-      unread: (message.labelIds ?? []).includes("UNREAD"),
-      bulk: Boolean(headers["list-unsubscribe"]) || /^(bulk|list|auto_reply)$/i.test(headers.precedence ?? "") || (message.labelIds ?? []).some(
-        (id) => ["CATEGORY_PROMOTIONS", "CATEGORY_SOCIAL", "CATEGORY_FORUMS"].includes(id)
-      )
-    };
-  });
-}
-async function readMail(id) {
-  const message = await googleFetch(`${BASE3}/messages/${id}?format=full`);
-  const headers = headerMap(message.payload?.headers);
-  return {
-    id: message.id,
-    threadId: message.threadId,
-    from: headers.from ?? "unknown sender",
-    subject: headers.subject ?? "(no subject)",
-    date: new Date(Number(message.internalDate ?? 0)).toISOString(),
-    snippet: message.snippet ?? "",
-    unread: (message.labelIds ?? []).includes("UNREAD"),
-    // Opening one deliberately means it is wanted regardless of what it is.
-    bulk: false,
-    body: findText(message.payload) || (message.snippet ?? "")
-  };
-}
-async function modify(id, change) {
-  const addLabelIds = change.add ?? [];
-  const removeLabelIds = change.remove ?? [];
-  const banned = [...addLabelIds, ...removeLabelIds].find(
-    (label2) => FORBIDDEN.includes(label2.toUpperCase())
-  );
-  if (banned) throw new Error(`${banned} is not hers to touch`);
-  await googleFetch(`${BASE3}/messages/${id}/modify`, {
-    method: "POST",
-    body: JSON.stringify({ addLabelIds, removeLabelIds })
-  });
-}
-async function fileMail(id) {
-  await modify(id, { remove: ["INBOX"] });
-}
-async function markRead(id) {
-  await modify(id, { remove: ["UNREAD"] });
-}
-async function markUnread(id) {
-  await modify(id, { add: ["UNREAD", "INBOX"] });
-}
-async function star(id) {
-  await modify(id, { add: ["STARRED"] });
-}
-async function labelMail(id, name) {
-  const wanted = name.trim();
-  if (!wanted) throw new Error("a label needs a name");
-  if (FORBIDDEN.includes(wanted.toUpperCase())) {
-    throw new Error(`${wanted} is not hers to touch`);
-  }
-  const existing = await googleFetch(`${BASE3}/labels`);
-  const found = (existing.labels ?? []).find(
-    (label2) => label2.name.toLowerCase() === wanted.toLowerCase()
-  );
-  const labelId = found?.id ?? (await googleFetch(`${BASE3}/labels`, {
-    method: "POST",
-    body: JSON.stringify({
-      name: wanted,
-      labelListVisibility: "labelShow",
-      messageListVisibility: "show"
-    })
-  })).id;
-  await modify(id, { add: [labelId] });
-  return found ? wanted : `${wanted} (new label)`;
-}
-async function draftReply(options) {
-  const mime = [
-    `To: ${options.to}`,
-    `Subject: ${encodeHeader(options.subject)}`,
-    'Content-Type: text/plain; charset="UTF-8"',
-    "",
-    options.body
-  ].join("\r\n");
-  const draft = await googleFetch(`${BASE3}/drafts`, {
-    method: "POST",
-    body: JSON.stringify({
-      message: {
-        raw: Buffer.from(mime, "utf8").toString("base64url"),
-        ...options.threadId ? { threadId: options.threadId } : {}
-      }
-    })
-  });
-  return { id: draft.id };
-}
-function encodeHeader(value) {
-  if (/^[\x00-\x7F]*$/.test(value)) return value;
-  return `=?UTF-8?B?${Buffer.from(value, "utf8").toString("base64")}?=`;
-}
-var BASE3, FORBIDDEN;
-var init_gmail = __esm({
-  "server/google/gmail.ts"() {
-    init_oauth();
-    BASE3 = "https://gmail.googleapis.com/gmail/v1/users/me";
-    FORBIDDEN = ["TRASH", "SPAM"];
-  }
-});
-
-// server/modes.ts
-function getMode() {
-  return store7.read();
-}
-function isMode(value) {
-  return typeof value === "string" && Object.hasOwn(MODES, value);
-}
-async function setMode(mode) {
-  const current = await store7.read();
-  if (current.mode === mode) return current;
-  const next = { mode, since: (/* @__PURE__ */ new Date()).toISOString() };
-  await store7.write(next);
-  return next;
-}
-var MODES, DEFAULT, store7;
-var init_modes = __esm({
-  "server/modes.ts"() {
-    init_store();
-    MODES = {
-      open: {
-        label: "Open",
-        blurb: "Normal. She speaks up when it\u2019s worth it.",
-        guidance: "No special constraints. Answer as you normally would, and raise anything genuinely worth raising."
-      },
-      work: {
-        label: "Work",
-        blurb: "Brisk and on-task. Personal matters wait.",
-        guidance: "The user is working. Be brisk and concrete \u2014 lead with the answer, cut the preamble entirely. Keep replies to a sentence or two unless asked for more. Hold anything personal or non-urgent until they are out of Work mode, and say you are holding it rather than dropping it."
-      },
-      focus: {
-        label: "Focus",
-        blurb: "Answers only. Nothing volunteered.",
-        guidance: "The user is concentrating and every word costs them. Answer exactly what was asked, in as few words as will do \u2014 often a fragment rather than a sentence. Volunteer nothing at all: no observations, no suggestions, no follow-up questions. If something is genuinely urgent, say only that it is urgent and what it is, in under ten words."
-      },
-      away: {
-        label: "Away",
-        blurb: "She takes messages and holds them.",
-        guidance: "The user is away from their desk and may be listening rather than reading. Assume everything is being spoken aloud: short sentences, no detail they cannot hold in their head. Take note of anything that arrives and tell them it is waiting rather than working through it now."
-      }
-    };
-    DEFAULT = { mode: "open", since: (/* @__PURE__ */ new Date(0)).toISOString() };
-    store7 = new Document("mode", () => DEFAULT);
-  }
-});
-
 // server/tools/ask.ts
 function parseChoices(raw) {
   return raw.split(/\s*\|\s*|\n+/).map((line) => line.trim()).filter(Boolean).map((line) => {
@@ -2771,18 +2990,18 @@ var init_ask = __esm({
 });
 
 // server/approvals.ts
-import { randomUUID as randomUUID5 } from "node:crypto";
+import { randomUUID as randomUUID8 } from "node:crypto";
 function live(all, now = Date.now()) {
   return all.filter((entry) => now - new Date(entry.at).getTime() < HOLD_FOR_MS);
 }
 async function hold(name, args) {
-  const entry = { id: randomUUID5().slice(0, 8), name, args, at: (/* @__PURE__ */ new Date()).toISOString() };
-  await store9.update((all) => [...live(all), entry]);
+  const entry = { id: randomUUID8().slice(0, 8), name, args, at: (/* @__PURE__ */ new Date()).toISOString() };
+  await store12.update((all) => [...live(all), entry]);
   return entry;
 }
 async function take(id) {
   let found = null;
-  await store9.update((all) => {
+  await store12.update((all) => {
     const current = live(all);
     found = current.find((entry) => entry.id === id) ?? null;
     return current.filter((entry) => entry.id !== id);
@@ -2790,41 +3009,14 @@ async function take(id) {
   return found;
 }
 async function restore(entry) {
-  await store9.update((all) => [...live(all).filter((e) => e.id !== entry.id), entry]);
+  await store12.update((all) => [...live(all).filter((e) => e.id !== entry.id), entry]);
 }
-var HOLD_FOR_MS, store9;
+var HOLD_FOR_MS, store12;
 var init_approvals = __esm({
   "server/approvals.ts"() {
     init_store();
     HOLD_FOR_MS = 5 * 60 * 1e3;
-    store9 = new Document("approvals", () => []);
-  }
-});
-
-// server/journal.ts
-import { randomUUID as randomUUID6 } from "node:crypto";
-async function recentDeeds(limit = 25) {
-  const all = await store10.read();
-  return all.slice(-limit).reverse();
-}
-async function noteDeed(kind, text, unprompted = false) {
-  const clean = text.trim().slice(0, 300);
-  if (!clean) return;
-  const entry = {
-    id: randomUUID6(),
-    at: (/* @__PURE__ */ new Date()).toISOString(),
-    kind,
-    text: clean,
-    ...unprompted ? { unprompted: true } : {}
-  };
-  await store10.update((current) => [...current, entry].slice(-LIMIT));
-}
-var LIMIT, store10;
-var init_journal = __esm({
-  "server/journal.ts"() {
-    init_store();
-    LIMIT = 120;
-    store10 = new Document("journal", () => []);
+    store12 = new Document("approvals", () => []);
   }
 });
 
@@ -3126,7 +3318,7 @@ var init_tests = __esm({
 });
 
 // server/coding/index.ts
-import { randomUUID as randomUUID7 } from "node:crypto";
+import { randomUUID as randomUUID9 } from "node:crypto";
 function recentJobs() {
   return [...jobs.values()].sort((a, b) => b.startedAt - a.startedAt);
 }
@@ -3135,7 +3327,7 @@ function jobById(id) {
 }
 function startJob(task, folder, hands2, { straightToOpus = false } = {}) {
   const job = {
-    id: randomUUID7().slice(0, 8),
+    id: randomUUID9().slice(0, 8),
     task,
     folder,
     startedAt: Date.now(),
@@ -4169,9 +4361,9 @@ var init_machine = __esm({
 });
 
 // server/files.ts
-import { randomUUID as randomUUID8 } from "node:crypto";
+import { randomUUID as randomUUID10 } from "node:crypto";
 async function liveFiles() {
-  return (await store11.read()).filter((file) => !file.archivedAt).sort((left, right) => right.addedAt.localeCompare(left.addedAt));
+  return (await store13.read()).filter((file) => !file.archivedAt).sort((left, right) => right.addedAt.localeCompare(left.addedAt));
 }
 async function findFile(said2) {
   const needle = said2.toLowerCase().trim();
@@ -4184,13 +4376,13 @@ async function addFile(name, text) {
   const body = text.trim().slice(0, MAX_CHARS);
   if (!body) throw new Error("there was no readable text in that file");
   const file = {
-    id: randomUUID8(),
+    id: randomUUID10(),
     name: clean,
     text: body,
     chars: body.length,
     addedAt: (/* @__PURE__ */ new Date()).toISOString()
   };
-  await store11.update((files) => {
+  await store13.update((files) => {
     const others = files.filter((one) => one.name !== clean || one.archivedAt);
     const kept = [file, ...others];
     const live2 = kept.filter((one) => !one.archivedAt);
@@ -4205,7 +4397,7 @@ async function addFile(name, text) {
   return file;
 }
 async function archiveFile(id) {
-  await store11.update(
+  await store13.update(
     (files) => files.map(
       (file) => file.id === id ? { ...file, archivedAt: (/* @__PURE__ */ new Date()).toISOString() } : file
     )
@@ -4225,13 +4417,13 @@ async function searchFiles(query) {
     return { name: file.name, excerpt, score: hits.length };
   }).filter((row) => Boolean(row)).sort((left, right) => right.score - left.score).slice(0, 4).map(({ name, excerpt }) => ({ name, excerpt }));
 }
-var MAX_CHARS, MAX_FILES, store11, NOISE2;
+var MAX_CHARS, MAX_FILES, store13, NOISE2;
 var init_files = __esm({
   "server/files.ts"() {
     init_store();
     MAX_CHARS = 4e4;
     MAX_FILES = 40;
-    store11 = new Document("files", () => []);
+    store13 = new Document("files", () => []);
     NOISE2 = /* @__PURE__ */ new Set([
       "the",
       "a",
@@ -4260,9 +4452,9 @@ var init_files = __esm({
 });
 
 // server/notes.ts
-import { randomUUID as randomUUID9 } from "node:crypto";
+import { randomUUID as randomUUID11 } from "node:crypto";
 async function liveNotes() {
-  const all = await store12.read();
+  const all = await store14.read();
   return all.filter((note) => !note.archivedAt).sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
 }
 function match(notes, title) {
@@ -4294,7 +4486,7 @@ async function writeNote(title, text, mode = "append") {
   if (!clean || !body) throw new Error("a note needs a title and something to say");
   const now = (/* @__PURE__ */ new Date()).toISOString();
   let saved = null;
-  await store12.update((notes) => {
+  await store14.update((notes) => {
     const existing = match(
       notes.filter((note) => !note.archivedAt),
       clean
@@ -4310,7 +4502,7 @@ ${dateLine(now)} ${body}`,
       return notes.map((note) => note.id === existing.id ? saved : note);
     }
     saved = {
-      id: randomUUID9(),
+      id: randomUUID11(),
       title: clean,
       body: `${dateLine(now)} ${body}`,
       createdAt: now,
@@ -4328,7 +4520,7 @@ async function readNote(title) {
 }
 async function saveNoteBody(id, title, body) {
   const now = (/* @__PURE__ */ new Date()).toISOString();
-  await store12.update(
+  await store14.update(
     (notes) => notes.map(
       (note) => note.id === id ? { ...note, title: title.trim().slice(0, 80), body: body.trim(), updatedAt: now } : note
     )
@@ -4337,27 +4529,27 @@ async function saveNoteBody(id, title, body) {
 }
 async function archiveNote(id) {
   const now = (/* @__PURE__ */ new Date()).toISOString();
-  await store12.update(
+  await store14.update(
     (notes) => notes.map((note) => note.id === id ? { ...note, archivedAt: now } : note)
   );
   return liveNotes();
 }
-var store12, FILLER;
+var store14, FILLER;
 var init_notes = __esm({
   "server/notes.ts"() {
     init_store();
-    store12 = new Document("notes", () => []);
+    store14 = new Document("notes", () => []);
     FILLER = /* @__PURE__ */ new Set(["the", "a", "an", "my", "our", "this", "that", "of", "for"]);
   }
 });
 
 // server/situations.ts
-import { randomUUID as randomUUID10 } from "node:crypto";
+import { randomUUID as randomUUID12 } from "node:crypto";
 function allSituations() {
-  return store13.read();
+  return store15.read();
 }
 async function openSituations() {
-  const all = await store13.read();
+  const all = await store15.read();
   return all.filter((one) => one.status === "open").sort((left, right) => lastMove(right).localeCompare(lastMove(left)));
 }
 function lastMove(one) {
@@ -4392,7 +4584,7 @@ async function trackSituation(title, update) {
   if (!clean || !text) throw new Error("a situation needs a title and an update");
   const now = (/* @__PURE__ */ new Date()).toISOString();
   let saved = null;
-  await store13.update((list) => {
+  await store15.update((list) => {
     const existing = find(
       list.filter((one) => one.status === "open"),
       clean
@@ -4402,7 +4594,7 @@ async function trackSituation(title, update) {
       return list.map((one) => one.id === existing.id ? saved : one);
     }
     saved = {
-      id: randomUUID10(),
+      id: randomUUID12(),
       title: clean,
       status: "open",
       updates: [{ at: now, text }],
@@ -4415,7 +4607,7 @@ async function trackSituation(title, update) {
 async function resolveSituation(title) {
   const now = (/* @__PURE__ */ new Date()).toISOString();
   let resolved = null;
-  await store13.update((list) => {
+  await store15.update((list) => {
     const one = findForResolving(
       list.filter((s) => s.status === "open"),
       title.trim()
@@ -4426,11 +4618,11 @@ async function resolveSituation(title) {
   });
   return resolved;
 }
-var store13, FILLER2;
+var store15, FILLER2;
 var init_situations = __esm({
   "server/situations.ts"() {
     init_store();
-    store13 = new Document("situations", () => []);
+    store15 = new Document("situations", () => []);
     FILLER2 = /* @__PURE__ */ new Set(["the", "a", "an", "my", "our", "this", "that", "of", "for"]);
   }
 });
@@ -4578,7 +4770,7 @@ ${found.text}`;
 
 // server/scenes.ts
 async function allScenes() {
-  const { changes } = await store14.read();
+  const { changes } = await store16.read();
   return DEFAULTS.map((scene) => {
     const change = changes[scene.id];
     if (!change) return scene;
@@ -4619,13 +4811,13 @@ async function tuneScene(id, change) {
     kelvin: clamp(kelvin, KELVIN_RANGE.low, KELVIN_RANGE.high),
     brightness: clamp(brightness, 1, 100)
   };
-  await store14.update((current) => ({
+  await store16.update((current) => ({
     changes: { ...current.changes, [id]: tuned }
   }));
   return { ...before, ...tuned };
 }
 async function restoreScene(id) {
-  await store14.update((current) => {
+  await store16.update((current) => {
     const changes = { ...current.changes };
     delete changes[id];
     return { changes };
@@ -4642,7 +4834,7 @@ function kelvinToRgb(kelvin) {
   const blue = temp >= 66 ? 255 : temp <= 19 ? 0 : bound(138.5177312231 * Math.log(temp - 10) - 305.0447927307);
   return [red, green, blue];
 }
-var KELVIN_RANGE, DEFAULTS, SCENE_NAMES, store14, clamp, STEP;
+var KELVIN_RANGE, DEFAULTS, SCENE_NAMES, store16, clamp, STEP;
 var init_scenes = __esm({
   "server/scenes.ts"() {
     init_store();
@@ -4727,7 +4919,7 @@ var init_scenes = __esm({
       }
     ];
     SCENE_NAMES = DEFAULTS.map((scene) => scene.id);
-    store14 = new Document("scenes", () => ({ changes: {} }));
+    store16 = new Document("scenes", () => ({ changes: {} }));
     clamp = (value, low, high) => Number.isFinite(value) ? Math.max(low, Math.min(high, Math.round(value))) : low;
     STEP = {
       little: { brightness: 8, kelvin: 250 },
@@ -4962,9 +5154,9 @@ var init_lights2 = __esm({
 });
 
 // server/workspaces.ts
-import { randomUUID as randomUUID11 } from "node:crypto";
+import { randomUUID as randomUUID13 } from "node:crypto";
 async function workspaces() {
-  const saved = await store15.read();
+  const saved = await store17.read();
   const missing = DEFAULTS2.filter((one) => !saved.some((other) => other.id === one.id));
   return [...saved, ...missing].filter((one) => !one.hidden);
 }
@@ -4976,7 +5168,7 @@ async function findWorkspace(said2) {
 }
 async function saveWorkspace(patch) {
   const clean = {
-    id: patch.id?.trim() || randomUUID11().slice(0, 8),
+    id: patch.id?.trim() || randomUUID13().slice(0, 8),
     name: (patch.name ?? "Untitled").trim().slice(0, 24),
     icon: patch.icon ?? "sparkles",
     accent: patch.accent ?? "ice",
@@ -4985,7 +5177,7 @@ async function saveWorkspace(patch) {
     blurb: patch.blurb?.slice(0, 80),
     brief: patch.brief?.slice(0, 200)
   };
-  await store15.update((current) => {
+  await store17.update((current) => {
     const rest = current.filter((one) => one.id !== clean.id);
     const at = current.findIndex((one) => one.id === clean.id);
     if (at < 0) return [...current, clean];
@@ -4996,14 +5188,14 @@ async function saveWorkspace(patch) {
   return workspaces();
 }
 async function hideWorkspace(id) {
-  await store15.update((current) => {
+  await store17.update((current) => {
     const known2 = current.some((one) => one.id === id);
     const base = known2 ? current : [...current, ...DEFAULTS2.filter((one) => one.id === id)];
     return base.map((one) => one.id === id ? { ...one, hidden: true } : one);
   });
   return workspaces();
 }
-var DEFAULTS2, store15;
+var DEFAULTS2, store17;
 var init_workspaces = __esm({
   "server/workspaces.ts"() {
     init_store();
@@ -5047,7 +5239,7 @@ var init_workspaces = __esm({
         blurb: "The console, and what you have been playing."
       }
     ];
-    store15 = new Document("workspaces", () => DEFAULTS2);
+    store17 = new Document("workspaces", () => DEFAULTS2);
   }
 });
 
@@ -5486,109 +5678,6 @@ ${known2.join("\n")}`);
   }
 });
 
-// server/tools/reminders.ts
-import { randomUUID as randomUUID12 } from "node:crypto";
-async function outstanding() {
-  const all = await store16.read();
-  return all.filter((reminder) => !reminder.doneAt).sort((left, right) => {
-    if (!left.due) return 1;
-    if (!right.due) return -1;
-    return left.due.localeCompare(right.due);
-  });
-}
-function describe(reminder) {
-  if (!reminder.due) return reminder.text;
-  return `${reminder.text} (${new Date(reminder.due).toLocaleString("en-GB", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit"
-  })})`;
-}
-var store16, reminderTools;
-var init_reminders = __esm({
-  "server/tools/reminders.ts"() {
-    init_store();
-    store16 = new Document("reminders", () => []);
-    reminderTools = [
-      {
-        name: "add_reminder",
-        description: "Add something to the user\u2019s list of things to remember or do. Use this whenever they ask to be reminded of something, or mention something they need to do later.",
-        category: "calendar",
-        parameters: {
-          text: {
-            type: "string",
-            description: "What to remember, in the user\u2019s own words where possible."
-          },
-          due: {
-            type: "string",
-            description: 'When it is wanted, as a full ISO 8601 timestamp. Omit entirely if no particular time was given. Work out real dates from phrases like "tomorrow morning" using the current date you were given.'
-          }
-        },
-        required: ["text"],
-        run: async (args) => {
-          const text = String(args.text ?? "").trim();
-          if (!text) return "Nothing was given to remember.";
-          const raw = args.due ? String(args.due) : "";
-          const parsed = raw ? new Date(raw) : null;
-          const valid2 = parsed && Number.isFinite(parsed.getTime()) ? parsed : null;
-          const reminder = {
-            id: randomUUID12(),
-            text,
-            due: valid2 ? valid2.toISOString() : null,
-            createdAt: (/* @__PURE__ */ new Date()).toISOString(),
-            doneAt: null
-          };
-          await store16.update((current) => [...current, reminder]);
-          return `Noted: ${describe(reminder)}`;
-        }
-      },
-      {
-        name: "list_reminders",
-        description: "List what the user still has outstanding. Use it when they ask what is on their list, what is outstanding, or what they have forgotten.",
-        category: "research",
-        parameters: {},
-        required: [],
-        run: async () => {
-          const open = await outstanding();
-          if (open.length === 0) return "Their list is empty.";
-          return `Outstanding:
-${open.map((item) => `- ${describe(item)}`).join("\n")}`;
-        }
-      },
-      {
-        name: "complete_reminder",
-        description: "Mark something on the list as done. Match on the wording the user used; if more than one thing could be meant, ask which rather than guessing.",
-        category: "calendar",
-        parameters: {
-          text: {
-            type: "string",
-            description: "Enough of the reminder\u2019s wording to identify it."
-          }
-        },
-        required: ["text"],
-        run: async (args) => {
-          const needle = String(args.text ?? "").trim().toLowerCase();
-          if (!needle) return "Which one?";
-          const open = await outstanding();
-          const matches2 = open.filter((item) => item.text.toLowerCase().includes(needle));
-          if (matches2.length === 0) return `Nothing on the list matches "${needle}".`;
-          if (matches2.length > 1) {
-            return `More than one matches: ${matches2.map((item) => item.text).join("; ")}. Ask which one they mean.`;
-          }
-          await store16.update(
-            (current) => current.map(
-              (item) => item.id === matches2[0].id ? { ...item, doneAt: (/* @__PURE__ */ new Date()).toISOString() } : item
-            )
-          );
-          return `Marked done: ${matches2[0].text}`;
-        }
-      }
-    ];
-  }
-});
-
 // server/tools/self.ts
 var selfTools;
 var init_self2 = __esm({
@@ -5735,92 +5824,6 @@ var init_self2 = __esm({
         }
       }
     ];
-  }
-});
-
-// server/watch.ts
-import { createHash as createHash2, randomUUID as randomUUID13 } from "node:crypto";
-async function liveWatches() {
-  return (await store17.read()).filter((watch) => !watch.archivedAt);
-}
-async function startWatch(what, url, keyword) {
-  const clean = what.trim().slice(0, 100);
-  const address = url.trim();
-  if (!clean || !/^https?:\/\//i.test(address)) {
-    throw new Error("a watch needs something to watch and a full https address");
-  }
-  const watch = {
-    id: randomUUID13(),
-    what: clean,
-    url: address,
-    keyword: keyword?.trim() || void 0,
-    createdAt: (/* @__PURE__ */ new Date()).toISOString()
-  };
-  await store17.update((list) => [...list, watch]);
-  return watch;
-}
-async function stopWatch(what) {
-  const needle = what.toLowerCase().trim();
-  let found = false;
-  await store17.update(
-    (list) => list.map((watch) => {
-      if (watch.archivedAt || !watch.what.toLowerCase().includes(needle)) return watch;
-      found = true;
-      return { ...watch, archivedAt: (/* @__PURE__ */ new Date()).toISOString() };
-    })
-  );
-  return found;
-}
-function textOf(html) {
-  return html.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
-}
-async function observe(watch) {
-  try {
-    const response = await fetch(watch.url, {
-      headers: { "user-agent": "Mozilla/5.0 (Grace watch)" },
-      signal: AbortSignal.timeout(8e3)
-    });
-    if (!response.ok) return null;
-    const text = textOf(await response.text());
-    if (watch.keyword) {
-      return text.includes(watch.keyword.toLowerCase()) ? "present" : "absent";
-    }
-    return createHash2("sha256").update(text).digest("hex").slice(0, 16);
-  } catch {
-    return null;
-  }
-}
-async function checkWatches() {
-  const watches = await liveWatches();
-  if (watches.length === 0) return [];
-  const changes = [];
-  const now = (/* @__PURE__ */ new Date()).toISOString();
-  const readings = await Promise.all(
-    watches.map(async (watch) => ({ watch, reading: await observe(watch) }))
-  );
-  await store17.update(
-    (list) => list.map((stored) => {
-      const found = readings.find((r) => r.watch.id === stored.id);
-      if (!found || found.reading === null) return stored;
-      const { reading } = found;
-      if (stored.last !== void 0 && stored.last !== reading) {
-        changes.push({
-          id: stored.id,
-          what: stored.what,
-          url: stored.url,
-          detail: stored.keyword ? reading === "present" ? `"${stored.keyword}" now appears on the page for ${stored.what}` : `"${stored.keyword}" has gone from the page for ${stored.what}` : `${stored.what} changed`
-        });
-      }
-      return { ...stored, last: reading, lastCheckedAt: now };
-    })
-  );
-  return changes;
-}
-var store17;
-var init_watch = __esm({
-  "server/watch.ts"() {
-    init_store();
-    store17 = new Document("watches", () => []);
   }
 });
 
@@ -6408,6 +6411,191 @@ var init_tools = __esm({
 // server/vercel-entry.ts
 import express2 from "express";
 
+// server/heartbeat.ts
+init_config();
+init_journal();
+init_push();
+
+// server/pulse.ts
+init_memory();
+init_calendar();
+init_gmail();
+init_oauth();
+init_journal();
+init_llm();
+init_modes();
+init_push();
+init_reminders();
+init_watch();
+init_store();
+var seen = new Document("pulse", () => ({ raised: {} }));
+var IMMINENT_MINUTES = 45;
+var FORGET_AFTER_MS = 36 * 60 * 60 * 1e3;
+function minutesUntil(iso) {
+  return Math.round((new Date(iso).getTime() - Date.now()) / 6e4);
+}
+async function gather(now = /* @__PURE__ */ new Date()) {
+  const concerns = [];
+  for (const change of await checkWatches().catch(() => [])) {
+    concerns.push({
+      id: `watch:${change.id}:${now.toISOString().slice(0, 13)}`,
+      kind: "watch",
+      text: change.detail,
+      urgency: "soon"
+    });
+  }
+  const overdue = await outstanding().catch(() => []);
+  for (const reminder of overdue) {
+    if (!reminder.due) continue;
+    const minutes = minutesUntil(reminder.due);
+    if (minutes > IMMINENT_MINUTES) continue;
+    concerns.push({
+      id: `reminder:${reminder.id}`,
+      kind: "reminder",
+      text: minutes < 0 ? `${reminder.text} \u2014 that was due ${Math.abs(minutes)} minutes ago` : `${reminder.text} \u2014 due in ${minutes} minutes`,
+      urgency: minutes < 15 ? "now" : "soon",
+      at: reminder.due
+    });
+  }
+  const google = await connection().catch(() => null);
+  if (google && !google.brokenReason) {
+    const [events, mail] = await Promise.all([
+      upcoming(2, 5).catch(() => []),
+      recentMail("in:inbox is:unread category:primary newer_than:1d", 5).catch(() => [])
+    ]);
+    for (const event of events) {
+      if (event.allDay) continue;
+      const minutes = minutesUntil(event.start);
+      if (minutes < 0 || minutes > IMMINENT_MINUTES) continue;
+      concerns.push({
+        id: `diary:${event.id}`,
+        kind: "diary",
+        text: `${event.summary} starts in ${minutes} minutes${event.location ? `, at ${event.location}` : ""}`,
+        urgency: minutes <= 15 ? "now" : "soon",
+        at: event.start
+      });
+    }
+    const real = mail.filter((message) => !message.bulk);
+    if (real.length > 0) {
+      const senders = [...new Set(real.map((message) => message.from.split("<")[0].trim()))];
+      concerns.push({
+        // Keyed on the newest message, so the same batch is one concern and a
+        // genuinely new arrival is a new one.
+        id: `mail:${real[0].id}`,
+        kind: "mail",
+        text: real.length === 1 ? `${senders[0]} wrote: ${real[0].subject}` : `${real.length} new emails, from ${senders.slice(0, 3).join(", ")}`,
+        // Someone writing to you is worth a note on your phone; it is not
+        // worth stopping you mid-sentence for.
+        urgency: "soon"
+      });
+    }
+    const moving = mail.find(
+      (message) => /(out for delivery|has shipped|is on the way|arriving today|delivered)/i.test(
+        message.subject
+      )
+    );
+    if (moving) {
+      concerns.push({
+        id: `delivery:${moving.id}`,
+        kind: "mail",
+        text: `Delivery update: ${moving.subject}`,
+        urgency: "whenever"
+      });
+    }
+  }
+  void now;
+  return concerns;
+}
+async function unraised(concerns) {
+  const record4 = await seen.read();
+  const cutoff = Date.now() - FORGET_AFTER_MS;
+  const kept = {};
+  for (const [id, at] of Object.entries(record4.raised)) {
+    if (new Date(at).getTime() > cutoff) kept[id] = at;
+  }
+  const fresh2 = concerns.filter((concern) => !kept[concern.id]);
+  if (fresh2.length === 0) {
+    if (Object.keys(kept).length !== Object.keys(record4.raised).length) {
+      await seen.write({ raised: kept });
+    }
+    return [];
+  }
+  const now = (/* @__PURE__ */ new Date()).toISOString();
+  for (const concern of fresh2) kept[concern.id] = now;
+  await seen.write({ raised: kept });
+  return fresh2;
+}
+function mayInterrupt(mode, urgency) {
+  if (mode === "away") return false;
+  if (mode === "focus") return urgency === "now";
+  if (mode === "work") return urgency !== "whenever";
+  return true;
+}
+function overnight(now) {
+  const hour = now.getHours();
+  return hour >= 23 || hour < 7;
+}
+var RANK = { now: 0, soon: 1, whenever: 2 };
+async function pulse({ fromPage = false } = {}) {
+  const fresh2 = await unraised(await gather());
+  if (fresh2.length === 0) return { concerns: [], say: null, held: null };
+  for (const concern of fresh2) {
+    await noteDeed("noticed", concern.text, true);
+  }
+  const { mode } = await getMode();
+  const now = /* @__PURE__ */ new Date();
+  const sorted = [...fresh2].sort((left, right) => RANK[left.urgency] - RANK[right.urgency]);
+  const speakable = sorted.filter(
+    (concern) => mayInterrupt(mode, concern.urgency) && (!overnight(now) || concern.urgency === "now")
+  );
+  const spokenHere = new Set(fromPage ? speakable : []);
+  const worthABuzz = sorted.filter(
+    (concern) => !spokenHere.has(concern) && concern.urgency !== "whenever" && (!overnight(now) || concern.urgency === "now")
+  );
+  if (worthABuzz.length > 0) {
+    await notify("Grace", worthABuzz.map((concern) => concern.text).join(" \xB7 ")).catch(
+      () => 0
+    );
+  }
+  if (speakable.length === 0) {
+    return {
+      concerns: sorted,
+      say: null,
+      held: overnight(now) ? "Holding this until morning." : mode === "away" ? "Holding this until you are back." : "Not interrupting while you are heads-down."
+    };
+  }
+  const say = await compose(speakable).catch(() => fallback(speakable));
+  await noteDeed("spoke", say, true);
+  return { concerns: sorted, say, held: null, message: await record2("grace", say, "voice") };
+}
+function fallback(concerns) {
+  return concerns.map((concern) => concern.text).join(". ") + ".";
+}
+async function compose(concerns) {
+  const said2 = await getProvider().complete({
+    system: 'You are Grace, a composed personal assistant, interrupting the person you work for because something wants their attention. Say it in one short spoken sentence \u2014 two at the very most, and only if there are genuinely two things. No preamble, no "just letting you know", no markdown, no lists. Plain speech, understated. Do not add anything you were not given.',
+    turns: [
+      {
+        role: "user",
+        text: concerns.map((concern) => `- ${concern.text}`).join("\n")
+      }
+    ],
+    temperature: 0.4,
+    maxOutputTokens: 120,
+    fast: true
+  });
+  return said2.trim() || fallback(concerns);
+}
+
+// server/heartbeat.ts
+var EVERY_MS = Number(process.env.GRACE_PULSE_MS) || 2 * 60 * 1e3;
+var PAGE_FRESH_MS = 5 * 60 * 1e3;
+var pageLookedAt = 0;
+function pageLooked() {
+  pageLookedAt = Date.now();
+}
+var SETTLE_MS = 60 * 1e3;
+
 // server/llm/plainly.ts
 function dig(text, depth = 0) {
   const found = { message: text, status: "", code: 0 };
@@ -6904,7 +7092,7 @@ ${summary}` : null;
 init_gmail();
 init_llm();
 init_store();
-var store8 = new Document("style", () => ({
+var store11 = new Document("style", () => ({
   description: null,
   samples: 0,
   builtAt: null
@@ -6912,14 +7100,14 @@ var store8 = new Document("style", () => ({
 var STALE_MS2 = 7 * 24 * 60 * 60 * 1e3;
 var SAMPLES = 8;
 async function writingStyle() {
-  return (await store8.read()).description;
+  return (await store11.read()).description;
 }
 function fresh(style) {
   if (!style.description || !style.builtAt) return false;
   return Date.now() - new Date(style.builtAt).getTime() < STALE_MS2;
 }
 async function learnWritingStyle(force = false) {
-  const current = await store8.read();
+  const current = await store11.read();
   if (!force && fresh(current)) return false;
   const sent = await recentMail("in:sent", SAMPLES).catch(() => []);
   if (sent.length < 3) return false;
@@ -6943,7 +7131,7 @@ ${body}`).join("\n\n")
     fast: true
   }).catch(() => "");
   if (!description.trim()) return false;
-  await store8.write({
+  await store11.write({
     description: description.trim(),
     samples: bodies.length,
     builtAt: (/* @__PURE__ */ new Date()).toISOString()
@@ -7156,10 +7344,10 @@ init_modes();
 init_reminders();
 init_store();
 var store19 = new Document("greeting", () => ({ at: null }));
-var EVERY_MS = 4 * 60 * 60 * 1e3;
+var EVERY_MS2 = 4 * 60 * 60 * 1e3;
 async function greet(compose2) {
   const { at } = await store19.read();
-  if (at && Date.now() - new Date(at).getTime() < EVERY_MS) return { say: null };
+  if (at && Date.now() - new Date(at).getTime() < EVERY_MS2) return { say: null };
   const { mode } = await getMode();
   if (mode === "focus" || mode === "away") return { say: null };
   const [briefing, list] = await Promise.all([
@@ -7192,178 +7380,6 @@ init_github();
 init_n8n();
 init_llm();
 init_ps5();
-
-// server/pulse.ts
-init_memory();
-init_calendar();
-init_gmail();
-init_oauth();
-init_journal();
-init_llm();
-init_modes();
-init_push();
-init_reminders();
-init_watch();
-init_store();
-var seen = new Document("pulse", () => ({ raised: {} }));
-var IMMINENT_MINUTES = 45;
-var FORGET_AFTER_MS = 36 * 60 * 60 * 1e3;
-function minutesUntil(iso) {
-  return Math.round((new Date(iso).getTime() - Date.now()) / 6e4);
-}
-async function gather(now = /* @__PURE__ */ new Date()) {
-  const concerns = [];
-  for (const change of await checkWatches().catch(() => [])) {
-    concerns.push({
-      id: `watch:${change.id}:${now.toISOString().slice(0, 13)}`,
-      kind: "watch",
-      text: change.detail,
-      urgency: "soon"
-    });
-  }
-  const overdue = await outstanding().catch(() => []);
-  for (const reminder of overdue) {
-    if (!reminder.due) continue;
-    const minutes = minutesUntil(reminder.due);
-    if (minutes > IMMINENT_MINUTES) continue;
-    concerns.push({
-      id: `reminder:${reminder.id}`,
-      kind: "reminder",
-      text: minutes < 0 ? `${reminder.text} \u2014 that was due ${Math.abs(minutes)} minutes ago` : `${reminder.text} \u2014 due in ${minutes} minutes`,
-      urgency: minutes < 15 ? "now" : "soon",
-      at: reminder.due
-    });
-  }
-  const google = await connection().catch(() => null);
-  if (google && !google.brokenReason) {
-    const [events, mail] = await Promise.all([
-      upcoming(2, 5).catch(() => []),
-      recentMail("in:inbox is:unread category:primary newer_than:1d", 5).catch(() => [])
-    ]);
-    for (const event of events) {
-      if (event.allDay) continue;
-      const minutes = minutesUntil(event.start);
-      if (minutes < 0 || minutes > IMMINENT_MINUTES) continue;
-      concerns.push({
-        id: `diary:${event.id}`,
-        kind: "diary",
-        text: `${event.summary} starts in ${minutes} minutes${event.location ? `, at ${event.location}` : ""}`,
-        urgency: minutes <= 15 ? "now" : "soon",
-        at: event.start
-      });
-    }
-    const real = mail.filter((message) => !message.bulk);
-    if (real.length > 0) {
-      const senders = [...new Set(real.map((message) => message.from.split("<")[0].trim()))];
-      concerns.push({
-        // Keyed on the newest message, so the same batch is one concern and a
-        // genuinely new arrival is a new one.
-        id: `mail:${real[0].id}`,
-        kind: "mail",
-        text: real.length === 1 ? `${senders[0]} wrote: ${real[0].subject}` : `${real.length} new emails, from ${senders.slice(0, 3).join(", ")}`,
-        // Someone writing to you is worth a note on your phone; it is not
-        // worth stopping you mid-sentence for.
-        urgency: "soon"
-      });
-    }
-    const moving = mail.find(
-      (message) => /(out for delivery|has shipped|is on the way|arriving today|delivered)/i.test(
-        message.subject
-      )
-    );
-    if (moving) {
-      concerns.push({
-        id: `delivery:${moving.id}`,
-        kind: "mail",
-        text: `Delivery update: ${moving.subject}`,
-        urgency: "whenever"
-      });
-    }
-  }
-  void now;
-  return concerns;
-}
-async function unraised(concerns) {
-  const record4 = await seen.read();
-  const cutoff = Date.now() - FORGET_AFTER_MS;
-  const kept = {};
-  for (const [id, at] of Object.entries(record4.raised)) {
-    if (new Date(at).getTime() > cutoff) kept[id] = at;
-  }
-  const fresh2 = concerns.filter((concern) => !kept[concern.id]);
-  if (fresh2.length === 0) {
-    if (Object.keys(kept).length !== Object.keys(record4.raised).length) {
-      await seen.write({ raised: kept });
-    }
-    return [];
-  }
-  const now = (/* @__PURE__ */ new Date()).toISOString();
-  for (const concern of fresh2) kept[concern.id] = now;
-  await seen.write({ raised: kept });
-  return fresh2;
-}
-function mayInterrupt(mode, urgency) {
-  if (mode === "away") return false;
-  if (mode === "focus") return urgency === "now";
-  if (mode === "work") return urgency !== "whenever";
-  return true;
-}
-function overnight(now) {
-  const hour = now.getHours();
-  return hour >= 23 || hour < 7;
-}
-var RANK = { now: 0, soon: 1, whenever: 2 };
-async function pulse() {
-  const fresh2 = await unraised(await gather());
-  if (fresh2.length === 0) return { concerns: [], say: null, held: null };
-  for (const concern of fresh2) {
-    await noteDeed("noticed", concern.text, true);
-  }
-  const { mode } = await getMode();
-  const now = /* @__PURE__ */ new Date();
-  const sorted = [...fresh2].sort((left, right) => RANK[left.urgency] - RANK[right.urgency]);
-  const speakable = sorted.filter(
-    (concern) => mayInterrupt(mode, concern.urgency) && (!overnight(now) || concern.urgency === "now")
-  );
-  const worthABuzz = sorted.filter(
-    (concern) => concern.urgency !== "whenever" && (!overnight(now) || concern.urgency === "now")
-  );
-  if (worthABuzz.length > 0) {
-    await notify("Grace", worthABuzz.map((concern) => concern.text).join(" \xB7 ")).catch(
-      () => 0
-    );
-  }
-  if (speakable.length === 0) {
-    return {
-      concerns: sorted,
-      say: null,
-      held: overnight(now) ? "Holding this until morning." : mode === "away" ? "Holding this until you are back." : "Not interrupting while you are heads-down."
-    };
-  }
-  const say = await compose(speakable).catch(() => fallback(speakable));
-  await noteDeed("spoke", say, true);
-  return { concerns: sorted, say, held: null, message: await record2("grace", say, "voice") };
-}
-function fallback(concerns) {
-  return concerns.map((concern) => concern.text).join(". ") + ".";
-}
-async function compose(concerns) {
-  const said2 = await getProvider().complete({
-    system: 'You are Grace, a composed personal assistant, interrupting the person you work for because something wants their attention. Say it in one short spoken sentence \u2014 two at the very most, and only if there are genuinely two things. No preamble, no "just letting you know", no markdown, no lists. Plain speech, understated. Do not add anything you were not given.',
-    turns: [
-      {
-        role: "user",
-        text: concerns.map((concern) => `- ${concern.text}`).join("\n")
-      }
-    ],
-    temperature: 0.4,
-    maxOutputTokens: 120,
-    fast: true
-  });
-  return said2.trim() || fallback(concerns);
-}
-
-// server/api.ts
 init_push();
 init_timers();
 init_watch();
@@ -8495,11 +8511,12 @@ function createApi() {
   api.post(
     "/pulse",
     guard(async (_req, res) => {
+      pageLooked();
       if (!isConfigured()) {
         res.json({ concerns: [], say: null, held: null });
         return;
       }
-      res.json(await pulse());
+      res.json(await pulse({ fromPage: true }));
     })
   );
   api.get(
